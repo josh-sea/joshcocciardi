@@ -31,3 +31,8 @@
     transform: rotate(360deg);
   }
 }
+
+.jumbotron {
+  background: #68C2E5;
+  height: 80vh;
+}
