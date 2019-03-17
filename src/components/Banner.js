@@ -1,11 +1,21 @@
 import React from 'react';
 import { Button } from 'semantic-ui-react'
+import { BrowserRouter as Router, Route } from 'react-router-dom'
+import Projects from './Projects'
+import Contact from './Contact'
 
 const Banner = ({}) => (
   <div style={style}>
     <div className='container'>
-      <div className='jumbotron'>
-        <a href='https://www.google.com' target='_blank'><Button>GOOGLE</Button></a>
+      <div className='jumbotron' style={{height: '80vh'}}>
+      <Route
+        path='/projects/'
+        render={() => <Projects/>}
+      />
+      <Route
+        exact path='/contact'
+        render={() => <Contact/>}
+      />
       </div>
     </div>
   </div>
