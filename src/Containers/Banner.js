@@ -1,13 +1,12 @@
 import React from 'react';
-import { Button } from 'semantic-ui-react'
+import { Button, Segment } from 'semantic-ui-react'
 import { BrowserRouter as Router, Route } from 'react-router-dom'
-import Projects from './Projects'
-import Contact from './Contact'
+import Projects from '../components/Projects'
+import Contact from '../components/Contact'
+import Home from '../components/Home'
 
 const Banner = ({}) => (
-  <div style={style}>
-    <div className='container'>
-      <div className='jumbotron' style={{height: '80vh'}}>
+  <Segment padded='very' style={{height:'95vh', marginTop: '0', backgroundColor: '#3F5866', borderRadius: '0'}}>
       <Route
         path='/projects/'
         render={() => <Projects/>}
@@ -16,9 +15,11 @@ const Banner = ({}) => (
         exact path='/contact'
         render={() => <Contact/>}
       />
-      </div>
-    </div>
-  </div>
+      <Route
+        exact path='/'
+        render={() =><Home />}
+      />
+  </Segment>
 );
 
 export default Banner;
