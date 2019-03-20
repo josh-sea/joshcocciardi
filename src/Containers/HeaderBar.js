@@ -1,10 +1,9 @@
 import React from 'react';
-import { Icon, Menu, Dropdown, Button, Header, Segment } from 'semantic-ui-react'
+import { Menu, Dropdown, Header } from 'semantic-ui-react'
 import { Link } from 'react-router-dom'
 
 
 const HeaderBar = ({}) => (
-
     <Menu attached='top' inverted style={{marginBottom: '0', borderRadius:'0', backgroundColor: '#2B3A42', padding:'15px'}}>
       <Dropdown item icon='bars' simple>
         <Dropdown.Menu style={{backgroundColor: '#2B3A42', borderRadius: '5px', width: '15vw'}}>
@@ -25,12 +24,6 @@ const HeaderBar = ({}) => (
 );
 
 export default HeaderBar;
-
-const style = {
-  background: '#60487F',
-  height: '10vh',
-  width: '100%'
-}
 
 const font = {
   color:'#BDD3DE'

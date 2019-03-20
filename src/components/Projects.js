@@ -1,5 +1,5 @@
 import React from 'react';
-import { Header, Button, Icon, Modal, Segment, Card, Image } from 'semantic-ui-react'
+import { Header, Button, Modal, Segment, Card } from 'semantic-ui-react'
 import Iframe from 'react-iframe'
 import { Link, Route } from 'react-router-dom'
 
@@ -91,7 +91,7 @@ const Projects = ({}) => (
       <Card.Description>More projects to come. In the meantime feel free to look at my repositories to see what I am working on</Card.Description>
     </Card.Content>
     <Card.Content extra>
-    <Button fluid style={{marginBottom: '15%'}}> <a href='https://github.com/josh-sea' target='_blank'> GitHub </a></Button>
+    <Button fluid style={{marginBottom: '15%'}}> <a href='https://github.com/josh-sea' target='_blank' rel="noopener noreferrer"> GitHub </a></Button>
     </Card.Content>
   </Card>
 
