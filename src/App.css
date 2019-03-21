@@ -1,0 +1,7 @@
+@media all and (max-width: 550px) {
+  .home {
+    display: flex;
+    padding: 10px;
+    minWidth: 350px;
+  }
+}
