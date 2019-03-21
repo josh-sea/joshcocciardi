@@ -4,7 +4,7 @@ import Iframe from 'react-iframe'
 
 const Contact = ({firstName, lastName, email, comments, handleSubmit, handleFormText}) => (
   <Container style={{height:'50vh'}}>
-    <Segment>
+    <Segment style={{minWidth: '600px'}}>
       <Header as='h3' style={align}>Contact Me</Header>
       <div style={{display: 'flex'}}>
         <Form style={{marginLeft: '15%', marginTop: '2%', marginRight: '3%', width: '50%', maxWidth: '500px'}} onSubmit={handleSubmit}>
