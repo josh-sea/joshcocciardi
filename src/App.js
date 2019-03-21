@@ -28,7 +28,7 @@ class App extends Component {
         email: '',
         comments: ''
       })
-    console.log(this.state);
+    alert('Message Successfully Sent')
   }
 
   handleFormText = e => {
@@ -36,8 +36,6 @@ class App extends Component {
     e.target.id === 'lastName' && this.setState({lastName: e.target.value})
     e.target.id === 'email' && this.setState({email: e.target.value})
     e.target.id === 'comments' && this.setState({comments: e.target.value})
-
-    console.log(e.target.value);
   }
 
   render() {

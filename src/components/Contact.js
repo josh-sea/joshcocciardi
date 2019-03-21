@@ -7,7 +7,7 @@ const Contact = ({firstName, lastName, email, comments, handleSubmit, handleForm
     <Segment>
       <Header as='h3' style={align}>Contact Me</Header>
       <div style={{display: 'flex'}}>
-        <Form style={{margin: '5%', width: '50%', maxWidth: '500px'}} onSubmit={handleSubmit}>
+        <Form style={{marginLeft: '15%', marginTop: '2%', marginRight: '3%', width: '50%', maxWidth: '500px'}} onSubmit={handleSubmit}>
           <Form.Field>
             <label>First Name</label>
             <input id='firstName' onChange={handleFormText} placeholder='First Name' value={firstName}/>
@@ -23,8 +23,8 @@ const Contact = ({firstName, lastName, email, comments, handleSubmit, handleForm
           <Form.TextArea id='comments'  onChange={handleFormText} label='Comment/Quesion' placeholder="What's up?" value={comments}/>
           <Button type='submit'>Submit</Button>
         </Form>
-        <div style={{width: '50%', marginRight: '5%', marginTop: '5%', padding:'5%'}}>
-          <List>
+        <div style={{width: '50%', marginRight: '5%', padding:'5%'}}>
+          <List style={{marginBottom: '10%'}}>
             <List.Item>
               <List.Icon name='user' />
               <List.Content>Joshua Cocciardi</List.Content>
@@ -58,22 +58,19 @@ const Contact = ({firstName, lastName, email, comments, handleSubmit, handleForm
               </List.Content>
             </List.Item>
           </List>
-          </div>
-
-            <Iframe url={'https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d7279.141778752608!2d-73.68194985974586!3d41.257717223303366!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sus!4v1553193199623'}
-                    width="200"
-                    height="150"
-                    frameborder="0"
-                    style={{border:'0'}}
-                    id="myId"
-                    className="myClassname"
-                    display="initial"
-                    position="relative"
-                    allowFullScreen>
-            </Iframe>
-  
+          <Iframe url={'https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d7279.141778752608!2d-73.68194985974586!3d41.257717223303366!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sus!4v1553193199623'}
+                  width="200"
+                  height="150"
+                  frameborder="0"
+                  style={{border:'0'}}
+                  id="myId"
+                  className="myClassname"
+                  display="initial"
+                  position="relative"
+                  allowFullScreen>
+          </Iframe>
         </div>
-
+      </div>
     </Segment>
   </Container>
 );

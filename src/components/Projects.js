@@ -54,7 +54,7 @@ const Projects = () => (
       <Card.Meta>
         <span className='date'>A community for sharing stylesheets</span>
       </Card.Meta>
-      <Card.Description>CSStyle is powered by REACT/RAILS and gives user the opportunity to share HTML/CSS/Javascript snippets with the community. Snippets can be viewed by all and edited by teir owners. Users can also download stylesheets at the time of viewing or get a link to a stylesheet as a referenece for use in future projects.</Card.Description>
+      <Card.Description>CSStyle is powered by REACT/RAILS and gives users the opportunity to share HTML/CSS/Javascript snippets with the community. Snippets can be viewed by all and edited by their owners. Users can also download stylesheets at the time of viewing or get a link to a stylesheet as a referenece for use in future projects.</Card.Description>
 
     </Card.Content>
     <Card.Content extra>
