@@ -1,5 +1,5 @@
 import React from 'react';
-import { Header, Container, Form, Button, Segment, List, Icon } from 'semantic-ui-react'
+import { Header, Container, Form, Button, Segment, List } from 'semantic-ui-react'
 import Iframe from 'react-iframe'
 
 const Contact = ({firstName, lastName, email, comments, handleSubmit, handleFormText}) => (

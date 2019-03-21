@@ -7,7 +7,7 @@ const Projects = () => (
 
   <Segment padded='very' style={{height:'100%', backgroundColor: '#F0F0DF',overflow:'scroll'}}>
   <Card.Group>
-  <Card style={{margin:'5%'}}>
+  <Card style={{margin:'3%'}}>
       <Card.Content>
       <Card.Header>Knowtr</Card.Header>
       <Card.Meta>
@@ -48,7 +48,7 @@ const Projects = () => (
     </Card.Content>
   </Card>
 
-  <Card style={{margin:'5%'}}>
+  <Card style={{margin:'3%'}}>
     <Card.Content>
       <Card.Header>CSStyle</Card.Header>
       <Card.Meta>
@@ -93,7 +93,7 @@ const Projects = () => (
     </Card.Content>
   </Card>
 
-  <Card style={{margin:'5%'}}>
+  <Card style={{margin:'3%'}}>
       <Card.Content>
       <Card.Header>GitHub</Card.Header>
       <Card.Meta>
