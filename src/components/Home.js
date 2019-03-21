@@ -15,7 +15,7 @@ const Home = ({resumeHovered, handleResumeEnter, handleResumeLeave}) => (
             </Card.Content>
           </Card>
           <Segment>
-            <div onMouseEnter={handleResumeEnter} onMouseLeave={handleResumeLeave} style={{height: '30vh', width: '15vw', boxShadow: resumeHovered ? '4px 3px 4px #888888' : '8px 6px 8px #888888'}}>
+            <div onMouseEnter={handleResumeEnter} onMouseLeave={handleResumeLeave} style={{height: '30vh', width: '15vw', minWidth: '250px', boxShadow: resumeHovered ? '4px 3px 4px #888888' : '8px 6px 8px #888888'}}>
               <Modal trigger={<Image style={{height:'100%',width:'100%'}} src="JoshCocciardi_Resume.jpg" />} basic size='fullscreen'>
                 <Modal.Content style={{marginLeft: '3%'}}>
                   <Image src="JoshCocciardi_Resume.jpg" />
