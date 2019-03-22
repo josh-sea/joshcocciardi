@@ -21,7 +21,7 @@ const Home = ({resumeHovered, handleResumeEnter, handleResumeLeave}) => (
             </Card>
           <Segment style={{marginTop: '0',marginLeft: '5px', minWidth: '500', textAlign:'center'}}>
             <h1 style={{color: '#2B3A42'}}>Hey there! </h1>
-            <h3 style={{maxWidth: '800px'}}>I'm Josh, I am a full stack developer and mechanical engineer. I love creating new and exciting things like my website or my past and ongoing projects. <p>**This page is powered by React.js, ReactRouter, Semantic UI React, Custom CSS</p></h3>
+            <h3 style={{maxWidth: '800px'}}>I'm Josh, I am a full stack developer and mechanical engineer. I love creating new and exciting things. I look forward to working with amazing people and continuing to challenge myself.</h3>
             <Segment style={{display:'flex'}}>
               <div style={{width:'33%'}}>
                 <h3> Some of my current tech stack</h3>
@@ -63,7 +63,7 @@ const Home = ({resumeHovered, handleResumeEnter, handleResumeLeave}) => (
                 <Link to='/projects/'><Button >Projects Page</Button></Link>
               </div>
               <div style={{width:'33%'}}>
-                <h3> Hire Me: My Resume</h3>
+                <h3>My Resume</h3>
                 <div>
                   <div onMouseEnter={handleResumeEnter} onMouseLeave={handleResumeLeave} style={resumeHovered ? hoveredResume : resume}>
                     <Modal trigger={<Image style={{height:'100%',width:'auto', minWidth: '250px',overflow:'scroll'}} src="JoshCocciardi_Resume.jpg" />} basic size='fullscreen'>
@@ -80,6 +80,7 @@ const Home = ({resumeHovered, handleResumeEnter, handleResumeLeave}) => (
                 <Link to='/contact/'><Button >Contact</Button></Link>
               </div>
             </Segment>
+            <p>This page is powered by React.js, ReactRouter, Semantic UI React, Custom CSS</p>
           </Segment>
       </Container>
 );
