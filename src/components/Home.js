@@ -58,8 +58,24 @@ const Home = ({resumeHovered, handleResumeEnter, handleResumeLeave}) => (
                     <Icon color='grey' name='github' />
                     GitHub/Git
                   </List.Item>
+                  <List.Item>
+                    <Icon color='purple' name='eye dropper' />
+                    Bootstrap/Materialize/Semantic
+                  </List.Item>
+                  <List.Item>
+                    <Icon color='orange' name='html5' />
+                    HTML
+                  </List.Item>
+                  <List.Item>
+                    <Icon color='blue' name='css3' />
+                    CSS
+                  </List.Item>
+                  <List.Item>
+                  <Icon color='orange' name='rss' />
+                    ActionCable/Websockets
+                  </List.Item>
                 </List>
-                <h6> Check out my projects page to see what I am working</h6>
+                <h6> Check out my projects page to see what I am working on</h6>
                 <Link to='/projects/'><Button >Projects Page</Button></Link>
               </div>
               <div style={{width:'33%'}}>

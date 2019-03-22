@@ -44,6 +44,10 @@ const Projects = () => (
       <Icon color='red' name='npm' />
       <Icon color='purple' name='h' />
       <Icon color='grey' name='github' />
+      <Icon color='orange' name='html5' />
+      <Icon color='purple' name='eye dropper' />
+      <Icon color='blue' name='css3' />
+      <Icon color='orange' name='rss' />
     </Card.Meta>
     </Card.Content>
   </Card>
@@ -89,6 +93,9 @@ const Projects = () => (
       <Icon color='red' name='npm' />
       <Icon color='purple' name='h' />
       <Icon color='grey' name='github' />
+      <Icon color='orange' name='html5' />
+      <Icon color='purple' name='eye dropper' />
+      <Icon color='blue' name='css3' />
     </Card.Meta>
     </Card.Content>
   </Card>
