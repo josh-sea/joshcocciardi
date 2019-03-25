@@ -46,15 +46,15 @@ const Contact = ({firstName, lastName, email, comments, handleSubmit, handleForm
               </List.Content>
             </List.Item>
             <List.Item>
-              <List.Icon name='linkify' />
+              <List.Icon name='linkedin' />
               <List.Content>
-                <a href='www.joshcocciardi.com'>joshcocciardi.com</a>
+                <a href='https://www.linkedin.com/in/joshuacocciardi/' target='_blank' rel="noopener noreferrer" >LinkedIn</a>
               </List.Content>
             </List.Item>
             <List.Item>
               <List.Icon name='github' />
               <List.Content>
-                <a href='https://github.com/josh-sea'>GitHub</a>
+                <a href='https://github.com/josh-sea' target='_blank' rel="noopener noreferrer"> GitHub </a>
               </List.Content>
             </List.Item>
           </List>
