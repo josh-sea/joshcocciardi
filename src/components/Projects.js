@@ -1,5 +1,5 @@
 import React from 'react';
-import { Header, Button, Modal, Segment, Card, Icon } from 'semantic-ui-react'
+import { Header, Button, Modal, Segment, Card, Icon, Popup } from 'semantic-ui-react'
 import Iframe from 'react-iframe'
 import { Link, Route } from 'react-router-dom'
 
@@ -37,17 +37,17 @@ const Projects = () => (
     </Modal>
     <Card.Meta>
       <span className='date'>App is hosted on Heroku and may take up to 30 seconds to wake the server</span><br/>
-      <Icon color='yellow' name='js' />
-      <Icon color='blue' loading name='react' />
-      <Icon color='red' name='gem outline' />
-      <Icon color='orange' name='database' />
-      <Icon color='red' name='npm' />
-      <Icon color='purple' name='h' />
-      <Icon color='grey' name='github' />
-      <Icon color='orange' name='html5' />
-      <Icon color='purple' name='eye dropper' />
-      <Icon color='blue' name='css3' />
-      <Icon color='orange' name='rss' />
+      <Popup trigger={<Icon color='yellow' name='js' />} content='javascript' />
+      <Popup trigger={<Icon color='blue' loading name='react' />} content='React' />
+      <Popup trigger={<Icon color='red' name='gem outline' />} content='Ruby/Ruby on Rails' />
+      <Popup trigger={<Icon color='orange' name='database' />} content='PostgreSQL' />
+      <Popup trigger={<Icon color='red' name='npm' />} content='npm' />
+      <Popup trigger={<Icon color='purple' name='h' />} content='Heroku' />
+      <Popup trigger={<Icon color='grey' name='github' />} content='GitHub/git' />
+      <Popup trigger={<Icon color='orange' name='html5' />} content='HTML5' />
+      <Popup trigger={<Icon color='purple' name='eye dropper' />} content='Semantic UI React' />
+      <Popup trigger={<Icon color='blue' name='css3' />} content='CSS3' />
+      <Popup trigger={<Icon color='orange' name='rss' />} content='ActionCable/Websockets' />
     </Card.Meta>
     </Card.Content>
   </Card>
@@ -86,16 +86,16 @@ const Projects = () => (
     </Modal>
     <Card.Meta>
       <span className='date'>App is hosted on Heroku and may take up to 30 seconds to wake the server</span><br/>
-      <Icon color='yellow' name='js' />
-      <Icon color='blue' loading name='react' />
-      <Icon color='red' name='gem outline' />
-      <Icon color='orange' name='database' />
-      <Icon color='red' name='npm' />
-      <Icon color='purple' name='h' />
-      <Icon color='grey' name='github' />
-      <Icon color='orange' name='html5' />
-      <Icon color='purple' name='eye dropper' />
-      <Icon color='blue' name='css3' />
+      <Popup trigger={<Icon color='yellow' name='js' />} content='javascript' />
+      <Popup trigger={<Icon color='blue' loading name='react' />} content='React' />
+      <Popup trigger={<Icon color='red' name='gem outline' />} content='Ruby/Ruby on Rails' />
+      <Popup trigger={<Icon color='orange' name='database' />} content='PostgreSQL' />
+      <Popup trigger={<Icon color='red' name='npm' />} content='npm' />
+      <Popup trigger={<Icon color='purple' name='h' />} content='Heroku' />
+      <Popup trigger={<Icon color='grey' name='github' />} content='GitHub/git' />
+      <Popup trigger={<Icon color='orange' name='html5' />} content='HTML5' />
+      <Popup trigger={<Icon color='purple' name='eye dropper' />} content='Semantic UI React' />
+      <Popup trigger={<Icon color='blue' name='css3' />} content='CSS3' />
     </Card.Meta>
     </Card.Content>
   </Card>
