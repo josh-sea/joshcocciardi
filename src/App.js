@@ -2,7 +2,8 @@ import React, { Component } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom'
 import HeaderBar from './Containers/HeaderBar'
 import Banner from './Containers/Banner'
-
+// const BASEURL =  `http://localhost:3000/api/v1/messages`
+const BASEURL =  `https://joshcocciardi-backend.herokuapp.com/api/v1/messages`
 
 class App extends Component {
   state = {
@@ -22,12 +23,30 @@ class App extends Component {
 
   handleSubmit = e => {
     e.preventDefault()
+    fetch(`${BASEURL}`, {
+      method: 'POST',
+      headers:
+      {
+        "Content-Type": 'application/json',
+        "Accept": 'application/json'
+      },
+      body: JSON.stringify({
+        firstname: this.state.firstName,
+        lastname: this.state.lastName,
+        email: this.state.email,
+        comment: this.state.comments
+      })
+    })
+    .then(r=>r.json())
+    .then(console.log)
+
     this.setState({
         firstName: '',
         lastName: '',
         email: '',
         comments: ''
       })
+
     alert('Message Successfully Sent')
   }
 
