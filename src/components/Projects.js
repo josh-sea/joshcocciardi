@@ -94,7 +94,7 @@ const Projects = () => (
       <Popup trigger={<Icon color='purple' name='h' />} content='Heroku' />
       <Popup trigger={<Icon color='grey' name='github' />} content='GitHub/git' />
       <Popup trigger={<Icon color='orange' name='html5' />} content='HTML5' />
-      <Popup trigger={<Icon color='purple' name='eye dropper' />} content='Semantic UI React' />
+      <Popup trigger={<Icon color='purple' name='eye dropper' />} content='React-Materialize' />
       <Popup trigger={<Icon color='blue' name='css3' />} content='CSS3' />
     </Card.Meta>
     </Card.Content>
