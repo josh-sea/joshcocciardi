@@ -1,0 +1,46 @@
+{
+  "hosting": {
+    "public": "apps/portfolio/build",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/projects/moments/**",
+        "destination": "/projects/moments/index.html"
+      },
+      {
+        "source": "/projects/electronic-mail/**",
+        "destination": "/projects/electronic-mail/index.html"
+      },
+      {
+        "source": "!/projects/**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/projects/moments/**",
+        "headers": [
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin"
+          },
+          {
+            "key": "Cross-Origin-Embedder-Policy",
+            "value": "require-corp"
+          }
+        ]
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

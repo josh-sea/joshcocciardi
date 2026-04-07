@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSX App Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        #root {
+            min-height: 100vh;
+        }
+        .loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-size: 20px;
+            color: #666;
+        }
+        .error {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            text-align: center;
+        }
+        .error h1 {
+            color: #e74c3c;
+            margin-bottom: 10px;
+        }
+        .error p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .error code {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            display: block;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loader">Loading...</div>
+    </div>
+
+    <!-- React, ReactDOM, and Babel Standalone -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+        // Get the JSX file from URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const jsxFile = urlParams.get('file');
+
+        if (!jsxFile) {
+            document.getElementById('root').innerHTML = `
+                <div class="error">
+                    <h1>No JSX file specified</h1>
+                    <p>Please provide a JSX file using the <strong>file</strong> parameter:</p>
+                    <code>viewer.html?file=myapp.jsx</code>
+                    <p style="margin-top: 20px;">Or use the direct URL:</p>
+                    <code>viewer.html?file=https://example.com/app.jsx</code>
+                </div>
+            `;
+        } else {
+            loadAndRenderJSX(jsxFile);
+        }
+
+        async function loadAndRenderJSX(file) {
+            try {
+                // Fetch the JSX file
+                const response = await fetch(file);
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${file}: ${response.statusText}`);
+                }
+                
+                const jsxCode = await response.text();
+                
+                // Transpile JSX to JavaScript using Babel
+                const transformed = Babel.transform(jsxCode, {
+                    presets: ['react']
+                }).code;
+                
+                // Create a function from the transpiled code and execute it
+                const AppFunction = new Function('React', 'ReactDOM', transformed + '\n; return App;');
+                const App = AppFunction(React, ReactDOM);
+                
+                // Render the app
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(React.createElement(App));
+                
+            } catch (error) {
+                console.error('Error loading JSX:', error);
+                document.getElementById('root').innerHTML = `
+                    <div class="error">
+                        <h1>Error Loading JSX</h1>
+                        <p>${error.message}</p>
+                        <p style="margin-top: 20px; color: #999;">Check the browser console for more details.</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

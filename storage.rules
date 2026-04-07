@@ -1,0 +1,38 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the file
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Helper function to validate video file
+    function isValidVideo() {
+      return request.resource.size < 50 * 1024 * 1024 // 50MB max
+             && request.resource.contentType.matches('video/.*');
+    }
+    
+    // Helper function to validate image file (thumbnails)
+    function isValidImage() {
+      return request.resource.size < 5 * 1024 * 1024 // 5MB max
+             && request.resource.contentType.matches('image/.*');
+    }
+    
+    // User files path: users/{userId}/**
+    match /users/{userId}/{allPaths=**} {
+      // Allow read if authenticated user owns the files
+      allow read: if isOwner(userId);
+      
+      // Allow write if authenticated user owns the files and file is valid
+      allow write: if isOwner(userId) && (isValidVideo() || isValidImage());
+      
+      // Allow delete if authenticated user owns the files
+      allow delete: if isOwner(userId);
+    }
+  }
+}

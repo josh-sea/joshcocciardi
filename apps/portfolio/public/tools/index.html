@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tools Dashboard - Josh Cocciardi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .welcome-message {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+        }
+
+        .welcome-message h2 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .welcome-message p {
+            color: #666;
+            line-height: 1.6;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .tool-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .tool-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .tool-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+
+        .tool-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+
+        .tool-card p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .empty-state-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        .empty-state h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .empty-state p {
+            color: #666;
+            max-width: 500px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .info-box {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        .info-box h4 {
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+
+        .info-box p {
+            color: #34495e;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .info-box code {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1><span>🔧</span> Tools Dashboard</h1>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="welcome-message">
+            <h2>Welcome to Your Tools Directory</h2>
+            <p>This is a password-protected area where you can deploy and access your development tools and utilities.</p>
+            
+            <div class="info-box">
+                <h4>How to Add New Tools:</h4>
+                <p>1. Create HTML files in the <code>public/tools/</code> directory</p>
+                <p>2. Include <code>&lt;script src="auth.js"&gt;&lt;/script&gt;</code> in your HTML</p>
+                <p>3. Add <code>&lt;script&gt;protectPage();&lt;/script&gt;</code> to protect the page</p>
+                <p>4. Run <code>npm run build</code> to build the project</p>
+                <p>5. Deploy with <code>firebase deploy</code></p>
+            </div>
+        </div>
+
+        <div class="tools-grid" id="toolsGrid">
+            <!-- Create New Tool card -->
+            <a href="new.html" class="tool-card" style="border: 2px dashed #667eea;">
+                <div class="tool-icon">➕</div>
+                <h3>Create New Tool</h3>
+                <p>Create a new dynamic tool that can be edited and deployed instantly.</p>
+            </a>
+
+            <!-- Sample tool card -->
+            <a href="sample.html" class="tool-card">
+                <div class="tool-icon">📊</div>
+                <h3>Sample Tool</h3>
+                <p>A sample tool page demonstrating how to create protected HTML pages in the tools directory.</p>
+            </a>
+
+            <!-- Closet tool card -->
+            <a href="closet.html" class="tool-card">
+                <div class="tool-icon">👔</div>
+                <h3>Closet</h3>
+                <p>Virtual closet organization tool.</p>
+            </a>
+
+            <!-- DeadNet tool card -->
+            <a href="/projects/deadnet" class="tool-card">
+                <div class="tool-icon">💀</div>
+                <h3>DeadNet</h3>
+                <p>Grateful Dead fan community forum — Windows XP style.</p>
+            </a>
+
+            <!-- Dynamic tools from Firestore will be loaded here -->
+        </div>
+
+        <div class="empty-state" style="margin-top: 40px;">
+            <div class="empty-state-icon">🚀</div>
+            <h3>Ready to Add More Tools</h3>
+            <p>
+                You can add any HTML pages you want to this tools directory. Each page will automatically 
+                be protected by the same authentication system. Just create new HTML files in 
+                <code>public/tools/</code> and they'll be accessible at <code>joshcocciardi.com/tools/yourpage.html</code>
+            </p>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="auth.js"></script>
+    <script>
+        // Protect this page - redirect to login if not authenticated
+        protectPage();
+
+        // Initialize Firebase
+        const firebaseConfig = {
+            // TODO: Add your Firebase config here
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        let db;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+        }
+
+        // Load dynamic tools from Firestore
+        async function loadDynamicTools() {
+            if (!db) {
+                console.log("Firebase not initialized - skipping dynamic tools");
+                return;
+            }
+
+            try {
+                const toolsGrid = document.getElementById('toolsGrid');
+                const snapshot = await db.collection('tools').orderBy('createdAt', 'desc').get();
+
+                snapshot.forEach(doc => {
+                    const tool = doc.data();
+                    const toolCard = document.createElement('a');
+                    toolCard.href = `view.html?id=${doc.id}`;
+                    toolCard.className = 'tool-card';
+                    toolCard.style.borderLeft = '4px solid #667eea';
+                    
+                    toolCard.innerHTML = `
+                        <div class="tool-icon">${tool.icon || '🔧'}</div>
+                        <h3>${tool.title}</h3>
+                        <p>${tool.description || 'No description provided.'}</p>
+                    `;
+                    
+                    toolsGrid.appendChild(toolCard);
+                });
+
+                if (!snapshot.empty) {
+                    console.log(`Loaded ${snapshot.size} dynamic tools from Firestore`);
+                }
+            } catch (error) {
+                console.error('Error loading dynamic tools:', error);
+            }
+        }
+
+        // Load dynamic tools when page loads
+        loadDynamicTools();
+    </script>
+</body>
+</html>

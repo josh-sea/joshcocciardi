@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Gmail tokens collection - allow access for OAuth flow
+    // Since the app uses Google Identity Services (not Firebase Auth),
+    // we need to allow access without Firebase authentication
+    match /gmail_tokens/{email} {
+      allow read, write: if true;
+    }
+    
+    // Email Cache - Users can only access their own cached emails
+    match /users/{userId} {
+      // Users can only access their own data
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Email threads subcollection
+      match /threads/{threadId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Email messages subcollection
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Sync metadata
+      match /meta/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Radar metadata - read access for clients
+    match /radar_sites/{siteId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    match /radar_scans/{scanId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    // Client usage tracking (optional)
+    match /client_usage/{clientId} {
+      allow read, write: if true;
+    }
+    
+    // Default authenticated access for other collections
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

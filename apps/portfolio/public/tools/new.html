@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create New Tool - Josh Cocciardi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 400px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+
+        .form-hint {
+            color: #666;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .template-selector {
+            margin-bottom: 20px;
+        }
+
+        .template-btn {
+            padding: 8px 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .template-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .preview-section {
+            margin-top: 30px;
+            border-top: 2px solid #f0f0f0;
+            padding-top: 30px;
+        }
+
+        .preview-iframe {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1><span>➕</span> Create New Tool</h1>
+            <div class="nav-links">
+                <a href="index.html">← Back to Dashboard</a>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="alert alert-success" id="successAlert">
+            Tool created successfully! <a href="#" id="viewLink" style="color: inherit; font-weight: bold;">View it here</a>
+        </div>
+        <div class="alert alert-error" id="errorAlert"></div>
+
+        <div class="card">
+            <h2>Create a New Tool</h2>
+            
+            <div class="template-selector">
+                <label>Start with a template:</label>
+                <button class="template-btn" onclick="loadTemplate('blank')">Blank Page</button>
+                <button class="template-btn" onclick="loadTemplate('basic')">Basic Tool</button>
+                <button class="template-btn" onclick="loadTemplate('form')">Form Tool</button>
+            </div>
+
+            <form id="toolForm">
+                <div class="form-group">
+                    <label for="toolTitle">Tool Title *</label>
+                    <input type="text" id="toolTitle" required placeholder="e.g., My Awesome Tool">
+                    <div class="form-hint">This will be displayed in the dashboard</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="toolSlug">Tool URL Slug *</label>
+                    <input type="text" id="toolSlug" required placeholder="e.g., my-awesome-tool">
+                    <div class="form-hint">URL will be: joshcocciardi.com/tools/view.html?id=<span id="slugPreview">your-slug</span></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="toolDescription">Description</label>
+                    <input type="text" id="toolDescription" placeholder="Brief description of what this tool does">
+                </div>
+
+                <div class="form-group">
+                    <label for="toolIcon">Icon Emoji</label>
+                    <input type="text" id="toolIcon" placeholder="e.g., 🔧" maxlength="2">
+                    <div class="form-hint">Pick an emoji to represent your tool</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="toolContent">HTML Content *</label>
+                    <textarea id="toolContent" required placeholder="Enter your HTML content here..."></textarea>
+                    <div class="form-hint">You can include HTML, CSS (in &lt;style&gt; tags), and JavaScript (in &lt;script&gt; tags)</div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Create Tool</button>
+                    <button type="button" class="btn btn-secondary" onclick="previewTool()">Preview</button>
+                    <button type="button" class="btn btn-secondary" onclick="window.location.href='index.html'">Cancel</button>
+                </div>
+            </form>
+
+            <div class="preview-section" id="previewSection" style="display: none;">
+                <h2>Preview</h2>
+                <iframe id="previewFrame" class="preview-iframe" sandbox="allow-scripts"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="auth.js"></script>
+    <script>
+        // Protect this page
+        protectPage();
+
+        // Initialize Firebase (you'll need to add your config)
+        const firebaseConfig = {
+            // TODO: Add your Firebase config here
+            // You can find this in Firebase Console > Project Settings
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        let db;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+        }
+
+        // Auto-generate slug from title
+        document.getElementById('toolTitle').addEventListener('input', (e) => {
+            const title = e.target.value;
+            const slug = title.toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+            document.getElementById('toolSlug').value = slug;
+            document.getElementById('slugPreview').textContent = slug || 'your-slug';
+        });
+
+        // Template functions
+        function loadTemplate(type) {
+            const templates = {
+                blank: '<div style="padding: 20px;">\n    <h1>My Tool</h1>\n    <p>Start building your tool here!</p>\n</div>',
+                
+                basic: '<style>\n    body {\n        font-family: Arial, sans-serif;\n        max-width: 800px;\n        margin: 50px auto;\n        padding: 20px;\n    }\n    .card {\n        background: #f9f9f9;\n        padding: 20px;\n        border-radius: 8px;\n        box-shadow: 0 2px 4px rgba(0,0,0,0.1);\n    }\n</style>\n\n<div class="card">\n    <h1>My Basic Tool</h1>\n    <p>This is a basic template with some styling.</p>\n    <button onclick="alert(\'Hello!\')">Click Me</button>\n</div>',
+                
+                form: '<style>\n    body {\n        font-family: Arial, sans-serif;\n        max-width: 600px;\n        margin: 50px auto;\n        padding: 20px;\n    }\n    .form-group {\n        margin-bottom: 15px;\n    }\n    label {\n        display: block;\n        margin-bottom: 5px;\n        font-weight: bold;\n    }\n    input, textarea {\n        width: 100%;\n        padding: 8px;\n        border: 1px solid #ddd;\n        border-radius: 4px;\n    }\n    button {\n        background: #667eea;\n        color: white;\n        padding: 10px 20px;\n        border: none;\n        border-radius: 4px;\n        cursor: pointer;\n    }\n    button:hover {\n        background: #5568d3;\n    }\n    #result {\n        margin-top: 20px;\n        padding: 15px;\n        background: #e8f4f8;\n        border-radius: 4px;\n        display: none;\n    }\n</style>\n\n<h1>Form Tool</h1>\n<form id="myForm" onsubmit="handleSubmit(event)">\n    <div class="form-group">\n        <label for="name">Name:</label>\n        <input type="text" id="name" required>\n    </div>\n    <div class="form-group">\n        <label for="message">Message:</label>\n        <textarea id="message" rows="4" required></textarea>\n    </div>\n    <button type="submit">Submit</button>\n</form>\n\n<div id="result"></div>\n\n<script>\nfunction handleSubmit(e) {\n    e.preventDefault();\n    const name = document.getElementById(\'name\').value;\n    const message = document.getElementById(\'message\').value;\n    const result = document.getElementById(\'result\');\n    result.innerHTML = \'<strong>Submitted!</strong><br>Name: \' + name + \'<br>Message: \' + message;\n    result.style.display = \'block\';\n}\n<\/script>'
+            };
+
+            document.getElementById('toolContent').value = templates[type];
+        }
+
+        // Preview function
+        function previewTool() {
+            const content = document.getElementById('toolContent').value;
+            const previewSection = document.getElementById('previewSection');
+            const previewFrame = document.getElementById('previewFrame');
+            
+            previewSection.style.display = 'block';
+            const previewDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+            previewDoc.open();
+            previewDoc.write(content);
+            previewDoc.close();
+        }
+
+        // Form submission
+        document.getElementById('toolForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const errorAlert = document.getElementById('errorAlert');
+            const successAlert = document.getElementById('successAlert');
+            
+            // Hide alerts
+            errorAlert.classList.remove('show');
+            successAlert.classList.remove('show');
+            
+            // Get form data
+            const toolData = {
+                title: document.getElementById('toolTitle').value,
+                slug: document.getElementById('toolSlug').value,
+                description: document.getElementById('toolDescription').value || '',
+                icon: document.getElementById('toolIcon').value || '🔧',
+                content: document.getElementById('toolContent').value,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating...';
+
+            try {
+                // Check if Firebase is initialized
+                if (!db) {
+                    throw new Error('Firebase is not initialized. Please add your Firebase config.');
+                }
+
+                // Check if slug already exists
+                const existingTool = await db.collection('tools').doc(toolData.slug).get();
+                if (existingTool.exists) {
+                    throw new Error('A tool with this URL slug already exists. Please choose a different slug.');
+                }
+
+                // Save to Firestore
+                await db.collection('tools').doc(toolData.slug).set(toolData);
+
+                // Show success message
+                const viewLink = document.getElementById('viewLink');
+                viewLink.href = `view.html?id=${toolData.slug}`;
+                successAlert.classList.add('show');
+
+                // Reset form
+                document.getElementById('toolForm').reset();
+                document.getElementById('slugPreview').textContent = 'your-slug';
+                
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error creating tool:', error);
+                errorAlert.textContent = 'Error: ' + error.message;
+                errorAlert.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Tool';
+            }
+        });
+
+        // Load blank template by default
+        loadTemplate('blank');
+    </script>
+</body>
+</html>

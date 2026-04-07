@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        #root {
+            min-height: 100vh;
+        }
+        .loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-size: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">
+        <div class="loader">Loading...</div>
+    </div>
+
+    <!-- React, ReactDOM, and Babel Standalone -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Your JSX Code -->
+    <script type="text/babel">
+function App() {
+  const [activeTab, setActiveTab] = React.useState('overview');
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [selectedCategory, setSelectedCategory] = React.useState('All');
+  const [sortField, setSortField] = React.useState('amount');
+  const [sortDirection, setSortDirection] = React.useState('desc');
+  const [transactions, setTransactions] = React.useState([]);
+  const [csvUploaded, setCsvUploaded] = React.useState(false);
+
+  // Parse CSV file
+  const parseCSV = (csvText) => {
+    const lines = csvText.trim().split('\n');
+    const parsedTransactions = [];
+    
+    // Skip header row
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      
+      // Parse CSV line (handling quoted fields with commas)
+      const parts = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          parts.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      parts.push(current.trim());
+      
+      // Parse transaction data
+      const debitStr = parts[5] || '';
+      const creditStr = parts[6] || '';
+      const debit = parseFloat(debitStr) || 0;
+      const credit = parseFloat(creditStr) || 0;
+      const amount = credit > 0 ? -credit : debit;
+      const isCredit = credit > 0;
+      
+      // Only include expenses (not payments/credits)
+      if (!isCredit && amount > 0) {
+        parsedTransactions.push({
+          transactionDate: parts[0],
+          postedDate: parts[1],
+          cardNo: parts[2],
+          description: parts[3],
+          category: parts[4],
+          amount: amount,
+          isCredit: isCredit
+        });
+      }
+    }
+    
+    return parsedTransactions;
+  };
+
+  // Handle file upload
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csvText = e.target.result;
+      const parsed = parseCSV(csvText);
+      setTransactions(parsed);
+      setCsvUploaded(true);
+    };
+    reader.readAsText(file);
+  };
+
+  // Detect subscriptions (recurring charges)
+  const subscriptions = React.useMemo(() => {
+    if (transactions.length === 0) return [];
+    
+    const merchantCounts = {};
+    const merchantAmounts = {};
+    
+    transactions.forEach(t => {
+      const merchant = t.description.split(/[0-9*#]/)[0].trim().toUpperCase();
+      if (!merchantCounts[merchant]) {
+        merchantCounts[merchant] = [];
+        merchantAmounts[merchant] = [];
+      }
+      merchantCounts[merchant].push(t.transactionDate);
+      merchantAmounts[merchant].push(t.amount);
+    });
+
+    const potentialSubs = [];
+    Object.keys(merchantCounts).forEach(merchant => {
+      const dates = merchantCounts[merchant];
+      const amounts = merchantAmounts[merchant];
+      
+      if (dates.length >= 2) {
+        const avgAmount = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+        const maxAmount = Math.max(...amounts);
+        const minAmount = Math.min(...amounts);
+        const variance = ((maxAmount - minAmount) / avgAmount) * 100;
+        
+        const isSubscription = variance < 20 || merchant.includes('SUBSCRIPTION') || 
+                              merchant.includes('SPOTIFY') || merchant.includes('NETFLIX') ||
+                              merchant.includes('PEACOCK') || merchant.includes('GOOGLE') ||
+                              merchant.includes('APPLE.COM/BILL') || merchant.includes('DISNEY') ||
+                              merchant.includes('AMAZON PRIME') || merchant.includes('SIMPLISAFE') ||
+                              merchant.includes('ONSTAR') || merchant.includes('CRUNCHLABS') ||
+                              merchant.includes('AMG WASTE') || merchant.includes('WP*STUDIOVMX') ||
+                              merchant.includes('F&F') || merchant.includes('JOHN JAY FC') ||
+                              merchant.includes('WW INT') || merchant.includes('SUNSHINE CROSSFIT') ||
+                              merchant.includes('BCS*MPP') || merchant.includes('THRIVE MARKET') ||
+                              merchant.includes('CHEWY.COM') || merchant.includes('LICE CLINICS') ||
+                              merchant.includes('DAILY HARVEST') || merchant.includes('SQSP*') ||
+                              merchant.includes('CLAUDE') || merchant.includes('CHATGPT') ||
+                              merchant.includes('OPENAI') || merchant.includes('ELEVENLABS');
+
+        if (isSubscription) {
+          potentialSubs.push({
+            merchant,
+            frequency: dates.length,
+            avgAmount,
+            totalSpent: amounts.reduce((a, b) => a + b, 0),
+            lastDate: dates[dates.length - 1],
+            monthlyEstimate: (amounts.reduce((a, b) => a + b, 0) / dates.length) * (365 / 30)
+          });
+        }
+      }
+    });
+
+    return potentialSubs.sort((a, b) => b.totalSpent - a.totalSpent);
+  }, [transactions]);
+
+  // Category breakdown
+  const categoryData = React.useMemo(() => {
+    if (transactions.length === 0) return [];
+    const catMap = {};
+    transactions.forEach(t => {
+      if (!catMap[t.category]) catMap[t.category] = 0;
+      catMap[t.category] += t.amount;
+    });
+    return Object.entries(catMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [transactions]);
+
+  // Monthly spending trend
+  const monthlyData = React.useMemo(() => {
+    if (transactions.length === 0) return [];
+    const monthMap = {};
+    transactions.forEach(t => {
+      const month = t.transactionDate.substring(0, 7);
+      if (!monthMap[month]) monthMap[month] = 0;
+      monthMap[month] += t.amount;
+    });
+    return Object.entries(monthMap)
+      .map(([month, amount]) => ({ month, amount }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+  }, [transactions]);
+
+  // Top merchants
+  const topMerchants = React.useMemo(() => {
+    if (transactions.length === 0) return [];
+    const merchantMap = {};
+    transactions.forEach(t => {
+      const merchant = t.description.split(/[0-9*#]/)[0].trim();
+      if (!merchantMap[merchant]) {
+        merchantMap[merchant] = { total: 0, count: 0 };
+      }
+      merchantMap[merchant].total += t.amount;
+      merchantMap[merchant].count += 1;
+    });
+    return Object.entries(merchantMap)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 20);
+  }, [transactions]);
+
+  // Filtered transactions
+  const filteredTransactions = React.useMemo(() => {
+    let filtered = transactions;
+    
+    if (searchTerm) {
+      filtered = filtered.filter(t => 
+        t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.category.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    if (selectedCategory !== 'All') {
+      filtered = filtered.filter(t => t.category === selectedCategory);
+    }
+    
+    return filtered.sort((a, b) => {
+      const aVal = sortField === 'amount' ? a.amount : a.transactionDate;
+      const bVal = sortField === 'amount' ? b.amount : b.transactionDate;
+      return sortDirection === 'asc' ? 
+        (aVal > bVal ? 1 : -1) : 
+        (aVal < bVal ? 1 : -1);
+    });
+  }, [transactions, searchTerm, selectedCategory, sortField, sortDirection]);
+
+  const categories = React.useMemo(() => {
+    return ['All', ...new Set(transactions.map(t => t.category))];
+  }, [transactions]);
+  
+  const totalSpent = React.useMemo(() => {
+    return transactions.reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
+  
+  const avgTransaction = transactions.length > 0 ? totalSpent / transactions.length : 0;
+
+  const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#84cc16'];
+
+  // Upload screen
+  if (!csvUploaded) {
+    return (
+      <div style={{ width: '100%', minHeight: '100vh', background: 'linear-gradient(to bottom right, #f8fafc, #e2e8f0)', padding: '24px' }}>
+        <div style={{ maxWidth: '896px', margin: '0 auto' }}>
+          <div style={{ background: 'white', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(to right, #2563eb, #7c3aed)', padding: '24px', color: 'white' }}>
+              <h1 style={{ fontSize: '30px', fontWeight: 'bold', marginBottom: '8px' }}>💳 Capital One Expense Analyzer</h1>
+              <p style={{ color: '#bfdbfe' }}>Upload your Capital One transaction CSV to analyze your spending</p>
+            </div>
+
+            {/* Upload Area */}
+            <div style={{ padding: '48px' }}>
+              <div style={{ border: '2px dashed #d1d5db', borderRadius: '12px', padding: '64px', textAlign: 'center', background: '#f9fafb' }}>
+                <div style={{ fontSize: '64px', marginBottom: '16px' }}>📊</div>
+                <h2 style={{ fontSize: '24px', fontWeight: '600', color: '#1f2937', marginBottom: '8px' }}>Upload Transaction CSV</h2>
+                <p style={{ color: '#6b7280', marginBottom: '24px' }}>Drag and drop or click to select your Capital One transaction export</p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  style={{ display: 'none' }}
+                  id="csvUpload"
+                />
+                <label htmlFor="csvUpload" style={{ display: 'inline-block', background: 'linear-gradient(to right, #2563eb, #7c3aed)', color: 'white', padding: '12px 32px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>
+                  Choose File
+                </label>
+              </div>
+
+              <div style={{ marginTop: '32px', padding: '16px', background: '#dbeafe', borderRadius: '8px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>📝 How to export from Capital One:</h3>
+                <ol style={{ color: '#1e40af', paddingLeft: '24px', lineHeight: '1.6' }}>
+                  <li>Log in to your Capital One account</li>
+                  <li>Navigate to your credit card transactions</li>
+                  <li>Select "Download" or "Export"</li>
+                  <li>Choose CSV format with all transaction details</li>
+                  <li>Upload the CSV file here</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main dashboard
+  return (
+    <div style={{ width: '100%', minHeight: '100vh', background: 'linear-gradient(to bottom right, #f8fafc, #e2e8f0)', padding: '24px' }}>
+      <div style={{ maxWidth: '896px', margin: '0 auto' }}>
+        <div style={{ background: 'white', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{ background: 'linear-gradient(to right, #2563eb, #7c3aed)', padding: '24px', color: 'white' }}>
+            <h1 style={{ fontSize: '30px', fontWeight: 'bold', marginBottom: '8px' }}>💳 Expense Analyzer</h1>
+            <p style={{ color: '#bfdbfe' }}>Comprehensive spending analysis with subscription detection</p>
+          </div>
+
+          {/* Stats Bar */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', padding: '24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+              <div style={{ fontSize: '14px', color: '#64748b' }}>Total Spent</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a' }}>${totalSpent.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+            </div>
+            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+              <div style={{ fontSize: '14px', color: '#64748b' }}>Transactions</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a' }}>{transactions.length}</div>
+            </div>
+            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+              <div style={{ fontSize: '14px', color: '#64748b' }}>Avg Transaction</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a' }}>${avgTransaction.toFixed(2)}</div>
+            </div>
+            <div style={{ background: 'white', padding: '16px', borderRadius: '8px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' }}>
+              <div style={{ fontSize: '14px', color: '#64748b' }}>Subscriptions Found</div>
+              <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#7c3aed' }}>{subscriptions.length}</div>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ borderBottom: '1px solid #e2e8f0', background: 'white', padding: '0 24px' }}>
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto' }}>
+              {[
+                { id: 'overview', label: '📊 Overview' },
+                { id: 'subscriptions', label: '🔄 Subscriptions' },
+                { id: 'categories', label: '📂 Categories' },
+                { id: 'merchants', label: '🏪 Merchants' },
+                { id: 'transactions', label: '📋 All Transactions' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap',
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    borderBottom: activeTab === tab.id ? '2px solid #2563eb' : '2px solid transparent',
+                    color: activeTab === tab.id ? '#2563eb' : '#64748b'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={{ padding: '24px' }}>
+            {activeTab === 'overview' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Category Breakdown</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {categoryData.slice(0, 10).map((cat, idx) => {
+                      const percentage = (cat.value / totalSpent) * 100;
+                      return (
+                        <div key={idx}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: '500' }}>{cat.name}</span>
+                            <span style={{ color: '#64748b' }}>
+                              ${cat.value.toFixed(2)} ({percentage.toFixed(1)}%)
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', background: '#e2e8f0', borderRadius: '9999px', height: '8px' }}>
+                            <div
+                              style={{
+                                background: '#2563eb',
+                                height: '8px',
+                                borderRadius: '9999px',
+                                width: `${percentage}%`,
+                                transition: 'width 0.3s'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'subscriptions' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '8px', padding: '16px' }}>
+                  <h3 style={{ fontWeight: '600', color: '#1e3a8a', marginBottom: '8px' }}>💡 Subscription Detection</h3>
+                  <p style={{ fontSize: '14px', color: '#1e40af' }}>
+                    Found {subscriptions.length} recurring charges. Total monthly estimate: ${subscriptions.reduce((sum, s) => sum + (s.avgAmount * (s.frequency / 12)), 0).toFixed(2)}
+                  </p>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ background: '#f1f5f9' }}>
+                      <tr>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#475569' }}>Merchant</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>Frequency</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>Avg Amount</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>Total Spent</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>Monthly Est.</th>
+                      </tr>
+                    </thead>
+                    <tbody style={{ background: 'white' }}>
+                      {subscriptions.map((sub, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{sub.merchant}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>{sub.frequency}x</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>${sub.avgAmount.toFixed(2)}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: '600', color: '#2563eb' }}>${sub.totalSpent.toFixed(2)}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', color: '#7c3aed' }}>${sub.monthlyEstimate.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'categories' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ background: 'white', padding: '24px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Category Analysis</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {categoryData.map((cat, idx) => {
+                      const percentage = (cat.value / totalSpent) * 100;
+                      return (
+                        <div key={idx}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: '500' }}>{cat.name}</span>
+                            <span style={{ color: '#64748b' }}>
+                              ${cat.value.toFixed(2)} ({percentage.toFixed(1)}%)
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', background: '#e2e8f0', borderRadius: '9999px', height: '8px' }}>
+                            <div
+                              style={{
+                                background: '#2563eb',
+                                height: '8px',
+                                borderRadius: '9999px',
+                                width: `${percentage}%`
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'merchants' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ background: '#f1f5f9' }}>
+                      <tr>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#475569' }}>#</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#475569' }}>Merchant</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>Transactions</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>Total Spent</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569' }}>Avg per Transaction</th>
+                      </tr>
+                    </thead>
+                    <tbody style={{ background: 'white' }}>
+                      {topMerchants.map((merchant, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', color: '#64748b' }}>{idx + 1}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{merchant.name}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>{merchant.count}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: '600', color: '#2563eb' }}>
+                            ${merchant.total.toFixed(2)}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right' }}>
+                            ${(merchant.total / merchant.count).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'transactions' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Filters */}
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    placeholder="🔍 Search transactions..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ flex: '1', padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px' }}
+                  />
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    style={{ padding: '8px 16px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px' }}
+                  >
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Transaction Table */}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ background: '#f1f5f9' }}>
+                      <tr>
+                        <th 
+                          style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#475569', cursor: 'pointer' }}
+                          onClick={() => {
+                            setSortField('transactionDate');
+                            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                          }}
+                        >
+                          Date {sortField === 'transactionDate' && (sortDirection === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#475569' }}>Description</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#475569' }}>Category</th>
+                        <th 
+                          style={{ padding: '12px 16px', textAlign: 'right', fontWeight: '600', color: '#475569', cursor: 'pointer' }}
+                          onClick={() => {
+                            setSortField('amount');
+                            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                          }}
+                        >
+                          Amount {sortField === 'amount' && (sortDirection === 'asc' ? '↑' : '↓')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody style={{ background: 'white' }}>
+                      {filteredTransactions.map((t, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                          <td style={{ padding: '12px 16px', fontSize: '14px' }}>{t.transactionDate}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500' }}>{t.description}</td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px' }}>
+                            <span style={{ padding: '4px 8px', background: '#dbeafe', color: '#1e40af', borderRadius: '4px', fontSize: '12px' }}>
+                              {t.category}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: '14px', textAlign: 'right', fontWeight: '600', color: '#0f172a' }}>
+                            ${t.amount.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', padding: '16px' }}>
+                  Showing {filteredTransactions.length} of {transactions.length} transactions
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

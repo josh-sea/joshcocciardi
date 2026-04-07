@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading Tool... - Josh Cocciardi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .nav-links a, .nav-links button {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .nav-links a:hover, .nav-links button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .error-card {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+
+        .error-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        .error-card h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .error-card p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        #toolContent {
+            display: none;
+        }
+
+        #toolContent.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1 id="toolTitle"><span id="toolIcon">🔧</span> <span id="toolTitleText">Loading...</span></h1>
+            <div class="nav-links">
+                <a href="index.html">← Dashboard</a>
+                <button id="editBtn" style="display: none;" onclick="editTool()">Edit</button>
+                <button onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading" id="loadingIndicator">
+        <div class="spinner"></div>
+        <p>Loading tool...</p>
+    </div>
+
+    <div class="error-container" id="errorContainer" style="display: none;">
+        <div class="error-card">
+            <div class="error-icon">❌</div>
+            <h2>Tool Not Found</h2>
+            <p id="errorMessage">The tool you're looking for doesn't exist or has been removed.</p>
+            <a href="index.html" class="btn">Back to Dashboard</a>
+        </div>
+    </div>
+
+    <div id="toolContent"></div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="auth.js"></script>
+    <script>
+        // Protect this page
+        protectPage();
+
+        // Initialize Firebase (you'll need to add your config)
+        const firebaseConfig = {
+            // TODO: Add your Firebase config here
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        let db;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+        }
+
+        // Get tool ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const toolId = urlParams.get('id');
+
+        // Function to edit tool
+        function editTool() {
+            window.location.href = `edit.html?id=${toolId}`;
+        }
+
+        // Load and display tool
+        async function loadTool() {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const errorContainer = document.getElementById('errorContainer');
+            const toolContent = document.getElementById('toolContent');
+            const errorMessage = document.getElementById('errorMessage');
+            const editBtn = document.getElementById('editBtn');
+
+            if (!toolId) {
+                loadingIndicator.style.display = 'none';
+                errorMessage.textContent = 'No tool ID specified in the URL.';
+                errorContainer.style.display = 'block';
+                return;
+            }
+
+            try {
+                if (!db) {
+                    throw new Error('Firebase is not initialized. Please configure Firebase.');
+                }
+
+                // Fetch tool from Firestore
+                const toolDoc = await db.collection('tools').doc(toolId).get();
+
+                if (!toolDoc.exists) {
+                    throw new Error('Tool not found');
+                }
+
+                const toolData = toolDoc.data();
+
+                // Update page title and header
+                document.title = `${toolData.title} - Josh Cocciardi`;
+                document.getElementById('toolIcon').textContent = toolData.icon || '🔧';
+                document.getElementById('toolTitleText').textContent = toolData.title;
+
+                // Show edit button
+                editBtn.style.display = 'block';
+
+                // Inject tool content
+                toolContent.innerHTML = toolData.content;
+                toolContent.classList.add('show');
+
+                // Hide loading indicator
+                loadingIndicator.style.display = 'none';
+
+                // Execute any scripts in the content
+                const scripts = toolContent.querySelectorAll('script');
+                scripts.forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    Array.from(oldScript.attributes).forEach(attr => {
+                        newScript.setAttribute(attr.name, attr.value);
+                    });
+                    newScript.textContent = oldScript.textContent;
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
+
+            } catch (error) {
+                console.error('Error loading tool:', error);
+                loadingIndicator.style.display = 'none';
+                errorMessage.textContent = error.message;
+                errorContainer.style.display = 'block';
+            }
+        }
+
+        // Load tool when page loads
+        loadTool();
+    </script>
+</body>
+</html>

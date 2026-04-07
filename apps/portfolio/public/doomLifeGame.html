@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conway's DOOM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #0f0;
+            overflow: hidden;
+        }
+
+        .game-wrapper {
+            display: flex;
+            height: 100vh;
+            background: #111;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #1a1a1a;
+            border-right: 2px solid #0f0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .game-title {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            color: #ff0;
+            text-shadow: 0 0 10px #ff0;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stat-item {
+            background: #222;
+            padding: 8px;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .stat-item.health {
+            color: #f00;
+            border-color: #f00;
+        }
+
+        .stat-item.ammo {
+            color: #ff0;
+            border-color: #ff0;
+        }
+
+        .stat-item.level {
+            color: #0ff;
+            border-color: #0ff;
+        }
+
+        .controls {
+            background: #222;
+            padding: 15px;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+        }
+
+        .controls h3 {
+            color: #ff0;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .control-item {
+            margin: 5px 0;
+            font-size: 12px;
+        }
+
+        .control-key {
+            color: #0ff;
+            font-weight: bold;
+        }
+
+        .objective {
+            background: #222;
+            padding: 15px;
+            border: 1px solid #f0f;
+            border-radius: 4px;
+        }
+
+        .objective h3 {
+            color: #f0f;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .objective-text {
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .game-button {
+            flex: 1;
+            background: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .game-button:hover {
+            background: #0f0;
+            color: #000;
+        }
+
+        .back-button {
+            background: #444;
+            color: #fff;
+            text-decoration: none;
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            text-align: center;
+            border: 1px solid #fff;
+            transition: all 0.2s;
+        }
+
+        .back-button:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        .game-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: #000;
+        }
+
+        #gameCanvas {
+            border: 2px solid #0f0;
+            max-width: 90%;
+            max-height: 90%;
+            image-rendering: pixelated;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+        }
+
+        /* Help Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+        }
+
+        .modal-content {
+            background: #1a1a1a;
+            margin: 10% auto;
+            padding: 20px;
+            border: 2px solid #0f0;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            color: #0f0;
+        }
+
+        .close {
+            color: #f00;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #ff0;
+        }
+
+        .help-content {
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+
+        .help-section {
+            margin-bottom: 15px;
+        }
+
+        .help-section h4 {
+            color: #ff0;
+            margin-bottom: 8px;
+        }
+
+        @media (max-width: 768px) {
+            .game-wrapper {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 2px solid #0f0;
+            }
+            
+            .game-container {
+                height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper">
+        <div class="sidebar">
+            <a href="/" class="back-button">← Back to Projects</a>
+            
+            <div class="game-title">CONWAY'S DOOM</div>
+            
+            <div class="stats">
+                <div class="stat-item health" id="health">Health: 100</div>
+                <div class="stat-item ammo" id="ammo">Ammo: 20 / 20</div>
+                <div class="stat-item level" id="level">Level: 1</div>
+                <div class="stat-item" id="generation">Generation: 0</div>
+                <div class="stat-item" id="position">Position: 1, 1</div>
+            </div>
+            
+            <div class="controls">
+                <h3>CONTROLS</h3>
+                <div class="control-item">
+                    <span class="control-key">↑↓</span> Forward/Backward
+                </div>
+                <div class="control-item">
+                    <span class="control-key">←→</span> Turn Left/Right
+                </div>
+                <div class="control-item">
+                    <span class="control-key">SPACE</span> Shoot Walls
+                </div>
+                <div class="control-item">
+                    <span class="control-key">R</span> Restart Level
+                </div>
+            </div>
+            
+            <div class="objective">
+                <h3>OBJECTIVE</h3>
+                <div class="objective-text" id="objective">
+                    Navigate to the magenta/yellow checkerboard finish area!
+                </div>
+            </div>
+            
+            <div class="buttons">
+                <button class="game-button" id="restartButton">Restart Level</button>
+                <button class="game-button" id="helpButton">? Help</button>
+            </div>
+        </div>
+        
+        <div class="game-container">
+            <canvas id="gameCanvas" width="600" height="600"></canvas>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeHelp">&times;</span>
+            <h2>How to Play Conway's DOOM</h2>
+            <div class="help-content">
+                <div class="help-section">
+                    <h4>🎯 Goal</h4>
+                    <p>Navigate to the magenta/yellow checkerboard finish area while avoiding the evolving Conway's Game of Life patterns.</p>
+                </div>
+                
+                <div class="help-section">
+                    <h4>🎮 Movement</h4>
+                    <p><strong>Arrow Keys:</strong> Move forward/backward and turn left/right</p>
+                    <p><strong>Space:</strong> Shoot to destroy walls and living cells</p>
+                    <p><strong>R:</strong> Restart the current level</p>
+                </div>
+                
+                <div class="help-section">
+                    <h4>🧬 Conway's Rules</h4>
+                    <p>The grid evolves every 3 seconds following Conway's Game of Life rules:</p>
+                    <ul>
+                        <li>Living cells with 2-3 neighbors survive</li>
+                        <li>Dead cells with exactly 3 neighbors become alive</li>
+                        <li>Living cells with < 2 or > 3 neighbors die</li>
+                    </ul>
+                </div>
+                
+                <div class="help-section">
+                    <h4>⚠️ Dangers</h4>
+                    <p>• Touching living cells deals 10 damage</p>
+                    <p>• You have 1 second of invincibility after taking damage</p>
+                    <p>• Running out of health means game over</p>
+                </div>
+                
+                <div class="help-section">
+                    <h4>💎 Power-ups</h4>
+                    <p>• Cyan boxes contain ammo (+10 rounds)</p>
+                    <p>• Each level increases the map size by 3x3</p>
+                    <p>• Completing a level restores 20 health</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load the game script -->
+    <script src="doomLifeGame.js"></script>
+    
+    <script>
+        // Initialize the game when the page loads
+        window.addEventListener('load', function() {
+            if (typeof window.initDoomLifeGame === 'function') {
+                window.initDoomLifeGame();
+            } else {
+                console.error('DoomLifeGame initialization function not found');
+            }
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (typeof window.resizeGameCanvas === 'function') {
+                window.resizeGameCanvas();
+            }
+        });
+    </script>
+</body>
+</html>

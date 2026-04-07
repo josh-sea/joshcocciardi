@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sample Tool - Josh Cocciardi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .code-block {
+            background: #f8f9fa;
+            border: 1px solid #e1e4e8;
+            border-radius: 5px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin: 15px 0;
+        }
+
+        .code-block code {
+            color: #e83e8c;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list li::before {
+            content: "✓";
+            color: #28a745;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .demo-section {
+            background: linear-gradient(135deg, #667eea22 0%, #764ba222 100%);
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .demo-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .demo-button:hover {
+            transform: translateY(-2px);
+        }
+
+        #demoOutput {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            min-height: 50px;
+            display: none;
+        }
+
+        #demoOutput.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1><span>📊</span> Sample Tool</h1>
+            <div class="nav-links">
+                <a href="index.html">← Back to Dashboard</a>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Welcome to the Sample Tool Page</h2>
+            <p>
+                This is a demonstration of how to create protected HTML pages in the tools directory. 
+                This page is automatically protected by the authentication system.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>How This Works</h2>
+            <p>Every page in the <span class="highlight">/tools</span> directory can be protected by including these two scripts:</p>
+            
+            <div class="code-block">
+                <code>&lt;script src="auth.js"&gt;&lt;/script&gt;</code><br>
+                <code>&lt;script&gt;protectPage();&lt;/script&gt;</code>
+            </div>
+
+            <p>When a user tries to access this page:</p>
+            <ul class="feature-list">
+                <li>The auth.js script checks if they're authenticated</li>
+                <li>If not authenticated, they're redirected to the login page</li>
+                <li>After logging in with admin/admin, they gain access</li>
+                <li>Authentication persists for the browser session</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>Creating Your Own Tool Pages</h2>
+            <p>To create a new tool page:</p>
+            <ol style="margin-left: 20px; color: #666;">
+                <li style="margin-bottom: 10px;">Create a new HTML file in <code>public/tools/</code> directory</li>
+                <li style="margin-bottom: 10px;">Include the authentication scripts as shown above</li>
+                <li style="margin-bottom: 10px;">Add your custom functionality and styling</li>
+                <li style="margin-bottom: 10px;">Run <code>npm run build</code> to build the project</li>
+                <li style="margin-bottom: 10px;">Deploy with <code>firebase deploy</code></li>
+            </ol>
+        </div>
+
+        <div class="card">
+            <div class="demo-section">
+                <h2>Interactive Demo</h2>
+                <p>Click the button below to see a simple interactive example:</p>
+                <button class="demo-button" onclick="runDemo()">Run Demo</button>
+                <div id="demoOutput"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="auth.js"></script>
+    <script>
+        // Protect this page - redirect to login if not authenticated
+        protectPage();
+
+        // Demo functionality
+        function runDemo() {
+            const output = document.getElementById('demoOutput');
+            const now = new Date();
+            output.innerHTML = `
+                <h3>Demo Output</h3>
+                <p><strong>Current Time:</strong> ${now.toLocaleString()}</p>
+                <p><strong>You are authenticated as:</strong> admin</p>
+                <p><strong>Session Active:</strong> Yes ✓</p>
+                <p style="margin-top: 15px; color: #28a745;">
+                    🎉 You can add any JavaScript functionality you want to your tool pages!
+                </p>
+            `;
+            output.classList.add('show');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/projects/electronic-mail/static/css/main.98bbf877.css",
+    "main.js": "/projects/electronic-mail/static/js/main.e530128e.js",
+    "index.html": "/projects/electronic-mail/index.html",
+    "main.98bbf877.css.map": "/projects/electronic-mail/static/css/main.98bbf877.css.map",
+    "main.e530128e.js.map": "/projects/electronic-mail/static/js/main.e530128e.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.98bbf877.css",
+    "static/js/main.e530128e.js"
+  ]
+}

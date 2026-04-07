@@ -1,0 +1,317 @@
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Add smooth scrolling behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* App container */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sticky navigation */
+.sticky-nav {
+  position: sticky !important;
+  top: 0;
+  z-index: 1000;
+  background: white !important;
+  margin: 0 !important;
+  padding: 1rem 0 !important;
+  border-bottom: 1px solid rgba(34,36,38,.15) !important;
+}
+
+/* Main content area */
+.main-content {
+  flex: 1;
+  padding: 2rem 0;
+  min-height: 0;
+  height: auto;
+}
+
+/* Project image thumbnails */
+.project-image-container {
+  transition: transform 0.2s;
+}
+
+.project-image-container:hover {
+  transform: scale(1.05);
+}
+
+/* Modal styles */
+.ui.modal {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui.modal > .content {
+  display: flex;
+  justify-content: center;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.ui.modal > .content img {
+  max-width: 90vw;
+  max-height: 80vh;
+  object-fit: contain;
+}
+
+/* Hide scrollbar for clean look */
+.no-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ensure content containers can scroll */
+.ui.container {
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+  padding-bottom: 2rem;
+}
+
+/* Responsive image grid */
+.project-images-grid {
+  display: flex;
+  gap: 1em;
+  overflow-x: auto;
+  padding: 1em 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Add shadow to cards */
+.ui.card {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+  transition: box-shadow 0.3s ease;
+}
+
+.ui.card:hover {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15) !important;
+}
+
+/* ── Projects page layout ── */
+.projects-section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #555;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 2rem 0 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid #e8e8e8;
+}
+
+/* Featured apps: 3-up grid, wraps to 1-col on mobile */
+.featured-apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+/* Regular projects: 2-up grid */
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Make all Semantic cards fill their grid cell */
+.featured-apps-grid .ui.card,
+.projects-grid .ui.card {
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+/* Constrain project image strip height */
+.project-images-strip {
+  display: flex;
+  gap: 0.75em;
+  overflow-x: auto;
+  padding: 0.75em 0 0.25em;
+  -webkit-overflow-scrolling: touch;
+}
+
+.project-images-strip img {
+  height: 120px;
+  width: auto;
+  object-fit: cover;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.project-images-strip img:hover {
+  transform: scale(1.04);
+}
+
+/* Launch App footer link */
+.card-launch-link {
+  cursor: pointer;
+  color: #4183c4;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.card-launch-link:hover {
+  color: #2c6fad;
+  text-decoration: underline;
+}
+
+/* Hulk Game Styles */
+.hulk-game-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.back-button {
+  padding: 0.5rem 1rem;
+  background-color: #4CAF50;
+  color: white;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: background-color 0.3s;
+}
+
+.back-button:hover {
+  background-color: #45a049;
+}
+
+.game-container {
+  position: relative;
+  width: 100%;
+  height: 600px;
+  background-color: #f0f0f0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  margin-bottom: 1rem;
+}
+
+#gameCanvas {
+  display: block;
+  background-color: #87CEEB;
+  width: 100%;
+  height: 100%;
+}
+
+.game-ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 10px;
+  z-index: 10;
+}
+
+.game-stats {
+  display: flex;
+  justify-content: space-around;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+}
+
+.message-box {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  z-index: 20;
+  min-width: 300px;
+}
+
+.message-text {
+  margin-bottom: 15px;
+  font-size: 18px;
+  font-family: 'Press Start 2P', monospace;
+}
+
+.message-button {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+}
+
+.message-button:hover {
+  background-color: #45a049;
+}
+
+.hidden {
+  display: none;
+}
+
+.game-instructions {
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.game-instructions h2 {
+  margin-top: 0;
+  color: #333;
+}
+
+.game-instructions ul {
+  padding-left: 20px;
+}
+
+.game-instructions li {
+  margin-bottom: 5px;
+}
+
+@media (max-width: 768px) {
+  .game-stats {
+    flex-direction: column;
+    align-items: flex-start;
+    font-size: 12px;
+  }
+  
+  .game-container {
+    height: 400px;
+  }
+  
+  .game-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .back-button {
+    margin-top: 10px;
+  }
+}

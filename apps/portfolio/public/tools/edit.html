@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Tool - Josh Cocciardi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 400px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+
+        .form-hint {
+            color: #666;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.show {
+            display: block;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .preview-section {
+            margin-top: 30px;
+            border-top: 2px solid #f0f0f0;
+            padding-top: 30px;
+        }
+
+        .preview-iframe {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1><span>✏️</span> Edit Tool</h1>
+            <div class="nav-links">
+                <a href="index.html">← Back to Dashboard</a>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading" id="loadingIndicator">
+        <div class="spinner"></div>
+        <p>Loading tool...</p>
+    </div>
+
+    <div class="container" id="editForm" style="display: none;">
+        <div class="alert alert-success" id="successAlert">
+            Tool updated successfully! <a href="#" id="viewLink" style="color: inherit; font-weight: bold;">View it here</a>
+        </div>
+        <div class="alert alert-error" id="errorAlert"></div>
+
+        <div class="card">
+            <h2>Edit Tool</h2>
+
+            <form id="toolForm">
+                <div class="form-group">
+                    <label for="toolTitle">Tool Title *</label>
+                    <input type="text" id="toolTitle" required>
+                    <div class="form-hint">This will be displayed in the dashboard</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="toolSlug">Tool URL Slug *</label>
+                    <input type="text" id="toolSlug" required disabled>
+                    <div class="form-hint">URL slug cannot be changed after creation</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="toolDescription">Description</label>
+                    <input type="text" id="toolDescription">
+                </div>
+
+                <div class="form-group">
+                    <label for="toolIcon">Icon Emoji</label>
+                    <input type="text" id="toolIcon" maxlength="2">
+                </div>
+
+                <div class="form-group">
+                    <label for="toolContent">HTML Content *</label>
+                    <textarea id="toolContent" required></textarea>
+                    <div class="form-hint">You can include HTML, CSS (in &lt;style&gt; tags), and JavaScript (in &lt;script&gt; tags)</div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Save Changes</button>
+                    <button type="button" class="btn btn-secondary" onclick="previewTool()">Preview</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="deleteTool()" style="margin-left: auto;">Delete Tool</button>
+                </div>
+            </form>
+
+            <div class="preview-section" id="previewSection" style="display: none;">
+                <h2>Preview</h2>
+                <iframe id="previewFrame" class="preview-iframe" sandbox="allow-scripts"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script src="auth.js"></script>
+    <script>
+        // Protect this page
+        protectPage();
+
+        // Initialize Firebase
+        const firebaseConfig = {
+            // TODO: Add your Firebase config here
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        let db;
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+        }
+
+        // Get tool ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const toolId = urlParams.get('id');
+
+        // Cancel edit
+        function cancelEdit() {
+            if (confirm('Discard changes?')) {
+                window.location.href = `view.html?id=${toolId}`;
+            }
+        }
+
+        // Preview function
+        function previewTool() {
+            const content = document.getElementById('toolContent').value;
+            const previewSection = document.getElementById('previewSection');
+            const previewFrame = document.getElementById('previewFrame');
+            
+            previewSection.style.display = 'block';
+            const previewDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+            previewDoc.open();
+            previewDoc.write(content);
+            previewDoc.close();
+        }
+
+        // Delete tool
+        async function deleteTool() {
+            if (!confirm('Are you sure you want to delete this tool? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                await db.collection('tools').doc(toolId).delete();
+                alert('Tool deleted successfully!');
+                window.location.href = 'index.html';
+            } catch (error) {
+                console.error('Error deleting tool:', error);
+                alert('Error deleting tool: ' + error.message);
+            }
+        }
+
+        // Load tool data
+        async function loadTool() {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const editForm = document.getElementById('editForm');
+
+            if (!toolId) {
+                alert('No tool ID specified');
+                window.location.href = 'index.html';
+                return;
+            }
+
+            try {
+                if (!db) {
+                    throw new Error('Firebase is not initialized.');
+                }
+
+                const toolDoc = await db.collection('tools').doc(toolId).get();
+
+                if (!toolDoc.exists) {
+                    throw new Error('Tool not found');
+                }
+
+                const toolData = toolDoc.data();
+
+                // Populate form
+                document.getElementById('toolTitle').value = toolData.title;
+                document.getElementById('toolSlug').value = toolData.slug;
+                document.getElementById('toolDescription').value = toolData.description || '';
+                document.getElementById('toolIcon').value = toolData.icon || '';
+                document.getElementById('toolContent').value = toolData.content;
+
+                // Show form
+                loadingIndicator.style.display = 'none';
+                editForm.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error loading tool:', error);
+                alert('Error: ' + error.message);
+                window.location.href = 'index.html';
+            }
+        }
+
+        // Form submission
+        document.getElementById('toolForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const errorAlert = document.getElementById('errorAlert');
+            const successAlert = document.getElementById('successAlert');
+            
+            // Hide alerts
+            errorAlert.classList.remove('show');
+            successAlert.classList.remove('show');
+            
+            // Get form data
+            const toolData = {
+                title: document.getElementById('toolTitle').value,
+                slug: document.getElementById('toolSlug').value,
+                description: document.getElementById('toolDescription').value || '',
+                icon: document.getElementById('toolIcon').value || '🔧',
+                content: document.getElementById('toolContent').value,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Saving...';
+
+            try {
+                if (!db) {
+                    throw new Error('Firebase is not initialized.');
+                }
+
+                // Update in Firestore
+                await db.collection('tools').doc(toolId).update(toolData);
+
+                // Show success message
+                const viewLink = document.getElementById('viewLink');
+                viewLink.href = `view.html?id=${toolId}`;
+                successAlert.classList.add('show');
+                
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error updating tool:', error);
+                errorAlert.textContent = 'Error: ' + error.message;
+                errorAlert.classList.add('show');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Save Changes';
+            }
+        });
+
+        // Load tool when page loads
+        loadTool();
+    </script>
+</body>
+</html>

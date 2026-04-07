@@ -1,0 +1,49 @@
+{
+  "name": "gmail-messages",
+  "version": "1.0.0",
+  "private": true,
+  "homepage": "/projects/electronic-mail",
+  "dependencies": {
+    "express": "^4.18.2",
+    "firebase": "^10.7.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0"
+  },
+  "scripts": {
+    "dev": "react-scripts start",
+    "start": "node server.js",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "deploy": "./deploy-to-portfolio.sh",
+    "deploy:portfolio": "./deploy-to-portfolio.sh",
+    "deploy:firestore": "cd ../joshcocciardi && firebase deploy --only firestore:rules,firestore:indexes",
+    "deploy:hosting": "cd ../joshcocciardi && firebase deploy --only hosting",
+    "firestore:copy": "cp firestore.rules firestore.indexes.json ../joshcocciardi/"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

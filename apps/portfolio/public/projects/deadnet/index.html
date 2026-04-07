@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeadNet Community - The Grateful Dead Fan Forum</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tahoma:wght@400;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --win-blue: #0a246a;
+            --win-blue-light: #3169c6;
+            --win-title: #1f6bc5;
+            --win-gray: #ece9d8;
+            --win-border-light: #ffffff;
+            --win-border-dark: #888888;
+            --win-border-darker: #444444;
+            --win-green: #2d6b2d;
+            --accent-red: #8b0000;
+            --accent-gold: #cc9900;
+            --link-blue: #0000cc;
+            --link-visited: #551a8b;
+            --body-bg: #3a6ea5;
+            --panel-bg: #ece9d8;
+            --text-dark: #000000;
+            --text-med: #333333;
+        }
+
+        body {
+            font-family: Tahoma, 'MS Sans Serif', Arial, sans-serif;
+            font-size: 13px;
+            background-color: var(--body-bg);
+            background-image:
+                repeating-linear-gradient(45deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(0, 0, 0, 0.03) 2px,
+                    rgba(0, 0, 0, 0.03) 4px);
+            min-height: 100vh;
+            color: var(--text-dark);
+        }
+
+        /* WINDOW CHROME */
+        .window {
+            border: 2px solid var(--win-border-dark);
+            border-top-color: var(--win-border-light);
+            border-left-color: var(--win-border-light);
+            box-shadow: 2px 2px 0 var(--win-border-darker), inset 1px 1px 0 #fff;
+            background: var(--panel-bg);
+        }
+
+        .window-title-bar {
+            background: linear-gradient(to right, var(--win-title) 0%, var(--win-blue-light) 100%);
+            padding: 4px 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            user-select: none;
+        }
+
+        .title-bar-icon {
+            font-size: 14px;
+        }
+
+        .title-bar-buttons {
+            margin-left: auto;
+            display: flex;
+            gap: 2px;
+        }
+
+        .tb-btn {
+            width: 16px;
+            height: 14px;
+            background: var(--panel-bg);
+            border: 1px solid;
+            border-top-color: #fff;
+            border-left-color: #fff;
+            border-right-color: #888;
+            border-bottom-color: #888;
+            font-size: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #000;
+            font-weight: bold;
+            line-height: 1;
+        }
+
+        /* INSET PANEL */
+        .inset {
+            border: 2px solid;
+            border-top-color: var(--win-border-dark);
+            border-left-color: var(--win-border-dark);
+            border-bottom-color: var(--win-border-light);
+            border-right-color: var(--win-border-light);
+            background: white;
+            padding: 8px;
+        }
+
+        /* RAISED BUTTON */
+        .btn {
+            background: var(--panel-bg);
+            border: 2px solid;
+            border-top-color: var(--win-border-light);
+            border-left-color: var(--win-border-light);
+            border-right-color: var(--win-border-dark);
+            border-bottom-color: var(--win-border-dark);
+            padding: 4px 12px;
+            font-family: Tahoma, Arial, sans-serif;
+            font-size: 12px;
+            cursor: pointer;
+            color: #000;
+            min-width: 75px;
+        }
+
+        .btn:active {
+            border-top-color: var(--win-border-dark);
+            border-left-color: var(--win-border-dark);
+            border-right-color: var(--win-border-light);
+            border-bottom-color: var(--win-border-light);
+            padding: 5px 11px 3px 13px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(to bottom, #4a90d9 0%, #1a5fa8 50%, #2468b0 51%, #3a7cc4 100%);
+            color: white;
+            font-weight: bold;
+            border-top-color: #6ab0f0;
+            border-left-color: #5a9fe0;
+        }
+
+        /* LAYOUT */
+        .desktop {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        /* HEADER BANNER */
+        .header-window {
+            margin-bottom: 8px;
+        }
+
+        .header-content {
+            background: linear-gradient(135deg, #1a0a00 0%, #3d1a00 30%, #1a0a00 60%, #000 100%);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 3px solid var(--accent-gold);
+        }
+
+        .skull-logo {
+            font-size: 52px;
+            line-height: 1;
+            filter: drop-shadow(0 0 8px rgba(204, 153, 0, 0.6));
+            animation: glow 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from {
+                filter: drop-shadow(0 0 4px rgba(204, 153, 0, 0.4));
+            }
+
+            to {
+                filter: drop-shadow(0 0 12px rgba(204, 153, 0, 0.9));
+            }
+        }
+
+        .header-text h1 {
+            font-family: 'Times New Roman', serif;
+            font-size: 28px;
+            color: var(--accent-gold);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            letter-spacing: 2px;
+        }
+
+        .header-text .tagline {
+            color: #aaaaaa;
+            font-size: 12px;
+            margin-top: 4px;
+            font-style: italic;
+        }
+
+        .header-marquee {
+            background: #000;
+            border-top: 1px solid #333;
+            padding: 4px 0;
+            overflow: hidden;
+        }
+
+        .marquee-inner {
+            white-space: nowrap;
+            display: inline-block;
+            animation: marquee 30s linear infinite;
+            color: var(--accent-gold);
+            font-size: 12px;
+        }
+
+        @keyframes marquee {
+            0% {
+                transform: translateX(1100px);
+            }
+
+            100% {
+                transform: translateX(-100%);
+            }
+        }
+
+        /* ONLINE BAR */
+        .online-bar {
+            background: var(--win-blue);
+            color: #fff;
+            padding: 3px 8px;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 2px solid var(--win-border-dark);
+        }
+
+        .online-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff00;
+            border-radius: 50%;
+            display: inline-block;
+            animation: blink 2s ease-in-out infinite;
+            box-shadow: 0 0 4px #00ff00;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* MAIN LAYOUT */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 180px 1fr 180px;
+            gap: 8px;
+        }
+
+        /* SIDEBAR */
+        .sidebar-section {
+            margin-bottom: 8px;
+        }
+
+        .sidebar-header {
+            background: var(--win-blue);
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--accent-gold);
+        }
+
+        .sidebar-item {
+            display: block;
+            padding: 5px 8px;
+            border-bottom: 1px solid #d0cdc0;
+            cursor: pointer;
+            color: var(--link-blue);
+            text-decoration: none;
+            font-size: 12px;
+            background: white;
+        }
+
+        .sidebar-item:hover {
+            background: #ddeeff;
+            color: var(--accent-red);
+        }
+
+        .sidebar-item.active {
+            background: #ddeeff;
+            font-weight: bold;
+            color: #000;
+            border-left: 3px solid var(--accent-gold);
+        }
+
+        .sidebar-item .item-icon {
+            margin-right: 4px;
+        }
+
+        /* WHO'S ONLINE */
+        .member-list .member {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-bottom: 1px solid #d0cdc0;
+            font-size: 12px;
+            background: white;
+        }
+
+        .member-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            border: 1px solid #888;
+            background: #f0f0f0;
+        }
+
+        .member-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .status-online {
+            background: #00cc00;
+        }
+
+        .status-away {
+            background: #ffaa00;
+        }
+
+        .status-offline {
+            background: #888;
+        }
+
+        /* CONTENT AREA */
+        .content-tabs {
+            display: flex;
+            gap: 2px;
+            padding: 6px 6px 0;
+            background: var(--panel-bg);
+            border-bottom: 2px solid var(--win-border-dark);
+        }
+
+        .tab {
+            padding: 4px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            border: 2px solid;
+            border-bottom: none;
+            position: relative;
+            top: 2px;
+            border-top-color: var(--win-border-light);
+            border-left-color: var(--win-border-light);
+            border-right-color: var(--win-border-dark);
+            background: #c0bdb0;
+            color: #555;
+        }
+
+        .tab.active {
+            background: var(--panel-bg);
+            color: #000;
+            font-weight: bold;
+            z-index: 1;
+            border-top-color: var(--win-border-light);
+            border-left-color: var(--win-border-light);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* FORUM THREADS */
+        .thread-list {
+            background: white;
+        }
+
+        .thread-item {
+            display: grid;
+            grid-template-columns: 32px 1fr 80px 60px 80px;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-bottom: 1px solid #d0cdc0;
+            cursor: pointer;
+        }
+
+        .thread-item:hover {
+            background: #eef5ff;
+        }
+
+        .thread-item.unread {
+            background: #fffef0;
+        }
+
+        .thread-item.unread .thread-title {
+            font-weight: bold;
+        }
+
+        .thread-icon {
+            font-size: 20px;
+            text-align: center;
+        }
+
+        .thread-title {
+            font-size: 13px;
+            color: var(--link-blue);
+        }
+
+        .thread-title:hover {
+            text-decoration: underline;
+            color: var(--accent-red);
+        }
+
+        .thread-meta {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .thread-replies {
+            font-size: 12px;
+            text-align: center;
+            color: #333;
+        }
+
+        .thread-last {
+            font-size: 11px;
+            color: #666;
+            text-align: right;
+        }
+
+        .subforum-header {
+            background: linear-gradient(to right, #2a4a8a, #3a6ab0);
+            color: white;
+            padding: 5px 10px;
+            font-weight: bold;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .subforum-header span {
+            opacity: 0.7;
+            font-weight: normal;
+            font-size: 11px;
+        }
+
+        /* NEW POST BUTTON */
+        .toolbar {
+            padding: 6px 8px;
+            background: var(--panel-bg);
+            border-bottom: 2px solid var(--win-border-dark);
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        /* COMPOSE AREA */
+        .compose-area {
+            padding: 8px;
+            background: var(--panel-bg);
+            border-top: 2px solid var(--win-border-dark);
+        }
+
+        .compose-area label {
+            font-size: 12px;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .compose-area input[type="text"] {
+            width: 100%;
+            padding: 4px 6px;
+            font-family: Tahoma, Arial, sans-serif;
+            font-size: 12px;
+            border: 2px solid;
+            border-top-color: var(--win-border-dark);
+            border-left-color: var(--win-border-dark);
+            border-bottom-color: var(--win-border-light);
+            border-right-color: var(--win-border-light);
+            margin-bottom: 6px;
+            background: white;
+        }
+
+        .compose-area textarea {
+            width: 100%;
+            height: 80px;
+            padding: 4px 6px;
+            font-family: Tahoma, Arial, sans-serif;
+            font-size: 12px;
+            border: 2px solid;
+            border-top-color: var(--win-border-dark);
+            border-left-color: var(--win-border-dark);
+            border-bottom-color: var(--win-border-light);
+            border-right-color: var(--win-border-light);
+            resize: vertical;
+            background: white;
+            margin-bottom: 6px;
+        }
+
+        /* PHOTO GALLERY */
+        .photo-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            padding: 10px;
+            background: white;
+        }
+
+        .photo-thumb {
+            border: 3px solid var(--win-border-dark);
+            border-top-color: var(--win-border-light);
+            border-left-color: var(--win-border-light);
+            cursor: pointer;
+            text-align: center;
+            padding: 6px;
+            background: #f8f8f8;
+            font-size: 11px;
+            color: #555;
+        }
+
+        .photo-thumb:hover {
+            border-color: var(--accent-gold);
+            background: #fffef0;
+        }
+
+        .photo-thumb .photo-emoji {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .photo-thumb .photo-caption {
+            color: var(--link-blue);
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        /* SETLIST */
+        .setlist-entry {
+            border-bottom: 1px solid #d0cdc0;
+            padding: 10px 12px;
+            background: white;
+        }
+
+        .setlist-entry:hover {
+            background: #f5f5ff;
+        }
+
+        .setlist-date {
+            font-weight: bold;
+            color: var(--accent-red);
+            font-size: 13px;
+        }
+
+        .setlist-venue {
+            color: #333;
+            font-size: 12px;
+            margin: 2px 0;
+        }
+
+        .setlist-songs {
+            font-size: 11px;
+            color: #555;
+            font-style: italic;
+            margin-top: 4px;
+        }
+
+        .setlist-actions {
+            margin-top: 6px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .setlist-actions a {
+            font-size: 11px;
+            color: var(--link-blue);
+            cursor: pointer;
+        }
+
+        .setlist-actions a:hover {
+            text-decoration: underline;
+            color: var(--accent-red);
+        }
+
+        /* CHAT PANEL */
+        .chat-log {
+            height: 220px;
+            overflow-y: auto;
+            background: white;
+            padding: 6px;
+            border: 2px solid;
+            border-top-color: var(--win-border-dark);
+            border-left-color: var(--win-border-dark);
+            border-bottom-color: var(--win-border-light);
+            border-right-color: var(--win-border-light);
+            margin: 6px 0;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .chat-msg .msg-name {
+            font-weight: bold;
+            color: var(--win-blue);
+        }
+
+        .chat-msg .msg-name.me {
+            color: var(--accent-red);
+        }
+
+        .chat-input-row {
+            display: flex;
+            gap: 4px;
+        }
+
+        .chat-input-row input {
+            flex: 1;
+            padding: 4px 6px;
+            font-family: Tahoma, Arial, sans-serif;
+            font-size: 12px;
+            border: 2px solid;
+            border-top-color: var(--win-border-dark);
+            border-left-color: var(--win-border-dark);
+            border-bottom-color: var(--win-border-light);
+            border-right-color: var(--win-border-light);
+        }
+
+        /* STATUS BAR */
+        .status-bar {
+            background: var(--panel-bg);
+            border-top: 2px solid var(--win-border-dark);
+            padding: 2px 8px;
+            display: flex;
+            gap: 2px;
+            font-size: 11px;
+            color: #555;
+        }
+
+        .status-pane {
+            flex: 1;
+            border: 1px solid;
+            border-top-color: var(--win-border-dark);
+            border-left-color: var(--win-border-dark);
+            border-bottom-color: var(--win-border-light);
+            border-right-color: var(--win-border-light);
+            padding: 2px 4px;
+        }
+
+        /* MODAL OVERLAY */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-window {
+            width: 520px;
+            max-width: 90vw;
+        }
+
+        .modal-body {
+            padding: 12px;
+        }
+
+        /* UPLOAD ZONE */
+        .upload-zone {
+            border: 3px dashed #888;
+            background: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 13px;
+            color: #666;
+            margin: 8px 0;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent-gold);
+            background: #fffef0;
+        }
+
+        /* COUNTER */
+        .hit-counter {
+            background: #000;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 3px 8px;
+            letter-spacing: 4px;
+            display: inline-block;
+            margin: 4px 0;
+        }
+
+        /* SEPARATOR */
+        .separator {
+            border: none;
+            border-top: 2px solid;
+            border-top-color: var(--win-border-dark);
+            border-bottom: 1px solid var(--win-border-light);
+            margin: 6px 0;
+        }
+
+        /* ANNOUNCEMENT BOX */
+        .announcement {
+            background: #fffce0;
+            border: 2px solid var(--accent-gold);
+            padding: 8px 12px;
+            font-size: 12px;
+            margin: 6px 0;
+        }
+
+        .announcement strong {
+            color: var(--accent-red);
+        }
+
+        /* EVENT CARD */
+        .event-card {
+            background: white;
+            border-bottom: 1px solid #d0cdc0;
+            padding: 10px 12px;
+        }
+
+        .event-card:hover {
+            background: #f0f5ff;
+        }
+
+        .event-date-badge {
+            display: inline-block;
+            background: var(--accent-red);
+            color: white;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .event-title {
+            font-weight: bold;
+            color: var(--link-blue);
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .event-details {
+            font-size: 12px;
+            color: #555;
+        }
+
+        /* RSVP row */
+        .rsvp-row {
+            margin-top: 6px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .rsvp-count {
+            color: var(--win-green);
+            font-weight: bold;
+        }
+
+        /* HIGHLIGHT THREAD VIEW */
+        .thread-view {
+            padding: 10px;
+            background: white;
+        }
+
+        .post-entry {
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            background: #fafafa;
+        }
+
+        .post-header {
+            background: linear-gradient(to right, #e0e8f8, #d0d8f0);
+            padding: 5px 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid #bbb;
+        }
+
+        .post-avatar {
+            font-size: 22px;
+        }
+
+        .post-user {
+            font-weight: bold;
+            color: var(--win-blue);
+            font-size: 12px;
+        }
+
+        .post-date {
+            font-size: 11px;
+            color: #666;
+            margin-left: auto;
+        }
+
+        .post-body {
+            padding: 10px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .post-sig {
+            border-top: 1px dashed #bbb;
+            margin-top: 8px;
+            padding-top: 6px;
+            font-size: 11px;
+            color: #888;
+            font-style: italic;
+        }
+
+        /* EMOJI TOOLBAR */
+        .emoji-toolbar {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: #d8d5c5;
+            border-bottom: 1px solid #bbb;
+            flex-wrap: wrap;
+        }
+
+        .emoji-btn {
+            font-size: 16px;
+            cursor: pointer;
+            padding: 2px 4px;
+            border: 1px solid transparent;
+            border-radius: 2px;
+        }
+
+        .emoji-btn:hover {
+            border-color: #888;
+            background: white;
+        }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar {
+            width: 16px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--panel-bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--panel-bg);
+            border: 1px solid;
+            border-top-color: #fff;
+            border-left-color: #fff;
+            border-right-color: #888;
+            border-bottom-color: #888;
+        }
+
+        ::-webkit-scrollbar-button {
+            background: var(--panel-bg);
+            border: 1px solid;
+            border-top-color: #fff;
+            border-left-color: #fff;
+            border-right-color: #888;
+            border-bottom-color: #888;
+            height: 16px;
+        }
+
+        /* VISITOR NOTICE */
+        .notice-bar {
+            background: #ffff99;
+            border: 1px solid #cccc00;
+            padding: 4px 10px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="desktop">
+
+        <!-- HEADER WINDOW -->
+        <div class="window header-window">
+            <div class="window-title-bar">
+                <span class="title-bar-icon">💀</span>
+                DeadNet Community Forum - Version 2.1
+                <div class="title-bar-buttons">
+                    <div class="tb-btn">_</div>
+                    <div class="tb-btn">□</div>
+                    <div class="tb-btn">✕</div>
+                </div>
+            </div>
+            <div class="header-content">
+                <div class="skull-logo">☠️</div>
+                <div class="header-text">
+                    <h1>DeadNet Community</h1>
+                    <div class="tagline">"What a long, strange trip it's been..." &nbsp;|&nbsp; Est. 2003 &nbsp;|&nbsp;
+                        47,312 Members</div>
+                </div>
+                <div style="margin-left:auto; text-align:center; color:#aaa; font-size:11px;">
+                    <div class="hit-counter" id="hitCounter">0047312</div>
+                    <div>visitors since 2003</div>
+                </div>
+            </div>
+            <div class="header-marquee">
+                <span class="marquee-inner">
+                    🎸 Welcome to DeadNet! &nbsp;|&nbsp; 🌹 "Truckin'" turns 53 this year &nbsp;|&nbsp; 📅 Dead & Co
+                    dates announced for summer 2025! &nbsp;|&nbsp; 🎵 Share your favorite show recordings in the Tape
+                    Library &nbsp;|&nbsp; 👋 New members: introduce yourself in the Meeting Place! &nbsp;|&nbsp; 📷 New
+                    photos from Alpine Valley added to Gallery &nbsp;|&nbsp; ☮️ Keep it mellow, keep it Dead
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                </span>
+            </div>
+            <div class="online-bar">
+                <span class="online-dot"></span>
+                <strong>You are browsing as: Guest</strong>
+                &nbsp;|&nbsp;
+                <span>Members Online: <strong>23</strong></span>
+                &nbsp;|&nbsp;
+                <span>Posts Today: <strong>47</strong></span>
+            </div>
+            <div class="notice-bar">
+                ⚠️ <strong>Note:</strong> You are browsing in guest mode. Sign in or register to post messages, upload
+                photos, and RSVP to events!
+                &nbsp; <button class="btn btn-primary" style="font-size:11px; padding:2px 10px;">Sign In /
+                    Register</button>
+            </div>
+        </div>
+
+        <!-- MAIN LAYOUT -->
+        <div class="main-layout">
+
+            <!-- LEFT SIDEBAR -->
+            <div>
+                <div class="window sidebar-section">
+                    <div class="window-title-bar" style="font-size:11px; padding:3px 6px;">
+                        📋 Navigation
+                    </div>
+                    <div>
+                        <a class="sidebar-item active" onclick="showSection('forum')"><span class="item-icon">💬</span>
+                            Message Boards</a>
+                        <a class="sidebar-item" onclick="showSection('photos')"><span class="item-icon">📷</span> Photo
+                            Gallery</a>
+                        <a class="sidebar-item" onclick="showSection('setlists')"><span class="item-icon">🎵</span>
+                            Setlist Archive</a>
+                        <a class="sidebar-item" onclick="showSection('events')"><span class="item-icon">📅</span>
+                            Upcoming Events</a>
+                        <a class="sidebar-item" onclick="showSection('chat')"><span class="item-icon">💭</span> Live
+                            Chat Room</a>
+                        <a class="sidebar-item" onclick="showSection('tapes')"><span class="item-icon">📼</span> Tape
+                            Library</a>
+                    </div>
+                </div>
+
+                <div class="window sidebar-section">
+                    <div class="window-title-bar" style="font-size:11px; padding:3px 6px;">
+                        🟢 Who's Online (23)
+                    </div>
+                    <div class="member-list">
+                        <div class="member">
+                            <div class="member-avatar">🎸</div><span style="flex:1;font-size:12px;">JerryFan68</span>
+                            <div class="member-status status-online"></div>
+                        </div>
+                        <div class="member">
+                            <div class="member-avatar">🌹</div><span style="flex:1;font-size:12px;">DeadHead_Lori</span>
+                            <div class="member-status status-online"></div>
+                        </div>
+                        <div class="member">
+                            <div class="member-avatar">☮️</div><span style="flex:1;font-size:12px;">BobWeir4ever</span>
+                            <div class="member-status status-online"></div>
+                        </div>
+                        <div class="member">
+                            <div class="member-avatar">💀</div><span style="flex:1;font-size:12px;">SugarMagnolia</span>
+                            <div class="member-status status-away"></div>
+                        </div>
+                        <div class="member">
+                            <div class="member-avatar">🎵</div><span style="flex:1;font-size:12px;">Phil_phan</span>
+                            <div class="member-status status-online"></div>
+                        </div>
+                        <div class="member">
+                            <div class="member-avatar">🌀</div><span style="flex:1;font-size:12px;">CaseyJones77</span>
+                            <div class="member-status status-online"></div>
+                        </div>
+                        <div class="member">
+                            <div class="member-avatar">🎪</div><span
+                                style="flex:1;font-size:12px;">TruckinSince72</span>
+                            <div class="member-status status-away"></div>
+                        </div>
+                        <div class="member">
+                            <div class="member-avatar">🍄</div><span style="flex:1;font-size:12px;">Rosebud_Mary</span>
+                            <div class="member-status status-offline"></div>
+                        </div>
+                        <a class="sidebar-item" style="font-size:11px; color:#666; text-align:center; display:block;">+
+                            15 more online...</a>
+                    </div>
+                </div>
+
+                <div class="window sidebar-section">
+                    <div class="window-title-bar" style="font-size:11px; padding:3px 6px;">
+                        🎵 Song of the Day
+                    </div>
+                    <div style="background:white; padding:8px; font-size:12px; text-align:center;">
+                        <div style="font-size:24px; margin-bottom:4px;">🎸</div>
+                        <div style="font-weight:bold; color:var(--accent-red);">"Ripple"</div>
+                        <div style="color:#666; font-size:11px; margin-top:4px; font-style:italic;">American Beauty,
+                            1970</div>
+                        <hr class="separator">
+                        <div style="color:#555; font-size:11px;">"If my words did glow..."</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN CONTENT -->
+            <div class="window">
+                <div class="window-title-bar">
+                    <span id="mainTitle">💬 Message Boards</span>
+                    <div class="title-bar-buttons">
+                        <div class="tb-btn">_</div>
+                        <div class="tb-btn">□</div>
+                    </div>
+                </div>
+
+                <!-- FORUM SECTION -->
+                <div id="section-forum" class="tab-content active">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" onclick="openNewPost()">✏️ New Post</button>
+                        <button class="btn" onclick="refreshForum()">🔄 Refresh</button>
+                        <button class="btn" onclick="showThread()">📖 View Thread</button>
+                        <span style="font-size:11px; color:#555; margin-left:8px;">Showing 1-15 of 2,847 threads</span>
+                    </div>
+
+                    <div class="announcement">
+                        <strong>📌 Pinned:</strong> Rules of the road — keep it friendly, keep it about the music. No
+                        bootleg sales. Share freely, trade fairly.
+                    </div>
+
+                    <div class="thread-list">
+                        <div class="subforum-header">📣 General Discussion <span>The main meeting place. Talk about
+                                anything Dead-related.</span></div>
+
+                        <div class="thread-item unread" onclick="showThread()">
+                            <div class="thread-icon">🔥</div>
+                            <div>
+                                <div class="thread-title">BEST Jerry guitar solo ever — poll results are in!</div>
+                                <div class="thread-meta">by JerryFan68 &nbsp;•&nbsp; General Discussion</div>
+                            </div>
+                            <div class="thread-meta">JerryFan68<br>2 min ago</div>
+                            <div class="thread-replies"><strong>142</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">Today<br>3:42 PM</div>
+                        </div>
+
+                        <div class="thread-item unread" onclick="showThread()">
+                            <div class="thread-icon">💬</div>
+                            <div>
+                                <div class="thread-title">Anyone else catch the Dead & Co stream last night?</div>
+                                <div class="thread-meta">by SugarMagnolia &nbsp;•&nbsp; General Discussion</div>
+                            </div>
+                            <div class="thread-meta">Phil_phan<br>18 min ago</div>
+                            <div class="thread-replies"><strong>38</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">Today<br>3:26 PM</div>
+                        </div>
+
+                        <div class="thread-item" onclick="showThread()">
+                            <div class="thread-icon">💬</div>
+                            <div>
+                                <div class="thread-title">Introduce yourself! New members check in here</div>
+                                <div class="thread-meta">by Admin_Garcia &nbsp;•&nbsp; General Discussion</div>
+                            </div>
+                            <div class="thread-meta">NewDeadhead<br>1 hr ago</div>
+                            <div class="thread-replies"><strong>2,104</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">Today<br>2:11 PM</div>
+                        </div>
+
+                        <div class="thread-item" onclick="showThread()">
+                            <div class="thread-icon">📷</div>
+                            <div>
+                                <div class="thread-title">Photos from Veneta 8/27/72 — someone finally scanned them
+                                </div>
+                                <div class="thread-meta">by TruckinSince72 &nbsp;•&nbsp; General Discussion</div>
+                            </div>
+                            <div class="thread-meta">DeadHead_Lori<br>3 hr ago</div>
+                            <div class="thread-replies"><strong>67</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">Today<br>12:55 PM</div>
+                        </div>
+
+                        <div class="subforum-header">🎵 Show Discussion <span>Talk about specific shows, setlists, and
+                                recordings.</span></div>
+
+                        <div class="thread-item unread" onclick="showThread()">
+                            <div class="thread-icon">🎸</div>
+                            <div>
+                                <div class="thread-title">Cornell 5/8/77 — still the greatest show ever played?</div>
+                                <div class="thread-meta">by Rosebud_Mary &nbsp;•&nbsp; Show Discussion</div>
+                            </div>
+                            <div class="thread-meta">CaseyJones77<br>45 min ago</div>
+                            <div class="thread-replies"><strong>311</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">Today<br>3:00 PM</div>
+                        </div>
+
+                        <div class="thread-item" onclick="showThread()">
+                            <div class="thread-icon">💬</div>
+                            <div>
+                                <div class="thread-title">Ranking every Dick's Picks release — my definitive list</div>
+                                <div class="thread-meta">by BobWeir4ever &nbsp;•&nbsp; Show Discussion</div>
+                            </div>
+                            <div class="thread-meta">JerryFan68<br>Yesterday</div>
+                            <div class="thread-replies"><strong>88</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">Yesterday<br>9:14 PM</div>
+                        </div>
+
+                        <div class="thread-item" onclick="showThread()">
+                            <div class="thread-icon">🎵</div>
+                            <div>
+                                <div class="thread-title">Top 10 "Dark Star" jams — where does 2/13/70 land?</div>
+                                <div class="thread-meta">by Phil_phan &nbsp;•&nbsp; Show Discussion</div>
+                            </div>
+                            <div class="thread-meta">SugarMagnolia<br>2 days ago</div>
+                            <div class="thread-replies"><strong>54</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">2 days ago</div>
+                        </div>
+
+                        <div class="subforum-header">🗓️ Planning & Events <span>Listening parties, meetups, and tour
+                                plans.</span></div>
+
+                        <div class="thread-item unread" onclick="showThread()">
+                            <div class="thread-icon">📅</div>
+                            <div>
+                                <div class="thread-title">Summer 2025 tour carpool thread — who needs a ride?</div>
+                                <div class="thread-meta">by DeadHead_Lori &nbsp;•&nbsp; Planning</div>
+                            </div>
+                            <div class="thread-meta">TruckinSince72<br>1 hr ago</div>
+                            <div class="thread-replies"><strong>29</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">Today<br>2:45 PM</div>
+                        </div>
+
+                        <div class="thread-item" onclick="showThread()">
+                            <div class="thread-icon">🏠</div>
+                            <div>
+                                <div class="thread-title">Monthly Listening Party — June date TBD, vote inside!</div>
+                                <div class="thread-meta">by Admin_Garcia &nbsp;•&nbsp; Planning</div>
+                            </div>
+                            <div class="thread-meta">Rosebud_Mary<br>3 days ago</div>
+                            <div class="thread-replies"><strong>16</strong><br><span
+                                    style="font-size:10px;color:#888;">replies</span></div>
+                            <div class="thread-last">3 days ago</div>
+                        </div>
+                    </div>
+
+                    <div class="status-bar">
+                        <div class="status-pane">Page 1 of 190</div>
+                        <div class="status-pane">2,847 threads | 48,213 posts</div>
+                        <div class="status-pane">Last post: 2 min ago</div>
+                    </div>
+                </div>
+
+                <!-- THREAD VIEW SECTION -->
+                <div id="section-thread" class="tab-content">
+                    <div class="toolbar">
+                        <button class="btn" onclick="showSection('forum')">⬅ Back to Boards</button>
+                        <button class="btn btn-primary" onclick="openReply()">✏️ Reply</button>
+                        <button class="btn">🔖 Subscribe</button>
+                    </div>
+
+                    <div style="padding:8px; background:#e8e0d0; border-bottom:2px solid #bbb;">
+                        <div style="font-size:16px; font-weight:bold; color:var(--accent-red);">Cornell 5/8/77 — still
+                            the greatest show ever played?</div>
+                        <div style="font-size:11px; color:#666; margin-top:2px;">Posted in: Show Discussion
+                            &nbsp;|&nbsp; 311 replies &nbsp;|&nbsp; Started by Rosebud_Mary on March 3, 2025</div>
+                    </div>
+
+                    <div class="thread-view">
+                        <div class="post-entry">
+                            <div class="post-header">
+                                <div class="post-avatar">🌹</div>
+                                <div>
+                                    <div class="post-user">Rosebud_Mary</div>
+                                    <div style="font-size:11px; color:#888;">Senior Member | Posts: 4,211 | Joined: 2004
+                                    </div>
+                                </div>
+                                <div class="post-date">March 3, 2025 at 11:22 AM</div>
+                            </div>
+                            <div class="post-body">
+                                I know this gets brought up every few months, but I was listening to the Cornell '77
+                                board recording last night and I'm telling you — that Scarlet > Fire > Estimated
+                                transition in the second set is absolutely untouchable. 47 years later and it still
+                                gives me chills.<br><br>
+                                So let's have it out once and for all. Is Cornell 5/8/77 the best show they ever played?
+                                I'll accept arguments for Veneta '72, Watkins Glen, or Nassau '80 but you're going to
+                                have to convince me.<br><br>
+                                Drop your picks below with reasoning. Let's keep it civil, folks!
+                                <div class="post-sig">— Mary | "The music never stopped" | 🌹🌹🌹</div>
+                            </div>
+                        </div>
+
+                        <div class="post-entry">
+                            <div class="post-header">
+                                <div class="post-avatar">🎸</div>
+                                <div>
+                                    <div class="post-user">JerryFan68</div>
+                                    <div style="font-size:11px; color:#888;">Legend | Posts: 12,440 | Joined: 2003</div>
+                                </div>
+                                <div class="post-date">March 3, 2025 at 12:07 PM</div>
+                            </div>
+                            <div class="post-body">
+                                Mary, you know I love you, but I have to go with Veneta 8/27/72. That "Dark Star" is
+                                from another dimension entirely. Cornell is magical but I think it gets outsized credit
+                                just because the soundboard is so pristine. Veneta sounds rough but the PLAYING is on
+                                another level.<br><br>
+                                That said — the Cornell "Morning Dew" is probably Jerry's single best guitar moment. So
+                                maybe it's a tie in different categories.
+                                <div class="post-sig">— Frank | Deadhead since 1968 | 🎸</div>
+                            </div>
+                        </div>
+
+                        <div class="post-entry">
+                            <div class="post-header">
+                                <div class="post-avatar">🌀</div>
+                                <div>
+                                    <div class="post-user">CaseyJones77</div>
+                                    <div style="font-size:11px; color:#888;">Member | Posts: 831 | Joined: 2011</div>
+                                </div>
+                                <div class="post-date">Today at 3:00 PM</div>
+                            </div>
+                            <div class="post-body">
+                                I've listened to both probably 200 times each and I go back and forth. But today I'm
+                                saying Cornell. The energy in that room was just different. You can HEAR the audience on
+                                the recording and they knew they were witnessing something special in real time.<br><br>
+                                My hot take: the 1977 spring tour as a WHOLE is the peak of the Grateful Dead. Cornell
+                                is just the crown jewel.
+                                <div class="post-sig">— Casey | "Driving that train..." 🚂</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="compose-area" id="replyArea" style="display:none;">
+                        <div class="emoji-toolbar">
+                            <span class="emoji-btn" onclick="insertEmoji('🎸')">🎸</span>
+                            <span class="emoji-btn" onclick="insertEmoji('☮️')">☮️</span>
+                            <span class="emoji-btn" onclick="insertEmoji('🌹')">🌹</span>
+                            <span class="emoji-btn" onclick="insertEmoji('💀')">💀</span>
+                            <span class="emoji-btn" onclick="insertEmoji('🎵')">🎵</span>
+                            <span class="emoji-btn" onclick="insertEmoji('🎪')">🎪</span>
+                            <span class="emoji-btn" onclick="insertEmoji('🌀')">🌀</span>
+                            <span class="emoji-btn" onclick="insertEmoji('👍')">👍</span>
+                            <span class="emoji-btn" onclick="insertEmoji('🔥')">🔥</span>
+                        </div>
+                        <div style="padding:8px;">
+                            <label>Your Reply:</label>
+                            <textarea id="replyText" placeholder="Type your reply here..."></textarea>
+                            <div style="display:flex; gap:6px;">
+                                <button class="btn btn-primary" onclick="postReply()">Post Reply</button>
+                                <button class="btn" onclick="closeReply()">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="status-bar">
+                        <div class="status-pane">Showing posts 309-311 of 311</div>
+                        <div class="status-pane">Page 21 of 21</div>
+                    </div>
+                </div>
+
+                <!-- PHOTOS SECTION -->
+                <div id="section-photos" class="tab-content">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" onclick="openUpload()">📷 Upload Photo / Video</button>
+                        <button class="btn">🗂️ Create Album</button>
+                        <span style="font-size:11px; color:#555; margin-left:8px;">3,841 photos | 127 albums</span>
+                    </div>
+                    <div class="photo-grid">
+                        <div class="photo-thumb">
+                            <span class="photo-emoji">📸</span>
+                            <div class="photo-caption">Alpine Valley 1989</div>
+                            <div style="margin-top:3px;">48 photos | by TruckinSince72</div>
+                            <div style="margin-top:4px;"><a style="color:var(--link-blue);">View Album</a></div>
+                        </div>
+                        <div class="photo-thumb">
+                            <span class="photo-emoji">🎬</span>
+                            <div class="photo-caption">Winterland '73 — rare footage</div>
+                            <div style="margin-top:3px;">3 videos | by JerryFan68</div>
+                            <div style="margin-top:4px;"><a style="color:var(--link-blue);">View Album</a></div>
+                        </div>
+                        <div class="photo-thumb">
+                            <span class="photo-emoji">📸</span>
+                            <div class="photo-caption">Cornell 5/8/77 Fan Photos</div>
+                            <div style="margin-top:3px;">22 photos | by Rosebud_Mary</div>
+                            <div style="margin-top:4px;"><a style="color:var(--link-blue);">View Album</a></div>
+                        </div>
+                        <div class="photo-thumb">
+                            <span class="photo-emoji">🎬</span>
+                            <div class="photo-caption">Our Group Listening Party Dec '24</div>
+                            <div style="margin-top:3px;">1 video, 12 photos | by DeadHead_Lori</div>
+                            <div style="margin-top:4px;"><a style="color:var(--link-blue);">View Album</a></div>
+                        </div>
+                        <div class="photo-thumb">
+                            <span class="photo-emoji">📸</span>
+                            <div class="photo-caption">Ticket Stubs Collection</div>
+                            <div style="margin-top:3px;">89 photos | by BobWeir4ever</div>
+                            <div style="margin-top:4px;"><a style="color:var(--link-blue);">View Album</a></div>
+                        </div>
+                        <div class="photo-thumb">
+                            <span class="photo-emoji">📸</span>
+                            <div class="photo-caption">Veneta 8/27/72</div>
+                            <div style="margin-top:3px;">15 photos | by Phil_phan</div>
+                            <div style="margin-top:4px;"><a style="color:var(--link-blue);">View Album</a></div>
+                        </div>
+                    </div>
+                    <div class="status-bar">
+                        <div class="status-pane">3,841 photos | 127 albums</div>
+                        <div class="status-pane">Latest upload: 2 hours ago</div>
+                    </div>
+                </div>
+
+                <!-- SETLISTS SECTION -->
+                <div id="section-setlists" class="tab-content">
+                    <div class="toolbar">
+                        <span style="font-size:12px;">Search:</span>
+                        <input type="text"
+                            style="padding:3px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px inset #ccc; width:150px;"
+                            placeholder="Date, venue, or song...">
+                        <button class="btn">🔍 Search</button>
+                        <button class="btn" onclick="showSection('setlists')">Show All</button>
+                    </div>
+                    <div>
+                        <div class="setlist-entry">
+                            <div class="setlist-date">May 8, 1977 — Cornell University, Ithaca, NY</div>
+                            <div class="setlist-venue">Barton Hall &nbsp;|&nbsp; 🌟 Community Rating: 5/5</div>
+                            <div class="setlist-songs">
+                                <strong>Set 1:</strong> New Minglewood Blues, Loser, El Paso, They Love Each Other, Jack
+                                Straw, Deal...<br>
+                                <strong>Set 2:</strong> Scarlet Begonias &gt; Fire on the Mountain &gt; Estimated
+                                Prophet, St. Stephen &gt; Not Fade Away...<br>
+                                <strong>Encore:</strong> One More Saturday Night
+                            </div>
+                            <div class="setlist-actions">
+                                <a>💬 Discuss (311)</a>
+                                <a>⭐ Rate This Show</a>
+                                <a>📼 Find Recording</a>
+                                <a>📷 View Photos (22)</a>
+                            </div>
+                        </div>
+                        <div class="setlist-entry">
+                            <div class="setlist-date">August 27, 1972 — Veneta, Oregon</div>
+                            <div class="setlist-venue">Ramblin' Rose Farm &nbsp;|&nbsp; 🌟 Community Rating: 5/5</div>
+                            <div class="setlist-songs">
+                                <strong>Set 1:</strong> Truckin', Sugaree, Mr. Charlie, Black-Throated Wind, Tennessee
+                                Jed...<br>
+                                <strong>Set 2:</strong> Dark Star &gt; Sugar Magnolia, St. Stephen &gt; Not Fade Away
+                                &gt; Going Down the Road...<br>
+                                <strong>Encore:</strong> Casey Jones
+                            </div>
+                            <div class="setlist-actions">
+                                <a>💬 Discuss (67)</a>
+                                <a>⭐ Rate This Show</a>
+                                <a>📼 Find Recording</a>
+                                <a>📷 View Photos (15)</a>
+                            </div>
+                        </div>
+                        <div class="setlist-entry">
+                            <div class="setlist-date">February 13, 1970 — Fillmore East, New York, NY</div>
+                            <div class="setlist-venue">Fillmore East &nbsp;|&nbsp; 🌟 Community Rating: 4.9/5</div>
+                            <div class="setlist-songs">
+                                <strong>Set 1:</strong> Casey Jones, Me and My Uncle, Dire Wolf, High Time...<br>
+                                <strong>Set 2:</strong> Dark Star &gt; St. Stephen &gt; The Eleven &gt; Turn On Your
+                                Love Light...<br>
+                                <strong>Encore:</strong> Uncle John's Band
+                            </div>
+                            <div class="setlist-actions">
+                                <a>💬 Discuss (54)</a>
+                                <a>⭐ Rate This Show</a>
+                                <a>📼 Find Recording</a>
+                                <a>📷 View Photos (4)</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="status-bar">
+                        <div class="status-pane">2,318 shows archived</div>
+                        <div class="status-pane">1965 – 1995</div>
+                    </div>
+                </div>
+
+                <!-- EVENTS SECTION -->
+                <div id="section-events" class="tab-content">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" onclick="openEvent()">📅 Add Event</button>
+                        <button class="btn">📋 View My RSVPs</button>
+                    </div>
+                    <div class="announcement">
+                        <strong>📌</strong> Events are community-organized listening parties, meetups, and watch-alongs.
+                        Anyone can add an event!
+                    </div>
+                    <div>
+                        <div class="event-card">
+                            <div><span class="event-date-badge">MAR 15, 2025</span>
+                                <span style="font-size:11px; color:var(--win-green);">🟢 UPCOMING</span>
+                            </div>
+                            <div class="event-title">Monthly Listening Party — Cornell 5/8/77 Full Show</div>
+                            <div class="event-details">
+                                🏠 Virtual — Zoom link sent to RSVPs &nbsp;|&nbsp; ⏰ 7:00 PM Eastern<br>
+                                We'll listen to the full Cornell board recording together and chat along as we go. BYOB!
+                                🍺
+                            </div>
+                            <div class="rsvp-row">
+                                <span class="rsvp-count">✅ 14 going</span>
+                                <span style="color:#888;">|</span>
+                                <span style="color:#888;">3 maybe</span>
+                                <button class="btn btn-primary"
+                                    style="font-size:11px; padding:2px 10px; margin-left:8px;">RSVP Going</button>
+                                <button class="btn" style="font-size:11px; padding:2px 10px;">Maybe</button>
+                            </div>
+                        </div>
+
+                        <div class="event-card">
+                            <div><span class="event-date-badge">APR 5, 2025</span>
+                                <span style="font-size:11px; color:var(--win-green);">🟢 UPCOMING</span>
+                            </div>
+                            <div class="event-title">Grateful Dead Night at McGrath's Bar — Live Tribute Band</div>
+                            <div class="event-details">
+                                📍 McGrath's Pub, Burlington VT &nbsp;|&nbsp; ⏰ 8:00 PM<br>
+                                Local tribute band "Casey's Crew" is playing a full Dead set. Great excuse for a meetup!
+                            </div>
+                            <div class="rsvp-row">
+                                <span class="rsvp-count">✅ 8 going</span>
+                                <span style="color:#888;">|</span>
+                                <span style="color:#888;">5 maybe</span>
+                                <button class="btn btn-primary"
+                                    style="font-size:11px; padding:2px 10px; margin-left:8px;">RSVP Going</button>
+                                <button class="btn" style="font-size:11px; padding:2px 10px;">Maybe</button>
+                            </div>
+                        </div>
+
+                        <div class="event-card">
+                            <div><span class="event-date-badge">JUN 20, 2025</span>
+                                <span style="font-size:11px; color:var(--win-green);">🟢 UPCOMING</span>
+                            </div>
+                            <div class="event-title">Dead & Company Summer Tour — Group Meetup (Chicago Dates)</div>
+                            <div class="event-details">
+                                📍 Soldier Field, Chicago IL &nbsp;|&nbsp; ⏰ All day / Show at 7:30 PM<br>
+                                Coordinating a group meetup in Lot D before the show. Potluck parking lot style!
+                            </div>
+                            <div class="rsvp-row">
+                                <span class="rsvp-count">✅ 23 going</span>
+                                <span style="color:#888;">|</span>
+                                <span style="color:#888;">11 maybe</span>
+                                <button class="btn btn-primary"
+                                    style="font-size:11px; padding:2px 10px; margin-left:8px;">RSVP Going</button>
+                                <button class="btn" style="font-size:11px; padding:2px 10px;">Maybe</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="status-bar">
+                        <div class="status-pane">3 upcoming events</div>
+                        <div class="status-pane">127 past events archived</div>
+                    </div>
+                </div>
+
+                <!-- CHAT SECTION -->
+                <div id="section-chat" class="tab-content">
+                    <div class="toolbar">
+                        <span style="font-size:12px; font-weight:bold;">🟢 Live Chat Room</span>
+                        <span style="font-size:11px; color:#555; margin-left:8px;">23 members in room</span>
+                    </div>
+                    <div style="padding:8px;">
+                        <div class="chat-log" id="chatLog">
+                            <div class="chat-msg"><span class="msg-name">JerryFan68:</span> Anyone else think the '77
+                                spring tour is just untouchable as a run?</div>
+                            <div class="chat-msg"><span class="msg-name">DeadHead_Lori:</span> 100% agree Frank. Though
+                                I'll always have a soft spot for late '73</div>
+                            <div class="chat-msg"><span class="msg-name">Phil_phan:</span> Don't sleep on the fall '79
+                                run either. Some incredible nights in there</div>
+                            <div class="chat-msg"><span class="msg-name">SugarMagnolia:</span> 🎸 just put on Barton
+                                Hall, it's a good afternoon for this</div>
+                            <div class="chat-msg"><span class="msg-name">CaseyJones77:</span> same lol, it's always a
+                                good afternoon for Cornell</div>
+                            <div class="chat-msg"><span class="msg-name">BobWeir4ever:</span> that Scarlet opener gets
+                                me every single time</div>
+                            <div class="chat-msg"><span class="msg-name">TruckinSince72:</span> Was anyone else there in
+                                person? I was 19 and had no idea what I was witnessing</div>
+                            <div class="chat-msg"><span class="msg-name">JerryFan68:</span> I was there! We all knew
+                                something special was happening but couldn't have guessed it would be talked about 50
+                                years later</div>
+                            <div class="chat-msg"><span class="msg-name">Rosebud_Mary:</span> 😭 I'm so jealous of you
+                                guys who saw them live</div>
+                            <div class="chat-msg"><span class="msg-name">DeadHead_Lori:</span> the recordings are so
+                                good though, you're almost there with us</div>
+                        </div>
+                        <div class="chat-input-row">
+                            <input type="text" id="chatInput" placeholder="Type a message and press Enter..."
+                                onkeydown="if(event.key==='Enter') sendChat()">
+                            <button class="btn btn-primary" onclick="sendChat()">Send</button>
+                            <button class="btn">😊</button>
+                        </div>
+                    </div>
+                    <div class="status-bar">
+                        <div class="status-pane">Connected to chat server</div>
+                        <div class="status-pane">23 members in room</div>
+                    </div>
+                </div>
+
+                <!-- TAPE LIBRARY SECTION -->
+                <div id="section-tapes" class="tab-content">
+                    <div class="toolbar">
+                        <button class="btn btn-primary">📼 Submit a Recording</button>
+                        <button class="btn">🔍 Advanced Search</button>
+                        <span style="font-size:11px; color:#555; margin-left:8px;">12,847 recordings in library</span>
+                    </div>
+                    <div class="thread-list">
+                        <div class="subforum-header">⭐ Community Favorites</div>
+                        <div class="thread-item">
+                            <div class="thread-icon">📼</div>
+                            <div>
+                                <div class="thread-title">Cornell 5/8/77 — AUD/SBD Matrix | Betty Boards | FLAC</div>
+                                <div class="thread-meta">Uploaded by: TruckinSince72 &nbsp;|&nbsp; Format: FLAC
+                                    &nbsp;|&nbsp; Source: Soundboard</div>
+                            </div>
+                            <div class="thread-meta">⬇️ 4,211<br>downloads</div>
+                            <div class="thread-replies">⭐⭐⭐⭐⭐</div>
+                            <div class="thread-last"><button class="btn"
+                                    style="font-size:10px; padding:2px 6px; min-width:0;">Get</button></div>
+                        </div>
+                        <div class="thread-item">
+                            <div class="thread-icon">📼</div>
+                            <div>
+                                <div class="thread-title">Veneta 8/27/72 — AUD | Charlie Miller Transfer | FLAC</div>
+                                <div class="thread-meta">Uploaded by: JerryFan68 &nbsp;|&nbsp; Format: FLAC
+                                    &nbsp;|&nbsp; Source: Audience</div>
+                            </div>
+                            <div class="thread-meta">⬇️ 3,877<br>downloads</div>
+                            <div class="thread-replies">⭐⭐⭐⭐⭐</div>
+                            <div class="thread-last"><button class="btn"
+                                    style="font-size:10px; padding:2px 6px; min-width:0;">Get</button></div>
+                        </div>
+                        <div class="thread-item">
+                            <div class="thread-icon">📼</div>
+                            <div>
+                                <div class="thread-title">Fillmore East 2/13/70 — SBD | Owsley/Bear | SHN</div>
+                                <div class="thread-meta">Uploaded by: Phil_phan &nbsp;|&nbsp; Format: SHN &nbsp;|&nbsp;
+                                    Source: Soundboard</div>
+                            </div>
+                            <div class="thread-meta">⬇️ 2,944<br>downloads</div>
+                            <div class="thread-replies">⭐⭐⭐⭐⭐</div>
+                            <div class="thread-last"><button class="btn"
+                                    style="font-size:10px; padding:2px 6px; min-width:0;">Get</button></div>
+                        </div>
+                    </div>
+                    <div class="status-bar">
+                        <div class="status-pane">12,847 recordings</div>
+                        <div class="status-pane">Non-commercial sharing only. Long live the tape tree! 📼</div>
+                    </div>
+                </div>
+
+            </div><!-- end main content -->
+
+            <!-- RIGHT SIDEBAR -->
+            <div>
+                <div class="window sidebar-section">
+                    <div class="window-title-bar" style="font-size:11px; padding:3px 6px;">
+                        📅 Next Event
+                    </div>
+                    <div style="background:white; padding:8px; font-size:12px;">
+                        <div style="font-weight:bold; color:var(--accent-red); font-size:13px;">Listening Party</div>
+                        <div style="color:#333; margin:4px 0;">Cornell 5/8/77</div>
+                        <div style="font-size:11px; color:#666;">📅 March 15, 2025</div>
+                        <div style="font-size:11px; color:#666;">⏰ 7:00 PM Eastern</div>
+                        <div style="font-size:11px; color:#666;">💻 Virtual / Zoom</div>
+                        <div style="margin-top:6px; color:var(--win-green); font-weight:bold; font-size:11px;">✅ 14
+                            going</div>
+                        <button class="btn btn-primary" style="width:100%; margin-top:6px; font-size:11px;">RSVP
+                            Now</button>
+                    </div>
+                </div>
+
+                <div class="window sidebar-section">
+                    <div class="window-title-bar" style="font-size:11px; padding:3px 6px;">
+                        📊 Site Stats
+                    </div>
+                    <div style="background:white; padding:8px; font-size:12px;">
+                        <table style="width:100%; border-collapse:collapse;">
+                            <tr>
+                                <td style="color:#666; padding:2px 0;">Members:</td>
+                                <td style="font-weight:bold; text-align:right;">47,312</td>
+                            </tr>
+                            <tr>
+                                <td style="color:#666; padding:2px 0;">Posts:</td>
+                                <td style="font-weight:bold; text-align:right;">1.2M</td>
+                            </tr>
+                            <tr>
+                                <td style="color:#666; padding:2px 0;">Shows:</td>
+                                <td style="font-weight:bold; text-align:right;">2,318</td>
+                            </tr>
+                            <tr>
+                                <td style="color:#666; padding:2px 0;">Recordings:</td>
+                                <td style="font-weight:bold; text-align:right;">12,847</td>
+                            </tr>
+                            <tr>
+                                <td style="color:#666; padding:2px 0;">Photos:</td>
+                                <td style="font-weight:bold; text-align:right;">3,841</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="window sidebar-section">
+                    <div class="window-title-bar" style="font-size:11px; padding:3px 6px;">
+                        🔗 Quick Links
+                    </div>
+                    <div>
+                        <a class="sidebar-item" style="font-size:11px;"><span class="item-icon">🌐</span> Archive.org
+                            Tapes</a>
+                        <a class="sidebar-item" style="font-size:11px;"><span class="item-icon">📻</span> GDRadio
+                            Stream</a>
+                        <a class="sidebar-item" style="font-size:11px;"><span class="item-icon">🏪</span> Dead Store</a>
+                        <a class="sidebar-item" style="font-size:11px;"><span class="item-icon">📰</span> Dead
+                            Newsletter</a>
+                        <a class="sidebar-item" style="font-size:11px;"><span class="item-icon">❓</span> Help / FAQ</a>
+                    </div>
+                </div>
+
+                <div class="window sidebar-section">
+                    <div class="window-title-bar" style="font-size:11px; padding:3px 6px;">
+                        🌹 Jerry Quote
+                    </div>
+                    <div
+                        style="background:white; padding:8px; font-size:11px; font-style:italic; color:#444; line-height:1.6;">
+                        "Somebody has to do something, and it's just incredibly pathetic that it has to be us."
+                        <div style="margin-top:6px; font-style:normal; color:#888; font-size:10px;">— Jerry Garcia</div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- end main-layout -->
+
+        <!-- FOOTER -->
+        <div class="window" style="margin-top:8px;">
+            <div
+                style="padding:6px 10px; display:flex; gap:16px; font-size:11px; color:#555; background:var(--panel-bg); align-items:center;">
+                <span>💀 DeadNet Community v2.1</span>
+                <span>|</span>
+                <a style="color:var(--link-blue); cursor:pointer;">Privacy Policy</a>
+                <a style="color:var(--link-blue); cursor:pointer;">Rules</a>
+                <a style="color:var(--link-blue); cursor:pointer;">Help</a>
+                <a style="color:var(--link-blue); cursor:pointer;">Contact Admin</a>
+                <span style="margin-left:auto;">Best viewed in Internet Explorer 6.0 at 1024x768 ☠️</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- NEW POST MODAL -->
+    <div class="modal-overlay" id="newPostModal">
+        <div class="window modal-window">
+            <div class="window-title-bar">
+                ✏️ Post New Message
+                <div class="title-bar-buttons">
+                    <div class="tb-btn" onclick="closeModal('newPostModal')">✕</div>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="emoji-toolbar">
+                    <span class="emoji-btn" onclick="insertEmoji('🎸')">🎸</span>
+                    <span class="emoji-btn" onclick="insertEmoji('☮️')">☮️</span>
+                    <span class="emoji-btn" onclick="insertEmoji('🌹')">🌹</span>
+                    <span class="emoji-btn" onclick="insertEmoji('💀')">💀</span>
+                    <span class="emoji-btn" onclick="insertEmoji('🎵')">🎵</span>
+                    <span class="emoji-btn" onclick="insertEmoji('🎪')">🎪</span>
+                    <span class="emoji-btn" onclick="insertEmoji('🌀')">🌀</span>
+                    <span class="emoji-btn" onclick="insertEmoji('👍')">👍</span>
+                    <span class="emoji-btn" onclick="insertEmoji('🔥')">🔥</span>
+                </div>
+                <div style="padding:8px;">
+                    <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Board /
+                        Category:</label>
+                    <select
+                        style="width:100%; padding:4px; font-family:Tahoma,Arial; font-size:12px; border:2px inset #ccc; margin-bottom:8px;">
+                        <option>General Discussion</option>
+                        <option>Show Discussion</option>
+                        <option>Planning & Events</option>
+                        <option>Tape Library</option>
+                    </select>
+                    <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Subject:</label>
+                    <input type="text" id="postSubject"
+                        style="width:100%; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff; margin-bottom:8px;"
+                        placeholder="Enter subject...">
+                    <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Message:</label>
+                    <textarea id="postBody"
+                        style="width:100%; height:120px; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff; resize:vertical; margin-bottom:8px;"
+                        placeholder="Type your message here..."></textarea>
+                    <div style="display:flex; gap:6px; justify-content:flex-end;">
+                        <button class="btn btn-primary" onclick="submitPost()">Post Message</button>
+                        <button class="btn" onclick="closeModal('newPostModal')">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UPLOAD MODAL -->
+    <div class="modal-overlay" id="uploadModal">
+        <div class="window modal-window">
+            <div class="window-title-bar">
+                📷 Upload Photo or Video
+                <div class="title-bar-buttons">
+                    <div class="tb-btn" onclick="closeModal('uploadModal')">✕</div>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:12px;">
+                <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Album /
+                    Title:</label>
+                <input type="text"
+                    style="width:100%; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff; margin-bottom:8px;"
+                    placeholder="Name this album or photo...">
+                <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Description:</label>
+                <textarea
+                    style="width:100%; height:60px; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff; margin-bottom:8px;"
+                    placeholder="Where was this taken? What's the occasion?"></textarea>
+                <div class="upload-zone">
+                    📁 Click here to browse for photos or videos<br>
+                    <span style="font-size:11px; color:#888; margin-top:4px; display:block;">JPG, GIF, PNG, MPG, AVI,
+                        MOV accepted &nbsp;|&nbsp; Max 50MB</span>
+                </div>
+                <div style="display:flex; gap:6px; justify-content:flex-end; margin-top:8px;">
+                    <button class="btn btn-primary">Upload</button>
+                    <button class="btn" onclick="closeModal('uploadModal')">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EVENT MODAL -->
+    <div class="modal-overlay" id="eventModal">
+        <div class="window modal-window">
+            <div class="window-title-bar">
+                📅 Add New Event
+                <div class="title-bar-buttons">
+                    <div class="tb-btn" onclick="closeModal('eventModal')">✕</div>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:12px;">
+                <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Event Name:</label>
+                <input type="text"
+                    style="width:100%; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff; margin-bottom:8px;"
+                    placeholder="e.g. Monthly Listening Party — Veneta '72">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <div>
+                        <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Date:</label>
+                        <input type="text"
+                            style="width:100%; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff;"
+                            placeholder="MM/DD/YYYY">
+                    </div>
+                    <div>
+                        <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Time:</label>
+                        <input type="text"
+                            style="width:100%; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff;"
+                            placeholder="7:00 PM Eastern">
+                    </div>
+                </div>
+                <label style="font-size:12px; font-weight:bold; display:block; margin:8px 0 4px;">Location (or
+                    Virtual):</label>
+                <input type="text"
+                    style="width:100%; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff; margin-bottom:8px;"
+                    placeholder="Address or 'Virtual / Zoom'">
+                <label style="font-size:12px; font-weight:bold; display:block; margin-bottom:4px;">Details:</label>
+                <textarea
+                    style="width:100%; height:80px; padding:4px 6px; font-family:Tahoma,Arial; font-size:12px; border:2px solid; border-top-color:#888; border-left-color:#888; border-bottom-color:#fff; border-right-color:#fff; resize:vertical; margin-bottom:8px;"
+                    placeholder="What are you planning? What should people bring or know?"></textarea>
+                <div style="display:flex; gap:6px; justify-content:flex-end;">
+                    <button class="btn btn-primary" onclick="closeModal('eventModal'); alert('Event added! 📅')">Add
+                        Event</button>
+                    <button class="btn" onclick="closeModal('eventModal')">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sections = ['forum', 'photos', 'setlists', 'events', 'chat', 'tapes', 'thread'];
+        const sectionTitles = {
+            forum: '💬 Message Boards',
+            photos: '📷 Photo Gallery',
+            setlists: '🎵 Setlist Archive',
+            events: '📅 Upcoming Events',
+            chat: '💭 Live Chat Room',
+            tapes: '📼 Tape Library',
+            thread: '📖 Thread: Cornell 5/8/77'
+        };
+
+        function showSection(id) {
+            sections.forEach(s => {
+                const el = document.getElementById('section-' + s);
+                if (el) el.classList.remove('active');
+            });
+            const target = document.getElementById('section-' + id);
+            if (target) target.classList.add('active');
+            document.getElementById('mainTitle').textContent = sectionTitles[id] || id;
+
+            // update nav active
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+        }
+
+        function showThread() {
+            showSection('thread');
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('show');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('show');
+        }
+
+        function openNewPost() { openModal('newPostModal'); }
+        function openUpload() { openModal('uploadModal'); }
+        function openEvent() { openModal('eventModal'); }
+
+        function submitPost() {
+            const subj = document.getElementById('postSubject').value.trim();
+            const body = document.getElementById('postBody').value.trim();
+            if (!subj || !body) { alert('Please fill in both the subject and message!'); return; }
+            closeModal('newPostModal');
+            alert('Your message has been posted! ✅');
+            document.getElementById('postSubject').value = '';
+            document.getElementById('postBody').value = '';
+        }
+
+        function openReply() {
+            document.getElementById('replyArea').style.display = 'block';
+            document.getElementById('replyText').focus();
+        }
+
+        function closeReply() {
+            document.getElementById('replyArea').style.display = 'none';
+        }
+
+        function postReply() {
+            const txt = document.getElementById('replyText').value.trim();
+            if (!txt) { alert('Please type a reply first!'); return; }
+            const threadView = document.querySelector('.thread-view');
+            const post = document.createElement('div');
+            post.className = 'post-entry';
+            post.innerHTML = `
+      <div class="post-header">
+        <div class="post-avatar">👤</div>
+        <div>
+          <div class="post-user me">You (Guest)</div>
+          <div style="font-size:11px;color:#888;">Guest | Posts: 1 | Just joined</div>
+        </div>
+        <div class="post-date">Just now</div>
+      </div>
+      <div class="post-body">${txt.replace(/</g, '&lt;')}</div>
+    `;
+            threadView.appendChild(post);
+            closeReply();
+            document.getElementById('replyText').value = '';
+            post.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            const log = document.getElementById('chatLog');
+            const div = document.createElement('div');
+            div.className = 'chat-msg';
+            div.innerHTML = `<span class="msg-name me">You:</span> ${msg.replace(/</g, '&lt;')}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+            input.value = '';
+        }
+
+        function refreshForum() {
+            // Simulate a refresh
+            const btn = event.target;
+            btn.textContent = '⏳ Refreshing...';
+            setTimeout(() => {
+                btn.textContent = '🔄 Refresh';
+            }, 1000);
+        }
+
+        function insertEmoji(e) {
+            // Insert into whichever textarea is active
+            const active = document.activeElement;
+            if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
+                active.value += e;
+                active.focus();
+            }
+        }
+
+        // Close modals on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function (e) {
+                if (e.target === this) this.classList.remove('show');
+            });
+        });
+
+        // Animate hit counter
+        let count = 0;
+        const target = 47312;
+        const step = Math.ceil(target / 60);
+        const counter = document.getElementById('hitCounter');
+        const interval = setInterval(() => {
+            count = Math.min(count + step, target);
+            counter.textContent = String(count).padStart(7, '0');
+            if (count >= target) clearInterval(interval);
+        }, 20);
+    </script>
+</body>
+
+</html>

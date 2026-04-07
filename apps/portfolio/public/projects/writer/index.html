@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spelling Detective</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --accent2: #f5a623;
+  --accent3: #53d769;
+  --accent4: #5dade2;
+  --text: #f0f0f0;
+  --text-dim: #a0a8c0;
+  --card-radius: 16px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.bg-pattern {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 50%, rgba(233,69,96,0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(93,173,226,0.08) 0%, transparent 50%),
+    radial-gradient(circle at 50% 80%, rgba(245,166,35,0.06) 0%, transparent 50%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.app { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+header {
+  text-align: center;
+  padding: 30px 0 20px;
+}
+
+header h1 {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 2.6em;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+header p {
+  color: var(--text-dim);
+  font-size: 1.05em;
+  margin-top: 6px;
+}
+
+/* Nav */
+.mode-nav {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 20px 0 28px;
+}
+
+.mode-btn {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1em;
+  font-weight: 600;
+  padding: 10px 22px;
+  border: 2px solid var(--surface2);
+  border-radius: 50px;
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.mode-btn:hover { border-color: var(--accent); color: var(--text); }
+.mode-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(233,69,96,0.35);
+}
+
+.mode-btn .emoji { margin-right: 6px; }
+
+/* Panels */
+.panel { display: none; animation: fadeUp 0.35s ease; }
+.panel.active { display: block; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border-radius: var(--card-radius);
+  padding: 28px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.card h2 {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1.4em;
+  margin-bottom: 6px;
+}
+
+.card .subtitle {
+  color: var(--text-dim);
+  font-size: 0.92em;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+/* Word Sorter */
+.sort-setup { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+
+.sort-setup select, .sort-setup button {
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.95em;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 2px solid var(--surface2);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sort-setup select:focus { border-color: var(--accent4); outline: none; }
+
+.btn-primary {
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 600;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(233,69,96,0.4); }
+
+.btn-secondary {
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 600;
+  background: var(--surface2) !important;
+  border-color: var(--surface2) !important;
+  color: var(--text) !important;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.btn-secondary:hover { transform: translateY(-1px); }
+
+.btn-success {
+  font-family: 'Fredoka', sans-serif;
+  font-weight: 600;
+  background: var(--accent3) !important;
+  border-color: var(--accent3) !important;
+  color: #1a1a2e !important;
+  cursor: pointer;
+}
+
+.sort-area {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sort-bucket {
+  flex: 1;
+  min-width: 200px;
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 200px;
+  border: 2px dashed rgba(255,255,255,0.1);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.sort-bucket.drag-over {
+  border-color: var(--accent4);
+  background: rgba(93,173,226,0.08);
+}
+
+.sort-bucket h3 {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1.05em;
+  margin-bottom: 10px;
+  color: var(--accent4);
+  text-align: center;
+}
+
+.word-bank-area {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  min-height: 60px;
+  border: 2px dashed rgba(255,255,255,0.1);
+}
+
+.word-bank-area h3 {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 0.95em;
+  color: var(--accent2);
+  margin-bottom: 10px;
+}
+
+.word-chip {
+  display: inline-block;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1.15em;
+  font-weight: 600;
+  padding: 8px 18px;
+  margin: 4px;
+  border-radius: 10px;
+  background: var(--surface2);
+  color: var(--text);
+  cursor: grab;
+  user-select: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+  border: 2px solid transparent;
+}
+
+.word-chip:active { cursor: grabbing; }
+.word-chip:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+
+.word-chip.touch-dragging {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0.9;
+  transform: scale(1.1);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.word-chip.touch-placeholder {
+  opacity: 0.3;
+}
+
+.word-chip.correct { border-color: var(--accent3); background: rgba(83,215,105,0.15); }
+.word-chip.incorrect { border-color: var(--accent); background: rgba(233,69,96,0.15); }
+
+/* LCWC */
+.lcwc-display {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.lcwc-word {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 3.5em;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--accent2);
+  min-height: 80px;
+  transition: opacity 0.3s;
+}
+
+.lcwc-word.hidden-word {
+  color: transparent;
+  text-shadow: 0 0 30px rgba(245,166,35,0.4);
+}
+
+.lcwc-step-label {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1.2em;
+  color: var(--accent4);
+  margin-bottom: 10px;
+}
+
+.lcwc-input {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 2em;
+  text-align: center;
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: 3px solid var(--surface2);
+  background: var(--bg);
+  color: var(--text);
+  width: 300px;
+  max-width: 90%;
+  letter-spacing: 4px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.lcwc-input:focus { border-color: var(--accent4); }
+.lcwc-input.correct-input { border-color: var(--accent3) !important; }
+.lcwc-input.wrong-input { border-color: var(--accent) !important; }
+
+.lcwc-controls { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+
+.lcwc-result {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1.3em;
+  margin-top: 16px;
+  min-height: 40px;
+}
+
+.letter-correct { color: var(--accent3); }
+.letter-wrong { color: var(--accent); text-decoration: underline; font-weight: 700; }
+
+/* Tricky Part */
+.tricky-word-display {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.tricky-letters {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.tricky-letter {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 2.5em;
+  font-weight: 700;
+  width: 60px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--surface2);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 3px solid transparent;
+  user-select: none;
+}
+
+.tricky-letter:hover { transform: translateY(-3px); border-color: var(--accent2); }
+.tricky-letter.marked {
+  background: rgba(245,166,35,0.25);
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+
+.tricky-hint {
+  color: var(--text-dim);
+  font-size: 0.95em;
+  margin-top: 10px;
+  font-style: italic;
+}
+
+/* Progress / Stats */
+.stats-bar {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.stat {
+  text-align: center;
+}
+
+.stat-num {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 2em;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 0.8em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stat-num.green { color: var(--accent3); }
+.stat-num.red { color: var(--accent); }
+.stat-num.blue { color: var(--accent4); }
+
+/* Pattern select */
+.pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.pattern-card {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.06);
+  transition: all 0.2s;
+}
+
+.pattern-card:hover { border-color: var(--accent4); transform: translateY(-2px); }
+.pattern-card.selected { border-color: var(--accent2); background: rgba(245,166,35,0.08); }
+
+.pattern-card h4 {
+  font-family: 'Fredoka', sans-serif;
+  color: var(--accent4);
+  margin-bottom: 4px;
+}
+
+.pattern-card .examples {
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  margin: 12px 0;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent4), var(--accent3));
+  transition: width 0.4s ease;
+}
+
+/* Custom words */
+.custom-input-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.custom-input-row input {
+  flex: 1;
+  font-family: 'Nunito', sans-serif;
+  font-size: 1em;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 2px solid var(--surface2);
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.custom-input-row input:focus { border-color: var(--accent4); }
+
+/* Responsive */
+@media (max-width: 600px) {
+  header h1 { font-size: 1.8em; }
+  .lcwc-word { font-size: 2.5em; }
+  .tricky-letter { font-size: 1.8em; width: 46px; height: 54px; }
+  .card { padding: 18px; }
+  .sort-bucket { min-width: 140px; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="bg-pattern"></div>
+<div class="app">
+  <header>
+    <h1>🔍 Spelling Detective</h1>
+    <p>Find the patterns. Crack the code. Master the words.</p>
+  </header>
+
+  <nav class="mode-nav">
+    <button class="mode-btn active" onclick="switchMode('sort')"><span class="emoji">🗂️</span>Word Sort</button>
+    <button class="mode-btn" onclick="switchMode('lcwc')"><span class="emoji">👁️</span>Look Cover Write</button>
+    <button class="mode-btn" onclick="switchMode('tricky')"><span class="emoji">⚡</span>Tricky Parts</button>
+    <button class="mode-btn" onclick="switchMode('custom')"><span class="emoji">📝</span>My Words</button>
+  </nav>
+
+  <!-- WORD SORT PANEL -->
+  <div id="panel-sort" class="panel active">
+    <div class="card">
+      <h2>🗂️ Pattern Sort</h2>
+      <p class="subtitle">Drag each word into the bucket that matches its spelling pattern. Sorting words by pattern trains your brain to see the rules instead of guessing.</p>
+      <div class="sort-setup">
+        <select id="sort-category">
+          <option value="">Choose a pattern pair...</option>
+        </select>
+        <button class="btn-primary" onclick="startSort()">Load Words</button>
+        <button class="btn-secondary" onclick="checkSort()">Check My Answers</button>
+        <button class="btn-secondary" onclick="resetSort()">Reset</button>
+      </div>
+      <div id="sort-word-bank" class="word-bank-area" style="display:none">
+        <h3>📦 Word Bank (drag words to buckets below)</h3>
+        <div id="sort-chips"></div>
+      </div>
+      <div id="sort-buckets" class="sort-area"></div>
+      <div id="sort-result" class="lcwc-result" style="text-align:center"></div>
+    </div>
+  </div>
+
+  <!-- LCWC PANEL -->
+  <div id="panel-lcwc" class="panel">
+    <div class="card">
+      <h2>👁️ Look, Cover, Write, Check</h2>
+      <p class="subtitle">Study the word carefully, then cover it and write it from memory. This builds real spelling memory, not just hand-muscle memory.</p>
+      <div class="sort-setup">
+        <select id="lcwc-category">
+          <option value="">Choose a word group...</option>
+        </select>
+        <button class="btn-primary" onclick="startLCWC()">Start</button>
+      </div>
+      <div id="lcwc-area" style="display:none">
+        <div class="stats-bar">
+          <div class="stat"><div class="stat-num blue" id="lcwc-progress">0/0</div><div class="stat-label">Progress</div></div>
+          <div class="stat"><div class="stat-num green" id="lcwc-correct">0</div><div class="stat-label">Correct</div></div>
+          <div class="stat"><div class="stat-num red" id="lcwc-wrong">0</div><div class="stat-label">Review</div></div>
+        </div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="lcwc-bar" style="width:0%"></div></div>
+        <div class="lcwc-display">
+          <div class="lcwc-step-label" id="lcwc-step">LOOK at the word</div>
+          <div class="lcwc-word" id="lcwc-word"></div>
+          <div style="margin-top:16px">
+            <input type="text" class="lcwc-input" id="lcwc-input" placeholder="type here..." autocomplete="off" autocapitalize="off" style="display:none">
+          </div>
+          <div class="lcwc-result" id="lcwc-result"></div>
+        </div>
+        <div class="lcwc-controls">
+          <button class="btn-primary" id="lcwc-action" onclick="lcwcNext()">Cover it →</button>
+        </div>
+        <div id="lcwc-review-list" style="margin-top:20px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRICKY PARTS PANEL -->
+  <div id="panel-tricky" class="panel">
+    <div class="card">
+      <h2>⚡ Find the Tricky Part</h2>
+      <p class="subtitle">Every word has a predictable part and a tricky part. Tap the letters that make the word hard to spell. This trains your brain to focus on exactly where mistakes happen.</p>
+      <div class="sort-setup">
+        <select id="tricky-category">
+          <option value="">Choose a word group...</option>
+        </select>
+        <button class="btn-primary" onclick="startTricky()">Start</button>
+      </div>
+      <div id="tricky-area" style="display:none">
+        <div class="stats-bar">
+          <div class="stat"><div class="stat-num blue" id="tricky-progress">0/0</div><div class="stat-label">Progress</div></div>
+          <div class="stat"><div class="stat-num green" id="tricky-score">0</div><div class="stat-label">Found</div></div>
+        </div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="tricky-bar" style="width:0%"></div></div>
+        <div class="tricky-word-display">
+          <div class="lcwc-step-label" id="tricky-prompt">Tap the tricky letters!</div>
+          <div id="tricky-letters" class="tricky-letters"></div>
+          <div class="tricky-hint" id="tricky-hint"></div>
+        </div>
+        <div class="lcwc-controls">
+          <button class="btn-primary" id="tricky-action" onclick="checkTricky()">Check</button>
+        </div>
+        <div class="lcwc-result" id="tricky-result" style="text-align:center"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOM WORDS PANEL -->
+  <div id="panel-custom" class="panel">
+    <div class="card">
+      <h2>📝 My Word List</h2>
+      <p class="subtitle">Add words from homework, tests, or anything Campbell misspells. These words will show up in Look Cover Write and Tricky Parts practice.</p>
+      <div class="custom-input-row">
+        <input type="text" id="custom-word-input" placeholder="Type a word and press Enter..." autocomplete="off" autocapitalize="off">
+        <button class="btn-primary" onclick="addCustomWord()">Add</button>
+      </div>
+      <div id="custom-word-list" style="margin-top:16px; min-height:60px;"></div>
+      <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="clearCustom()">Clear All</button>
+        <button class="btn-primary" onclick="practiceCustom('lcwc')">Practice with Look Cover Write →</button>
+        <button class="btn-primary" onclick="practiceCustom('tricky')">Practice with Tricky Parts →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// === MASSIVE WORD DATABASE ===
+const WORD_DB = {
+  // SORT CATEGORIES: each has buckets with words
+  sortPatterns: [
+    {
+      name: "Short A vs. Silent-E (a_e)",
+      buckets: {
+        "Short a (cat)": ["had","mad","bad","sad","cap","tap","map","can","man","pan","bat","rat","fat","hat","sat","van","ran","fan","nap","gap","dam","ram","jam","lab","cab","tag","bag","rag","wag"],
+        "Long a / a_e (cake)": ["made","fade","blade","cake","lake","bake","make","take","name","came","game","same","late","gate","date","rate","cave","gave","wave","save","page","cage","rage","stage","place","space","grade","trade","shape","snake"]
+      }
+    },
+    {
+      name: "Short I vs. Silent-E (i_e)",
+      buckets: {
+        "Short i (sit)": ["hid","did","rid","kid","big","dig","fig","pig","wig","bit","fit","hit","sit","kit","pin","win","tin","fin","bin","dim","him","tip","rip","sip","dip","lip","zip","mix","fix","six"],
+        "Long i / i_e (kite)": ["hide","ride","side","wide","bike","hike","like","mike","pike","bite","kite","site","pine","mine","fine","line","wine","vine","dine","nine","time","dime","lime","fire","tire","wire","hire","five","dive","life","wife","knife"]
+      }
+    },
+    {
+      name: "Short O vs. Silent-E (o_e)",
+      buckets: {
+        "Short o (hot)": ["hot","got","not","lot","pot","dot","cot","rot","hop","mop","top","pop","cop","dog","fog","log","hog","jog","box","fox","sob","rob","job","mob","nod","rod","cod"],
+        "Long o / o_e (home)": ["home","bone","cone","tone","zone","hope","rope","cope","mope","pole","hole","mole","role","sole","nose","hose","rose","pose","dose","close","those","woke","joke","poke","broke","spoke","smoke","stove","drove","froze"]
+      }
+    },
+    {
+      name: "Short U vs. Silent-E (u_e)",
+      buckets: {
+        "Short u (cup)": ["cup","pup","up","bus","gum","hum","sum","fun","run","sun","gun","bun","nut","hut","cut","but","rut","gut","mud","bud","dug","bug","hug","mug","rug","tug","jug","pug","lump","dump"],
+        "Long u / u_e (cute)": ["cute","mute","huge","use","fuse","muse","tube","cube","rule","mule","dune","tune","june","rude","dude","prune","flute","brute"]
+      }
+    },
+    {
+      name: "Short E vs. EA/EE",
+      buckets: {
+        "Short e (bed)": ["bed","red","led","fed","set","get","let","met","net","pet","wet","yet","hen","men","pen","ten","den","bell","fell","sell","tell","well","yell","best","nest","rest","test","west","desk","step"],
+        "Long e / ee,ea (tree)": ["tree","free","see","bee","three","green","sleep","deep","keep","feet","meet","need","seed","feed","week","seek","team","read","beach","teach","reach","each","eat","meat","heat","seat","beat","clean","mean","dream"]
+      }
+    },
+    {
+      name: "-ck vs. -ke ending",
+      buckets: {
+        "Ends in -ck (quick)": ["back","pack","rack","sack","tack","black","crack","snack","track","stack","deck","neck","check","wreck","kick","pick","sick","tick","trick","click","stick","quick","thick","brick","dock","lock","rock","sock","clock","block","duck","luck","stuck","truck"],
+        "Ends in -ke (bike)": ["bake","cake","fake","lake","make","rake","sake","take","wake","bike","hike","like","mike","pike","joke","poke","woke","broke","spoke","smoke","duke","fluke"]
+      }
+    },
+    {
+      name: "-ight vs. -ite",
+      buckets: {
+        "-ight (night)": ["light","night","right","sight","tight","might","fight","bright","flight","fright","knight","slight","plight","blight","delight","tonight","midnight","highlight","flashlight","daylight"],
+        "-ite (write)": ["bite","kite","site","mite","quite","white","write","spite","unite","ignite","polite","invite","excite","favorite","opposite","satellite"]
+      }
+    },
+    {
+      name: "OO sounds: /oo/ vs /\u028A/",
+      buckets: {
+        "Long oo (moon)": ["moon","soon","noon","spoon","room","boom","zoom","bloom","broom","groom","cool","pool","tool","fool","school","drool","food","mood","roof","proof","tooth","smooth","goose","loose","choose","boot","hoot","root","shoot","scoot"],
+        "Short oo (book)": ["book","cook","hook","look","took","nook","shook","brook","crook","good","hood","wood","stood","foot","soot","wool"]
+      }
+    },
+    {
+      name: "-tion vs. -sion",
+      buckets: {
+        "-tion (action)": ["action","nation","station","question","mention","section","fiction","fraction","direction","election","collection","connection","attention","invention","location","vacation","education","addition","condition","position","tradition","operation","population","celebration","information","decoration"],
+        "-sion (vision)": ["vision","mission","session","version","tension","pension","mansion","decision","division","occasion","invasion","explosion","conclusion","confusion","permission","admission","expression","impression","discussion","television","profession","extension"]
+      }
+    },
+    {
+      name: "OU vs. OW",
+      buckets: {
+        "ou (house)": ["out","our","hour","house","mouse","loud","cloud","proud","found","round","sound","ground","around","about","mouth","south","count","mount","scout","shout","couch","pouch","ouch","bounce","announce","amount","account"],
+        "ow (cow)": ["cow","how","now","wow","bow","row","plow","brow","town","down","gown","brown","crown","drown","frown","clown","crowd","flower","power","tower","shower","powder","allow","towel","vowel","howl","owl","growl"]
+      }
+    },
+    {
+      name: "AI vs. AY",
+      buckets: {
+        "ai - middle (rain)": ["rain","main","pain","gain","brain","train","chain","plain","drain","grain","stain","Spain","snail","tail","mail","rail","sail","trail","fail","jail","nail","bail","wait","bait","faint","paint","saint","claim","aim","paid","maid","laid","raid"],
+        "ay - end (play)": ["day","say","pay","way","may","lay","hay","ray","bay","play","stay","pray","gray","clay","spray","tray","sway","delay","away","today","okay","hooray","relay","display","essay","birthday","holiday","runway"]
+      }
+    },
+    {
+      name: "Silent Letters",
+      buckets: {
+        "Silent K (know)": ["know","knew","knife","knight","knit","knob","knock","knot","knee","kneel","knack","knead"],
+        "Silent W (write)": ["write","wrong","wrap","wrist","wreck","wreath","wren","wring","wrestle","wrote","written","wrapper"],
+        "Silent B (thumb)": ["thumb","lamb","climb","comb","bomb","dumb","numb","crumb","plumb","limb","tomb","debt","doubt","subtle"]
+      }
+    },
+    {
+      name: "Hard C vs. Soft C",
+      buckets: {
+        "Hard C /k/ (cat)": ["cat","car","cup","cap","cut","call","camp","card","cart","cold","come","cook","cool","corn","cost","could","cover","cow","clip","club","clap","class","close","cloud","coat","coast","cream","cross","crash"],
+        "Soft C /s/ (city)": ["city","cent","center","circle","circus","cell","cellar","cement","cereal","certain","cinema","cider","civil","cycle","fancy","dance","prince","since","space","place","race","face","nice","ice","rice","price","twice","peace","piece","voice"]
+      }
+    },
+    {
+      name: "ER vs. IR vs. UR",
+      buckets: {
+        "er (her)": ["her","fern","were","term","verb","nerve","serve","perfect","person","certain","other","water","never","over","under","after","paper","better","letter","winter","summer","sister","mother","father","brother","teacher","number","finger"],
+        "ir (bird)": ["bird","dirt","girl","sir","stir","shirt","skirt","first","third","birth","chirp","circle","firm","swirl","twirl","thirty","thirteen","thirsty"],
+        "ur (turn)": ["turn","burn","fur","hurt","curl","surf","purse","nurse","curve","burst","church","return","purple","turkey","turtle","purpose","surprise","Saturday","Thursday"]
+      }
+    },
+    {
+      name: "PH vs. F",
+      buckets: {
+        "ph = /f/ (phone)": ["phone","photo","phrase","phantom","pharmacy","phase","phobia","phoenix","phosphorus","physical","phony","phonics","trophy","dolphin","elephant","alphabet","graph","paragraph","triumph","nephew","orphan"],
+        "f (fun)": ["fun","fish","fire","five","find","four","from","free","full","fly","flag","flat","flip","flow","food","form","fort","fox","frame","front","fruit","family","finger","finish","follow","friend","funny","forest","flower"]
+      }
+    },
+    {
+      name: "Double Consonant vs. Single",
+      buckets: {
+        "Double (sitting)": ["sitting","running","getting","hitting","putting","cutting","hopping","shopping","stopping","dropping","swimming","winning","beginning","bigger","dinner","summer","butter","kitten","mitten","happen","rabbit","lesson","office","coffee","common","follow","yellow","pillow","borrow","allow"],
+        "Single (writing)": ["writing","riding","making","taking","baking","hiding","hoping","coming","having","giving","living","naming","using","biting","dining","filing","liking","mining","waving","caring","sharing","staring"]
+      }
+    }
+  ],
+
+  // LCWC / Tricky words grouped by difficulty & theme
+  lcwcGroups: [
+    {
+      name: "\ud83d\udfe2 Common Sight Words",
+      words: [
+        {w:"said",tricky:"ai",hint:"'ai' says /\u025b/, not /e\u026a/"},
+        {w:"they",tricky:"ey",hint:"'ey' says /e\u026a/ here"},
+        {w:"was",tricky:"a",hint:"the 'a' says /\u0252/ not /\u00e6/"},
+        {w:"were",tricky:"ere",hint:"sounds like 'wur' not 'weer'"},
+        {w:"there",tricky:"ere",hint:"sounds like 'air' but spelled 'ere'"},
+        {w:"their",tricky:"eir",hint:"'eir' makes the 'air' sound"},
+        {w:"where",tricky:"wh",hint:"'wh' sounds like just /w/"},
+        {w:"does",tricky:"oe",hint:"'oe' says /\u028c/ here"},
+        {w:"done",tricky:"o",hint:"the 'o' says /\u028c/ not /o\u028a/"},
+        {w:"gone",tricky:"o",hint:"the 'o' says /\u0252/ not /o\u028a/"},
+        {w:"come",tricky:"o",hint:"the 'o' says /\u028c/ despite the e"},
+        {w:"some",tricky:"o",hint:"same as 'come', the 'o' says /\u028c/"},
+        {w:"have",tricky:"a",hint:"short a even with silent e"},
+        {w:"give",tricky:"i",hint:"short i even with silent e"},
+        {w:"live",tricky:"i",hint:"short i even with silent e"},
+        {w:"love",tricky:"o",hint:"the 'o' says /\u028c/"},
+        {w:"move",tricky:"o",hint:"the 'o' says /oo/"},
+        {w:"been",tricky:"ee",hint:"sounds like 'bin' not 'bean'"},
+        {w:"many",tricky:"a",hint:"'a' says /\u025b/ like 'menny'"},
+        {w:"any",tricky:"a",hint:"'a' says /\u025b/ like 'enny'"},
+        {w:"again",tricky:"ai",hint:"'ai' says /\u025b/ here"},
+        {w:"could",tricky:"oul",hint:"the 'l' is silent"},
+        {w:"would",tricky:"oul",hint:"the 'l' is silent"},
+        {w:"should",tricky:"oul",hint:"the 'l' is silent"},
+        {w:"though",tricky:"ough",hint:"'ough' says /o\u028a/"},
+        {w:"through",tricky:"ough",hint:"'ough' says /oo/"},
+        {w:"thought",tricky:"ough",hint:"'ough' says /aw/"},
+        {w:"enough",tricky:"ough",hint:"'ough' says /\u028cf/"}
+      ]
+    },
+    {
+      name: "\ud83d\udfe1 Sneaky Vowels",
+      words: [
+        {w:"people",tricky:"eo",hint:"'eo' says /ee/"},
+        {w:"friend",tricky:"ie",hint:"'ie' says /\u025b/ not /ee/"},
+        {w:"field",tricky:"ie",hint:"'ie' says /ee/ here (i before e rule)"},
+        {w:"piece",tricky:"ie",hint:"'ie' says /ee/ (i before e after c... wait, no!)"},
+        {w:"receive",tricky:"ei",hint:"'ei' after 'c' says /ee/"},
+        {w:"believe",tricky:"ie",hint:"'ie' says /ee/"},
+        {w:"chief",tricky:"ie",hint:"'ie' says /ee/"},
+        {w:"eight",tricky:"eigh",hint:"'eigh' says /e\u026a/ like 'ate'"},
+        {w:"weigh",tricky:"eigh",hint:"'eigh' says /e\u026a/ like 'way'"},
+        {w:"neighbor",tricky:"eigh",hint:"'eigh' says /e\u026a/"},
+        {w:"height",tricky:"eigh",hint:"'eigh' says /eye/ here, unlike the others!"},
+        {w:"heart",tricky:"ea",hint:"'ea' says /ah/ not /ee/"},
+        {w:"heard",tricky:"ea",hint:"'ea' says /er/"},
+        {w:"earth",tricky:"ea",hint:"'ea' says /er/"},
+        {w:"learn",tricky:"ea",hint:"'ea' says /er/"},
+        {w:"early",tricky:"ea",hint:"'ea' says /er/"},
+        {w:"great",tricky:"ea",hint:"'ea' says /e\u026a/ not /ee/"},
+        {w:"break",tricky:"ea",hint:"'ea' says /e\u026a/ not /ee/"},
+        {w:"steak",tricky:"ea",hint:"'ea' says /e\u026a/ not /ee/"},
+        {w:"bread",tricky:"ea",hint:"'ea' says /\u025b/ not /ee/"},
+        {w:"head",tricky:"ea",hint:"'ea' says /\u025b/ not /ee/"},
+        {w:"dead",tricky:"ea",hint:"'ea' says /\u025b/ not /ee/"},
+        {w:"ready",tricky:"ea",hint:"'ea' says /\u025b/"},
+        {w:"beauty",tricky:"eau",hint:"'eau' says /yoo/"},
+        {w:"ocean",tricky:"ea",hint:"'ea' says /uh/ here (schwa)"}
+      ]
+    },
+    {
+      name: "\ud83d\udfe1 Silent Letters",
+      words: [
+        {w:"knife",tricky:"k",hint:"the 'k' is completely silent"},
+        {w:"knight",tricky:"k",hint:"the 'k' is silent, 'igh' says /eye/"},
+        {w:"know",tricky:"k",hint:"the 'k' is silent"},
+        {w:"knee",tricky:"k",hint:"the 'k' is silent"},
+        {w:"knot",tricky:"k",hint:"the 'k' is silent"},
+        {w:"write",tricky:"w",hint:"the 'w' is silent"},
+        {w:"wrong",tricky:"w",hint:"the 'w' is silent"},
+        {w:"wrap",tricky:"w",hint:"the 'w' is silent"},
+        {w:"wrist",tricky:"w",hint:"the 'w' is silent"},
+        {w:"climb",tricky:"b",hint:"the 'b' is silent"},
+        {w:"thumb",tricky:"b",hint:"the 'b' is silent"},
+        {w:"lamb",tricky:"b",hint:"the 'b' is silent"},
+        {w:"comb",tricky:"b",hint:"the 'b' is silent"},
+        {w:"doubt",tricky:"b",hint:"the 'b' is silent"},
+        {w:"debt",tricky:"b",hint:"the 'b' is silent"},
+        {w:"island",tricky:"s",hint:"the 's' is silent"},
+        {w:"castle",tricky:"t",hint:"the 't' is silent"},
+        {w:"listen",tricky:"t",hint:"the 't' is silent"},
+        {w:"whistle",tricky:"t",hint:"the 't' is silent"},
+        {w:"often",tricky:"t",hint:"the 't' is sometimes silent"},
+        {w:"answer",tricky:"w",hint:"the 'w' is silent"},
+        {w:"sword",tricky:"w",hint:"the 'w' is silent"},
+        {w:"half",tricky:"l",hint:"the 'l' is silent"},
+        {w:"calm",tricky:"l",hint:"the 'l' is silent"},
+        {w:"salmon",tricky:"l",hint:"the 'l' is silent"},
+        {w:"ghost",tricky:"h",hint:"the 'h' is silent"},
+        {w:"honest",tricky:"h",hint:"the 'h' is silent"},
+        {w:"hour",tricky:"h",hint:"the 'h' is silent"}
+      ]
+    },
+    {
+      name: "\ud83d\udfe1 Tricky Endings",
+      words: [
+        {w:"trouble",tricky:"le",hint:"ends in '-le' not '-el'"},
+        {w:"double",tricky:"le",hint:"ends in '-le' not '-el'"},
+        {w:"table",tricky:"le",hint:"ends in '-le' not '-el'"},
+        {w:"little",tricky:"le",hint:"ends in '-le' not '-el'"},
+        {w:"middle",tricky:"le",hint:"ends in '-le' not '-el'"},
+        {w:"people",tricky:"le",hint:"ends in '-le' not '-el'"},
+        {w:"example",tricky:"le",hint:"ends in '-le'"},
+        {w:"angel",tricky:"el",hint:"ends in '-el' not '-le'"},
+        {w:"model",tricky:"el",hint:"ends in '-el' not '-le'"},
+        {w:"travel",tricky:"el",hint:"ends in '-el' not '-le'"},
+        {w:"channel",tricky:"el",hint:"ends in '-el' not '-le'"},
+        {w:"beautiful",tricky:"ful",hint:"only one 'l' in '-ful'"},
+        {w:"wonderful",tricky:"ful",hint:"only one 'l' in '-ful'"},
+        {w:"careful",tricky:"ful",hint:"only one 'l' in '-ful'"},
+        {w:"hopeful",tricky:"ful",hint:"only one 'l' in '-ful'"},
+        {w:"separate",tricky:"ar",hint:"it's 'par' not 'per'"},
+        {w:"desperate",tricky:"per",hint:"'per' not 'par' this time!"},
+        {w:"different",tricky:"er",hint:"'er' not 'ar'"},
+        {w:"interest",tricky:"er",hint:"three syllables, 'er' in the middle"},
+        {w:"favorite",tricky:"or",hint:"'or' not 'er'"},
+        {w:"surprise",tricky:"sur",hint:"starts with 'sur' not 'ser'"}
+      ]
+    },
+    {
+      name: "\ud83d\udd34 Commonly Misspelled",
+      words: [
+        {w:"because",tricky:"au",hint:"'au' not 'u' or 'o'"},
+        {w:"Wednesday",tricky:"dnes",hint:"say it: Wed-NES-day"},
+        {w:"February",tricky:"bru",hint:"say it: Feb-RU-ary"},
+        {w:"library",tricky:"bra",hint:"say it: li-BRA-ry"},
+        {w:"probably",tricky:"bab",hint:"say it: pro-BAB-ly"},
+        {w:"different",tricky:"ff",hint:"double 'f', single 'r'"},
+        {w:"beginning",tricky:"nn",hint:"double 'n' and double 'g'? No, just one 'g'!"},
+        {w:"definitely",tricky:"ite",hint:"'ite' not 'ate'"},
+        {w:"especially",tricky:"cial",hint:"'cial' not 'shally'"},
+        {w:"necessary",tricky:"cess",hint:"one 'c', double 's'"},
+        {w:"tomorrow",tricky:"orro",hint:"one 'm', double 'r'"},
+        {w:"disappear",tricky:"pp",hint:"one 's', double 'p'"},
+        {w:"disappoint",tricky:"pp",hint:"one 's', double 'p'"},
+        {w:"embarrass",tricky:"rrass",hint:"double 'r' and double 's'"},
+        {w:"immediately",tricky:"mm",hint:"double 'm'"},
+        {w:"occasion",tricky:"cc",hint:"double 'c', one 's'"},
+        {w:"recommend",tricky:"mm",hint:"one 'c', double 'm'"},
+        {w:"restaurant",tricky:"au",hint:"say it: rest-AU-rant"},
+        {w:"rhythm",tricky:"hythm",hint:"no vowels after 'r'!"},
+        {w:"schedule",tricky:"sch",hint:"'sch' says /sk/"},
+        {w:"scissors",tricky:"sc",hint:"'sc' is silent-ish, double 's'"},
+        {w:"tongue",tricky:"gue",hint:"ends in '-gue' not '-ng'"},
+        {w:"league",tricky:"gue",hint:"ends in '-gue'"},
+        {w:"guard",tricky:"gu",hint:"the 'u' is silent"},
+        {w:"guarantee",tricky:"gu",hint:"the 'u' is silent"},
+        {w:"building",tricky:"ui",hint:"'ui' says /\u026a/"},
+        {w:"business",tricky:"si",hint:"say it: BIZ-ness but spelled 'busi'"},
+        {w:"minute",tricky:"ute",hint:"'ute' says /\u026at/ not /yoot/"},
+        {w:"language",tricky:"guage",hint:"ends in '-guage' not '-gwage'"},
+        {w:"although",tricky:"ough",hint:"'ough' says /o\u028a/"}
+      ]
+    },
+    {
+      name: "\ud83d\udfe2 CVC & Short Vowel Words",
+      words: [
+        {w:"had",tricky:"",hint:"straightforward short 'a'"},
+        {w:"has",tricky:"",hint:"straightforward short 'a'"},
+        {w:"him",tricky:"",hint:"straightforward short 'i'"},
+        {w:"his",tricky:"",hint:"straightforward short 'i'"},
+        {w:"went",tricky:"",hint:"blend 'nt' at end"},
+        {w:"them",tricky:"th",hint:"'th' makes one sound"},
+        {w:"then",tricky:"th",hint:"'th' makes one sound"},
+        {w:"when",tricky:"wh",hint:"'wh' sounds like /w/"},
+        {w:"what",tricky:"wh",hint:"'wh' sounds like /w/, 'a' says /\u0252/"},
+        {w:"that",tricky:"th",hint:"'th' makes one sound"},
+        {w:"this",tricky:"th",hint:"'th' makes one sound"},
+        {w:"with",tricky:"th",hint:"'th' at the end"},
+        {w:"much",tricky:"ch",hint:"'ch' makes one sound"},
+        {w:"such",tricky:"ch",hint:"'ch' makes one sound"},
+        {w:"which",tricky:"wh",hint:"starts 'wh', ends 'ch'"},
+        {w:"just",tricky:"",hint:"sounds like it looks"},
+        {w:"must",tricky:"",hint:"sounds like it looks"},
+        {w:"last",tricky:"",hint:"sounds like it looks"},
+        {w:"fast",tricky:"",hint:"sounds like it looks"},
+        {w:"best",tricky:"",hint:"sounds like it looks"},
+        {w:"next",tricky:"xt",hint:"'xt' blend at end"},
+        {w:"help",tricky:"lp",hint:"'lp' blend at end"},
+        {w:"left",tricky:"ft",hint:"'ft' blend at end"},
+        {w:"felt",tricky:"lt",hint:"'lt' blend at end"},
+        {w:"kept",tricky:"pt",hint:"'pt' blend at end"}
+      ]
+    },
+    {
+      name: "\ud83d\udfe1 Homophones",
+      words: [
+        {w:"there",tricky:"ere",hint:"a place (over THERE)"},
+        {w:"their",tricky:"eir",hint:"belonging to them (THEIR house)"},
+        {w:"they're",tricky:"ey'r",hint:"they + are = they're"},
+        {w:"to",tricky:"",hint:"going TO school"},
+        {w:"too",tricky:"oo",hint:"also / TOO much (extra 'o')"},
+        {w:"two",tricky:"tw",hint:"the number 2"},
+        {w:"your",tricky:"our",hint:"belongs to you (YOUR book)"},
+        {w:"you're",tricky:"'re",hint:"you + are = you're"},
+        {w:"its",tricky:"",hint:"belongs to it (the dog wagged ITS tail)"},
+        {w:"it's",tricky:"'s",hint:"it + is = it's"},
+        {w:"here",tricky:"ere",hint:"a place (over HERE)"},
+        {w:"hear",tricky:"ear",hint:"with your EAR you HEAR"},
+        {w:"wear",tricky:"ear",hint:"you WEAR clothes"},
+        {w:"where",tricky:"wh",hint:"a place (WHERE is it?)"},
+        {w:"right",tricky:"igh",hint:"correct / direction"},
+        {w:"write",tricky:"wr",hint:"to WRITE with a pen"},
+        {w:"knew",tricky:"kn",hint:"past tense of know"},
+        {w:"new",tricky:"",hint:"not old"},
+        {w:"piece",tricky:"ie",hint:"a PIECE of PIE"},
+        {w:"peace",tricky:"ea",hint:"calm and quiet"},
+        {w:"weather",tricky:"ea",hint:"rain or shine"},
+        {w:"whether",tricky:"whe",hint:"if... or not"},
+        {w:"which",tricky:"wh",hint:"WHICH one?"},
+        {w:"witch",tricky:"",hint:"a WITCH on a broom"}
+      ]
+    },
+    {
+      name: "\ud83d\udd34 Rule Breakers",
+      words: [
+        {w:"once",tricky:"on",hint:"'on' says /wun/"},
+        {w:"one",tricky:"o",hint:"'o' says /wun/"},
+        {w:"only",tricky:"on",hint:"'on' says /oh/"},
+        {w:"other",tricky:"o",hint:"'o' says /uh/"},
+        {w:"mother",tricky:"o",hint:"'o' says /uh/"},
+        {w:"brother",tricky:"o",hint:"'o' says /uh/"},
+        {w:"nothing",tricky:"o",hint:"'o' says /uh/"},
+        {w:"money",tricky:"o",hint:"'o' says /uh/"},
+        {w:"honey",tricky:"o",hint:"'o' says /uh/"},
+        {w:"monkey",tricky:"o",hint:"'o' says /uh/"},
+        {w:"front",tricky:"o",hint:"'o' says /uh/"},
+        {w:"month",tricky:"o",hint:"'o' says /uh/"},
+        {w:"won",tricky:"o",hint:"'o' says /uh/, sounds like 'one'"},
+        {w:"son",tricky:"o",hint:"'o' says /uh/, sounds like 'sun'"},
+        {w:"ton",tricky:"o",hint:"'o' says /uh/, sounds like 'tun'"},
+        {w:"above",tricky:"o",hint:"'o' says /uh/"},
+        {w:"glove",tricky:"o",hint:"'o' says /uh/ despite the 'e'"},
+        {w:"dove",tricky:"o",hint:"'o' says /uh/ despite the 'e'"},
+        {w:"shove",tricky:"o",hint:"'o' says /uh/ despite the 'e'"},
+        {w:"cover",tricky:"o",hint:"'o' says /uh/"},
+        {w:"oven",tricky:"o",hint:"'o' says /uh/"},
+        {w:"dozen",tricky:"o",hint:"'o' says /uh/"},
+        {w:"eye",tricky:"ey",hint:"totally irregular spelling"},
+        {w:"buy",tricky:"uy",hint:"'uy' says /eye/"},
+        {w:"guy",tricky:"uy",hint:"'uy' says /eye/"}
+      ]
+    }
+  ]
+};
+
+// State
+let currentMode = 'sort';
+let sortData = null;
+let lcwcWords = [];
+let lcwcIndex = 0;
+let lcwcPhase = 'look'; // look, cover, write, check
+let lcwcStats = { correct: 0, wrong: 0, reviewWords: [] };
+let trickyWords = [];
+let trickyIndex = 0;
+let trickyScore = 0;
+let customWords = JSON.parse(localStorage.getItem('spellingDetectiveCustom') || '[]');
+let dragWord = null;
+
+// Init
+function init() {
+  populateSortSelect();
+  populateLCWCSelect();
+  populateTrickySelect();
+  renderCustomWords();
+}
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach((b, i) => {
+    b.classList.toggle('active', b.getAttribute('onclick').includes(mode));
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + mode).classList.add('active');
+}
+
+// === SORT ===
+function populateSortSelect() {
+  const sel = document.getElementById('sort-category');
+  WORD_DB.sortPatterns.forEach((pat, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = pat.name;
+    sel.appendChild(opt);
+  });
+}
+
+function startSort() {
+  const idx = document.getElementById('sort-category').value;
+  if (idx === '') return;
+  sortData = WORD_DB.sortPatterns[idx];
+  const bucketNames = Object.keys(sortData.buckets);
+  const allWords = [];
+  bucketNames.forEach(b => {
+    sortData.buckets[b].forEach(w => allWords.push({ word: w, correctBucket: b }));
+  });
+  // Shuffle
+  for (let i = allWords.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allWords[i], allWords[j]] = [allWords[j], allWords[i]];
+  }
+  // Take a subset (16 words for manageability)
+  const subset = allWords.slice(0, 16);
+  sortData._active = subset;
+
+  // Render bank
+  const bank = document.getElementById('sort-word-bank');
+  bank.style.display = 'block';
+  const chips = document.getElementById('sort-chips');
+  chips.innerHTML = '';
+  subset.forEach(item => {
+    const chip = createDragChip(item.word);
+    chips.appendChild(chip);
+  });
+
+  // Render buckets
+  const area = document.getElementById('sort-buckets');
+  area.innerHTML = '';
+  bucketNames.forEach(name => {
+    const bucket = document.createElement('div');
+    bucket.className = 'sort-bucket';
+    bucket.dataset.bucket = name;
+    bucket.innerHTML = `<h3>${name}</h3>`;
+    bucket.addEventListener('dragover', e => { e.preventDefault(); bucket.classList.add('drag-over'); });
+    bucket.addEventListener('dragleave', () => bucket.classList.remove('drag-over'));
+    bucket.addEventListener('drop', e => {
+      e.preventDefault();
+      bucket.classList.remove('drag-over');
+      if (dragWord) {
+        bucket.appendChild(dragWord);
+      }
+    });
+    area.appendChild(bucket);
+  });
+
+  document.getElementById('sort-result').innerHTML = '';
+}
+
+// Touch drag state
+let touchGhost = null;
+let touchSource = null;
+let touchStarted = false;
+
+function createDragChip(word) {
+  const chip = document.createElement('span');
+  chip.className = 'word-chip';
+  chip.textContent = word;
+  chip.draggable = true;
+  chip.dataset.word = word;
+
+  // Desktop drag
+  chip.addEventListener('dragstart', () => { dragWord = chip; chip.style.opacity = '0.5'; });
+  chip.addEventListener('dragend', () => { dragWord = null; chip.style.opacity = '1'; });
+
+  // Touch drag
+  chip.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchSource = chip;
+    touchStarted = true;
+
+    // Create floating ghost
+    touchGhost = chip.cloneNode(true);
+    touchGhost.className = 'word-chip touch-dragging';
+    touchGhost.style.left = (touch.clientX - 40) + 'px';
+    touchGhost.style.top = (touch.clientY - 20) + 'px';
+    document.body.appendChild(touchGhost);
+
+    chip.classList.add('touch-placeholder');
+    clearBucketHighlights();
+  }, { passive: false });
+
+  chip.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (!touchGhost) return;
+    const touch = e.touches[0];
+    touchGhost.style.left = (touch.clientX - 40) + 'px';
+    touchGhost.style.top = (touch.clientY - 20) + 'px';
+
+    // Highlight bucket under finger
+    clearBucketHighlights();
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const bucket = el && el.closest('.sort-bucket');
+    const bank = el && el.closest('.word-bank-area');
+    if (bucket) bucket.classList.add('drag-over');
+    if (bank) bank.classList.add('drag-over');
+  }, { passive: false });
+
+  chip.addEventListener('touchend', e => {
+    if (!touchGhost || !touchSource) { cleanupTouch(); return; }
+    const touch = e.changedTouches[0];
+    // Remove ghost before elementFromPoint so it doesn't block
+    touchGhost.remove();
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const bucket = el && el.closest('.sort-bucket');
+    const bank = el && el.closest('.word-bank-area');
+
+    if (bucket) {
+      bucket.appendChild(touchSource);
+    } else if (bank) {
+      bank.querySelector('#sort-chips').appendChild(touchSource);
+    }
+
+    cleanupTouch();
+  });
+
+  // Desktop click to select (fallback)
+  chip.addEventListener('click', () => {
+    if (touchStarted) { touchStarted = false; return; }
+    document.querySelectorAll('.word-chip').forEach(c => c.style.outline = '');
+    chip.style.outline = '3px solid var(--accent4)';
+    dragWord = chip;
+  });
+
+  return chip;
+}
+
+function cleanupTouch() {
+  if (touchGhost && touchGhost.parentNode) touchGhost.remove();
+  if (touchSource) touchSource.classList.remove('touch-placeholder');
+  touchGhost = null;
+  touchSource = null;
+  clearBucketHighlights();
+}
+
+function clearBucketHighlights() {
+  document.querySelectorAll('.sort-bucket, .word-bank-area').forEach(b => b.classList.remove('drag-over'));
+}
+
+// Also allow clicking buckets to place selected word (desktop)
+document.addEventListener('click', e => {
+  const bucket = e.target.closest('.sort-bucket');
+  if (bucket && dragWord && !bucket.contains(dragWord)) {
+    bucket.appendChild(dragWord);
+    dragWord.style.outline = '';
+    dragWord = null;
+  }
+});
+
+function checkSort() {
+  if (!sortData || !sortData._active) return;
+  let correct = 0;
+  let total = sortData._active.length;
+
+  sortData._active.forEach(item => {
+    const chip = document.querySelector(`.word-chip[data-word="${item.word}"]`);
+    if (!chip) return;
+    const parentBucket = chip.closest('.sort-bucket');
+    if (parentBucket && parentBucket.dataset.bucket === item.correctBucket) {
+      chip.classList.remove('incorrect');
+      chip.classList.add('correct');
+      correct++;
+    } else if (parentBucket) {
+      chip.classList.remove('correct');
+      chip.classList.add('incorrect');
+    }
+  });
+
+  const el = document.getElementById('sort-result');
+  if (correct === total) {
+    el.innerHTML = `<span style="color:var(--accent3)">\ud83c\udf89 Perfect! ${correct}/${total} correct!</span>`;
+  } else {
+    el.innerHTML = `<span style="color:var(--accent2)">${correct}/${total} correct. Red words are in the wrong bucket. Try moving them!</span>`;
+  }
+}
+
+function resetSort() {
+  startSort();
+}
+
+// === LCWC ===
+function populateLCWCSelect() {
+  const sel = document.getElementById('lcwc-category');
+  WORD_DB.lcwcGroups.forEach((g, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = g.name + ` (${g.words.length} words)`;
+    sel.appendChild(opt);
+  });
+  const opt = document.createElement('option');
+  opt.value = 'custom';
+  opt.textContent = '\ud83d\udcdd My Words';
+  sel.appendChild(opt);
+}
+
+function startLCWC(words) {
+  const sel = document.getElementById('lcwc-category');
+  if (!words) {
+    const val = sel.value;
+    if (val === '') return;
+    if (val === 'custom') {
+      if (customWords.length === 0) { alert('Add some words in the My Words tab first!'); return; }
+      lcwcWords = customWords.map(w => ({w: w, tricky: '', hint: ''}));
+    } else {
+      lcwcWords = [...WORD_DB.lcwcGroups[parseInt(val)].words];
+    }
+  } else {
+    lcwcWords = words;
+  }
+
+  // Shuffle
+  for (let i = lcwcWords.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [lcwcWords[i], lcwcWords[j]] = [lcwcWords[j], lcwcWords[i]];
+  }
+  // Take up to 15
+  lcwcWords = lcwcWords.slice(0, 15);
+
+  lcwcIndex = 0;
+  lcwcStats = { correct: 0, wrong: 0, reviewWords: [] };
+  lcwcPhase = 'look';
+
+  document.getElementById('lcwc-area').style.display = 'block';
+  document.getElementById('lcwc-review-list').innerHTML = '';
+  showLCWCWord();
+}
+
+function showLCWCWord() {
+  if (lcwcIndex >= lcwcWords.length) {
+    finishLCWC();
+    return;
+  }
+  const item = lcwcWords[lcwcIndex];
+  lcwcPhase = 'look';
+
+  document.getElementById('lcwc-progress').textContent = `${lcwcIndex + 1}/${lcwcWords.length}`;
+  document.getElementById('lcwc-correct').textContent = lcwcStats.correct;
+  document.getElementById('lcwc-wrong').textContent = lcwcStats.wrong;
+  document.getElementById('lcwc-bar').style.width = `${(lcwcIndex / lcwcWords.length) * 100}%`;
+
+  const wordEl = document.getElementById('lcwc-word');
+  wordEl.textContent = item.w;
+  wordEl.classList.remove('hidden-word');
+
+  document.getElementById('lcwc-step').textContent = '\ud83d\udc41\ufe0f LOOK at the word carefully';
+  document.getElementById('lcwc-input').style.display = 'none';
+  document.getElementById('lcwc-input').value = '';
+  document.getElementById('lcwc-input').className = 'lcwc-input';
+  document.getElementById('lcwc-result').innerHTML = '';
+  document.getElementById('lcwc-action').textContent = 'Cover it \u2192';
+  document.getElementById('lcwc-action').className = 'btn-primary';
+  document.getElementById('lcwc-action').onclick = lcwcNext;
+}
+
+function lcwcNext() {
+  const item = lcwcWords[lcwcIndex];
+  if (lcwcPhase === 'look') {
+    lcwcPhase = 'cover';
+    document.getElementById('lcwc-word').classList.add('hidden-word');
+    document.getElementById('lcwc-step').textContent = '\ud83d\ude48 Word is COVERED! Now WRITE it:';
+    document.getElementById('lcwc-input').style.display = 'inline-block';
+    document.getElementById('lcwc-input').focus();
+    document.getElementById('lcwc-action').textContent = 'Check \u2713';
+  } else if (lcwcPhase === 'cover') {
+    lcwcPhase = 'check';
+    const input = document.getElementById('lcwc-input').value.trim().toLowerCase();
+    const correct = item.w.toLowerCase();
+
+    document.getElementById('lcwc-word').textContent = item.w;
+    document.getElementById('lcwc-word').classList.remove('hidden-word');
+
+    if (input === correct) {
+      lcwcStats.correct++;
+      document.getElementById('lcwc-step').textContent = '\u2705 CORRECT!';
+      document.getElementById('lcwc-input').classList.add('correct-input');
+      document.getElementById('lcwc-result').innerHTML = `<span style="color:var(--accent3)">Nailed it! \ud83c\udfaf</span>`;
+    } else {
+      lcwcStats.wrong++;
+      lcwcStats.reviewWords.push({ word: item.w, typed: input });
+      document.getElementById('lcwc-step').textContent = '\u274c Not quite. Study the difference:';
+      document.getElementById('lcwc-input').classList.add('wrong-input');
+      // Show letter comparison
+      let comp = '';
+      const maxLen = Math.max(correct.length, input.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < correct.length) {
+          if (correct[i] === (input[i] || '')) {
+            comp += `<span class="letter-correct">${correct[i]}</span>`;
+          } else {
+            comp += `<span class="letter-wrong">${correct[i]}</span>`;
+          }
+        }
+      }
+      document.getElementById('lcwc-result').innerHTML = `Correct: ${comp}<br><span style="color:var(--text-dim)">You wrote: ${input || '(nothing)'}</span>`;
+    }
+
+    document.getElementById('lcwc-correct').textContent = lcwcStats.correct;
+    document.getElementById('lcwc-wrong').textContent = lcwcStats.wrong;
+    document.getElementById('lcwc-action').textContent = 'Next Word \u2192';
+  } else if (lcwcPhase === 'check') {
+    lcwcIndex++;
+    showLCWCWord();
+  }
+}
+
+// Enter key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && currentMode === 'lcwc' && lcwcPhase !== 'look') {
+    lcwcNext();
+  }
+});
+
+function finishLCWC() {
+  document.getElementById('lcwc-bar').style.width = '100%';
+  document.getElementById('lcwc-progress').textContent = `Done!`;
+  document.getElementById('lcwc-step').textContent = '\ud83c\udfc1 Round Complete!';
+  document.getElementById('lcwc-word').textContent = '';
+  document.getElementById('lcwc-input').style.display = 'none';
+  document.getElementById('lcwc-action').textContent = 'Play Again';
+  document.getElementById('lcwc-action').className = 'btn-success';
+  document.getElementById('lcwc-action').onclick = () => startLCWC();
+
+  const pct = Math.round((lcwcStats.correct / lcwcWords.length) * 100);
+  document.getElementById('lcwc-result').innerHTML = `<span style="color:var(--accent2)">${pct}% correct!</span>`;
+
+  if (lcwcStats.reviewWords.length > 0) {
+    let html = '<h3 style="font-family:Fredoka;color:var(--accent);margin-bottom:8px;">\ud83d\udccb Words to Review:</h3>';
+    lcwcStats.reviewWords.forEach(r => {
+      html += `<div style="padding:6px 0;border-bottom:1px solid var(--surface2)">
+        <strong style="color:var(--accent2)">${r.word}</strong>
+        <span style="color:var(--text-dim);margin-left:10px;">you wrote: ${r.typed || '(blank)'}</span>
+      </div>`;
+    });
+    document.getElementById('lcwc-review-list').innerHTML = html;
+  }
+}
+
+// === TRICKY PARTS ===
+function populateTrickySelect() {
+  const sel = document.getElementById('tricky-category');
+  WORD_DB.lcwcGroups.forEach((g, i) => {
+    // Only include groups that have tricky parts defined
+    const hasTricky = g.words.some(w => w.tricky);
+    if (hasTricky) {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = g.name + ` (${g.words.filter(w=>w.tricky).length} words)`;
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function startTricky(words) {
+  if (!words) {
+    const val = document.getElementById('tricky-category').value;
+    if (val === '') return;
+    trickyWords = WORD_DB.lcwcGroups[parseInt(val)].words.filter(w => w.tricky);
+  } else {
+    trickyWords = words;
+  }
+
+  // Shuffle
+  for (let i = trickyWords.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [trickyWords[i], trickyWords[j]] = [trickyWords[j], trickyWords[i]];
+  }
+  trickyWords = trickyWords.slice(0, 12);
+  trickyIndex = 0;
+  trickyScore = 0;
+
+  document.getElementById('tricky-area').style.display = 'block';
+  showTrickyWord();
+}
+
+function showTrickyWord() {
+  if (trickyIndex >= trickyWords.length) {
+    finishTricky();
+    return;
+  }
+  const item = trickyWords[trickyIndex];
+  document.getElementById('tricky-progress').textContent = `${trickyIndex + 1}/${trickyWords.length}`;
+  document.getElementById('tricky-score').textContent = trickyScore;
+  document.getElementById('tricky-bar').style.width = `${(trickyIndex / trickyWords.length) * 100}%`;
+
+  const container = document.getElementById('tricky-letters');
+  container.innerHTML = '';
+  item.w.split('').forEach((ch, i) => {
+    const el = document.createElement('div');
+    el.className = 'tricky-letter';
+    el.textContent = ch;
+    el.dataset.index = i;
+    el.onclick = () => el.classList.toggle('marked');
+    container.appendChild(el);
+  });
+
+  document.getElementById('tricky-hint').textContent = '';
+  document.getElementById('tricky-prompt').textContent = 'Tap the tricky letters!';
+  document.getElementById('tricky-result').innerHTML = '';
+  document.getElementById('tricky-action').textContent = 'Check';
+  document.getElementById('tricky-action').onclick = checkTricky;
+}
+
+function checkTricky() {
+  const item = trickyWords[trickyIndex];
+  const letters = document.querySelectorAll('#tricky-letters .tricky-letter');
+  const markedChars = [];
+  letters.forEach(el => {
+    if (el.classList.contains('marked')) markedChars.push(el.textContent);
+  });
+
+  const trickyChars = item.tricky.split('');
+
+  // Highlight correct tricky parts
+  letters.forEach(el => {
+    const idx = parseInt(el.dataset.index);
+    const ch = el.textContent;
+    // Check if this letter position is part of the tricky substring
+    const wordStr = item.w;
+    const trickyStart = wordStr.indexOf(item.tricky);
+    const isTricky = idx >= trickyStart && idx < trickyStart + item.tricky.length;
+
+    if (isTricky) {
+      el.style.background = 'rgba(245,166,35,0.3)';
+      el.style.borderColor = 'var(--accent2)';
+      el.style.color = 'var(--accent2)';
+    }
+
+    if (el.classList.contains('marked') && !isTricky) {
+      el.style.borderColor = 'var(--accent)';
+      el.style.background = 'rgba(233,69,96,0.15)';
+    }
+  });
+
+  // Check if they got it right (got the tricky part)
+  const trickyStart = item.w.indexOf(item.tricky);
+  const trickyIndices = new Set();
+  for (let i = trickyStart; i < trickyStart + item.tricky.length; i++) trickyIndices.add(i);
+
+  const markedIndices = new Set();
+  letters.forEach(el => { if (el.classList.contains('marked')) markedIndices.add(parseInt(el.dataset.index)); });
+
+  const gotIt = [...trickyIndices].every(i => markedIndices.has(i));
+
+  if (gotIt) {
+    trickyScore++;
+    document.getElementById('tricky-result').innerHTML = `<span style="color:var(--accent3)">\ud83c\udfaf You found it!</span>`;
+  } else {
+    document.getElementById('tricky-result').innerHTML = `<span style="color:var(--accent2)">The tricky part is highlighted in gold.</span>`;
+  }
+
+  document.getElementById('tricky-hint').textContent = item.hint;
+  document.getElementById('tricky-score').textContent = trickyScore;
+
+  document.getElementById('tricky-action').textContent = 'Next \u2192';
+  document.getElementById('tricky-action').onclick = () => { trickyIndex++; showTrickyWord(); };
+}
+
+function finishTricky() {
+  document.getElementById('tricky-bar').style.width = '100%';
+  document.getElementById('tricky-progress').textContent = 'Done!';
+  document.getElementById('tricky-prompt').textContent = '\ud83c\udfc1 Round Complete!';
+  document.getElementById('tricky-letters').innerHTML = '';
+  document.getElementById('tricky-hint').textContent = '';
+  const pct = Math.round((trickyScore / trickyWords.length) * 100);
+  document.getElementById('tricky-result').innerHTML = `<span style="color:var(--accent2)">You found ${trickyScore}/${trickyWords.length} tricky parts (${pct}%)!</span>`;
+  document.getElementById('tricky-action').textContent = 'Play Again';
+  document.getElementById('tricky-action').onclick = () => startTricky();
+}
+
+// === CUSTOM WORDS ===
+function renderCustomWords() {
+  const el = document.getElementById('custom-word-list');
+  if (customWords.length === 0) {
+    el.innerHTML = '<span style="color:var(--text-dim)">No custom words yet. Add words from homework or tests!</span>';
+    return;
+  }
+  el.innerHTML = customWords.map((w, i) =>
+    `<span class="word-chip" style="cursor:pointer" onclick="removeCustom(${i})" title="Click to remove">${w} \u2716</span>`
+  ).join('');
+}
+
+function addCustomWord() {
+  const input = document.getElementById('custom-word-input');
+  const word = input.value.trim().toLowerCase();
+  if (!word || customWords.includes(word)) { input.value = ''; return; }
+  customWords.push(word);
+  localStorage.setItem('spellingDetectiveCustom', JSON.stringify(customWords));
+  input.value = '';
+  renderCustomWords();
+}
+
+document.getElementById('custom-word-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addCustomWord();
+});
+
+function removeCustom(i) {
+  customWords.splice(i, 1);
+  localStorage.setItem('spellingDetectiveCustom', JSON.stringify(customWords));
+  renderCustomWords();
+}
+
+function clearCustom() {
+  if (!confirm('Clear all custom words?')) return;
+  customWords = [];
+  localStorage.setItem('spellingDetectiveCustom', JSON.stringify(customWords));
+  renderCustomWords();
+}
+
+function practiceCustom(mode) {
+  if (customWords.length === 0) { alert('Add some words first!'); return; }
+  if (mode === 'lcwc') {
+    switchMode('lcwc');
+    document.getElementById('lcwc-category').value = 'custom';
+    startLCWC(customWords.map(w => ({w, tricky: '', hint: ''})));
+  } else {
+    switchMode('tricky');
+    // For custom words without tricky data, mark all letters as potential
+    startTricky(customWords.map(w => ({w, tricky: w.slice(0, Math.ceil(w.length/2)), hint: 'You decide what\'s tricky!'})));
+  }
+}
+
+init();
+</script>
+</body>
+</html>
