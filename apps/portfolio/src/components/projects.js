@@ -20,6 +20,12 @@ const Projects = () => {
       link: "/projects/electronic-mail",
     },
     {
+      title: "🔐 Cam's Secret Decoder",
+      description: "A retro-styled cipher tool for encoding and decoding secret messages. Features a custom A–Z substitution cipher with a full reference table.",
+      tech: ["JavaScript", "HTML5", "CSS3"],
+      link: "/projects/camcoded",
+    },
+    {
       title: "💀 Dead Net",
       description: "An interactive Dead Internet Theory experience — explore a web populated entirely by bots, AI-generated content, and automated noise.",
       tech: ["JavaScript", "HTML5", "Canvas API"],
