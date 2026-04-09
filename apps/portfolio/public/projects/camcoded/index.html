@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAM'S SECRET DECODER</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #00ff88;
+    --green-dim: #00cc6a;
+    --green-dark: #003320;
+    --green-glow: rgba(0, 255, 136, 0.15);
+    --bg: #060e0a;
+    --panel: #0b1a10;
+    --border: #1a4a28;
+    --text: #c8ffd8;
+    --dim: #4a8a5a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Grid background */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 50px;
+    animation: fadeIn 0.8s ease;
+  }
+
+  .header .eyebrow {
+    font-size: 11px;
+    letter-spacing: 6px;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .header h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(28px, 6vw, 52px);
+    font-weight: 900;
+    color: var(--green);
+    text-shadow:
+      0 0 20px rgba(0,255,136,0.6),
+      0 0 60px rgba(0,255,136,0.2);
+    letter-spacing: 4px;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .header .sub {
+    font-size: 12px;
+    color: var(--dim);
+    letter-spacing: 3px;
+  }
+
+  /* Corner decorations */
+  .corner-deco {
+    display: inline-block;
+    width: 60px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green-dim));
+    vertical-align: middle;
+    margin: 0 16px;
+  }
+  .corner-deco.flip { transform: scaleX(-1); }
+
+  /* Panels */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 28px 28px 24px;
+    margin-bottom: 20px;
+    position: relative;
+    animation: slideUp 0.6s ease both;
+    box-shadow: 0 0 40px rgba(0,255,136,0.04), inset 0 1px 0 rgba(0,255,136,0.05);
+  }
+
+  .panel:nth-child(1) { animation-delay: 0.1s; }
+  .panel:nth-child(2) { animation-delay: 0.2s; }
+
+  /* Panel corner marks */
+  .panel::before, .panel::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+  }
+  .panel::before {
+    top: -1px; left: -1px;
+    border-top: 2px solid var(--green);
+    border-left: 2px solid var(--green);
+  }
+  .panel::after {
+    bottom: -1px; right: -1px;
+    border-bottom: 2px solid var(--green);
+    border-right: 2px solid var(--green);
+  }
+
+  .panel-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--green-dim);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .panel-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
+  }
+
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.25);
+    border-radius: 2px;
+    padding: 2px 8px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--green);
+  }
+
+  .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: blink 2s ease infinite;
+  }
+
+  /* Textarea */
+  textarea {
+    width: 100%;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 16px;
+    line-height: 1.6;
+    padding: 14px 16px;
+    resize: vertical;
+    min-height: 100px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    letter-spacing: 1px;
+  }
+
+  textarea::placeholder {
+    color: var(--border);
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  textarea:focus {
+    border-color: var(--green-dim);
+    box-shadow: 0 0 0 2px rgba(0,255,136,0.08), inset 0 0 20px rgba(0,255,136,0.03);
+  }
+
+  /* Output display */
+  .output-box {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 14px 16px;
+    min-height: 100px;
+    font-size: 16px;
+    line-height: 1.6;
+    letter-spacing: 1.5px;
+    word-break: break-all;
+    transition: all 0.3s;
+    color: var(--green);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .output-box.has-content {
+    text-shadow: 0 0 8px rgba(0,255,136,0.4);
+  }
+
+  .output-box.flash {
+    animation: outputFlash 0.4s ease;
+  }
+
+  .placeholder-text {
+    color: var(--border);
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 10px 24px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+    outline: none;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: #060e0a;
+    box-shadow: 0 0 20px rgba(0,255,136,0.3);
+  }
+
+  .btn-primary:hover {
+    background: #33ffaa;
+    box-shadow: 0 0 30px rgba(0,255,136,0.5);
+    transform: translateY(-1px);
+  }
+
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--dim);
+    border: 1px solid var(--border);
+  }
+
+  .btn-ghost:hover {
+    border-color: var(--dim);
+    color: var(--text);
+    background: rgba(0,255,136,0.04);
+  }
+
+  .btn-copy {
+    background: transparent;
+    color: var(--green-dim);
+    border: 1px solid rgba(0,255,136,0.2);
+    font-size: 10px;
+    padding: 8px 16px;
+  }
+
+  .btn-copy:hover {
+    background: rgba(0,255,136,0.08);
+    border-color: var(--green-dim);
+    color: var(--green);
+  }
+
+  .btn-copy.copied {
+    color: var(--green);
+    border-color: var(--green);
+    text-shadow: 0 0 8px var(--green);
+  }
+
+  /* Output row */
+  .output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  /* Cipher reference */
+  .cipher-ref {
+    margin-top: 36px;
+    animation: slideUp 0.6s 0.35s ease both;
+  }
+
+  .cipher-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    gap: 6px;
+    margin-top: 14px;
+  }
+
+  .cipher-pair {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 8px 6px;
+    text-align: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .cipher-pair:hover {
+    background: var(--green-glow);
+    border-color: var(--green-dim);
+  }
+
+  .cipher-plain {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--green);
+    display: block;
+  }
+
+  .cipher-arrow {
+    font-size: 9px;
+    color: var(--border);
+    display: block;
+    margin: 1px 0;
+  }
+
+  .cipher-encoded {
+    font-size: 12px;
+    color: var(--dim);
+    display: block;
+  }
+
+  /* Status bar */
+  .status-bar {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--border);
+    letter-spacing: 2px;
+    animation: fadeIn 1s 0.5s ease both;
+    opacity: 0;
+    animation-fill-mode: forwards;
+  }
+
+  .status-live {
+    color: var(--green-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  @keyframes outputFlash {
+    0% { box-shadow: 0 0 0 2px rgba(0,255,136,0.6); }
+    100% { box-shadow: none; }
+  }
+
+  /* Divider */
+  .swap-divider {
+    text-align: center;
+    margin: 4px 0 8px;
+    color: var(--border);
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="eyebrow">crunchlabs // classified</div>
+    <h1>
+      <span class="corner-deco flip"></span>
+      SECRET<br>DECODER
+      <span class="corner-deco"></span>
+    </h1>
+    <div class="sub">CIPHER UNIT &mdash; AUTHORIZED ACCESS ONLY</div>
+  </div>
+
+  <!-- ENCODE PANEL -->
+  <div class="panel">
+    <div class="panel-label">
+      <span class="mode-badge"><span class="dot"></span>ENCODE</span>
+      plain text &rarr; cipher
+    </div>
+
+    <textarea id="plainInput" placeholder="TYPE YOUR SECRET MESSAGE HERE..." rows="3" spellcheck="false"
+      oninput="autoEncode()"></textarea>
+
+    <div class="output-header" style="margin-top:16px;">
+      <div class="panel-label" style="margin-bottom:0; font-size:9px;">ENCODED OUTPUT</div>
+      <button class="btn btn-copy" id="copyEncode" onclick="copyText('encodeOutput','copyEncode')">[ COPY ]</button>
+    </div>
+    <div class="output-box" id="encodeOutput">
+      <span class="placeholder-text">encoded message will appear here...</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="clearPanel('plainInput','encodeOutput','copyEncode')">CLEAR</button>
+    </div>
+  </div>
+
+  <!-- DECODE PANEL -->
+  <div class="panel">
+    <div class="panel-label">
+      <span class="mode-badge"><span class="dot"></span>DECODE</span>
+      cipher &rarr; plain text
+    </div>
+
+    <textarea id="cipherInput" placeholder="PASTE OR TYPE ENCODED MESSAGE..." rows="3" spellcheck="false"
+      oninput="autoDecode()"></textarea>
+
+    <div class="output-header" style="margin-top:16px;">
+      <div class="panel-label" style="margin-bottom:0; font-size:9px;">DECODED OUTPUT</div>
+      <button class="btn btn-copy" id="copyDecode" onclick="copyText('decodeOutput','copyDecode')">[ COPY ]</button>
+    </div>
+    <div class="output-box" id="decodeOutput">
+      <span class="placeholder-text">decoded message will appear here...</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="clearPanel('cipherInput','decodeOutput','copyDecode')">CLEAR</button>
+    </div>
+  </div>
+
+  <!-- CIPHER REFERENCE -->
+  <div class="cipher-ref">
+    <div class="panel-label">
+      <span class="mode-badge">CIPHER KEY</span>
+      A&ndash;Z reference table
+    </div>
+    <div class="cipher-grid" id="cipherGrid"></div>
+  </div>
+
+  <div class="status-bar">
+    <span>CAM'S DECODER v1.0</span>
+    <span class="status-live"><span class="dot"></span> SYSTEM ONLINE</span>
+  </div>
+
+</div>
+
+<script>
+  const ENCODED = ['V','B','E','W','S','O','R','T','X','P','N','Y','I','L','G','U','Q','M','D','Z','C','F','J','H','K','A'];
+
+  const decodeMap = {};
+  ENCODED.forEach((enc, i) => {
+    decodeMap[enc] = String.fromCharCode(65 + i);
+  });
+
+  function encode(text) {
+    return text.toUpperCase().split('').map(ch => {
+      if (ch >= 'A' && ch <= 'Z') return ENCODED[ch.charCodeAt(0) - 65];
+      return ch;
+    }).join('');
+  }
+
+  function decode(text) {
+    return text.toUpperCase().split('').map(ch => {
+      if (ch >= 'A' && ch <= 'Z') return decodeMap[ch] || ch;
+      return ch;
+    }).join('');
+  }
+
+  function setOutput(boxId, value) {
+    const box = document.getElementById(boxId);
+    if (!value.trim()) {
+      box.innerHTML = '<span class="placeholder-text">' + (boxId === 'encodeOutput' ? 'encoded message will appear here...' : 'decoded message will appear here...') + '</span>';
+      box.classList.remove('has-content', 'flash');
+    } else {
+      box.textContent = value;
+      box.classList.add('has-content');
+      box.classList.remove('flash');
+      void box.offsetWidth;
+      box.classList.add('flash');
+    }
+  }
+
+  function autoEncode() {
+    const val = document.getElementById('plainInput').value;
+    setOutput('encodeOutput', encode(val));
+    document.getElementById('copyEncode').classList.remove('copied');
+    document.getElementById('copyEncode').textContent = '[ COPY ]';
+  }
+
+  function autoDecode() {
+    const val = document.getElementById('cipherInput').value;
+    setOutput('decodeOutput', decode(val));
+    document.getElementById('copyDecode').classList.remove('copied');
+    document.getElementById('copyDecode').textContent = '[ COPY ]';
+  }
+
+  function clearPanel(inputId, outputId, copyId) {
+    document.getElementById(inputId).value = '';
+    setOutput(outputId, '');
+    const btn = document.getElementById(copyId);
+    btn.textContent = '[ COPY ]';
+    btn.classList.remove('copied');
+  }
+
+  function copyText(outputId, btnId) {
+    const box = document.getElementById(outputId);
+    const text = box.textContent;
+    if (!text || box.querySelector('.placeholder-text')) return;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById(btnId);
+      btn.textContent = '[ COPIED! ]';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '[ COPY ]';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  function buildGrid() {
+    const grid = document.getElementById('cipherGrid');
+    for (let i = 0; i < 26; i++) {
+      const plain = String.fromCharCode(65 + i);
+      const enc = ENCODED[i];
+      const div = document.createElement('div');
+      div.className = 'cipher-pair';
+      div.innerHTML = `<span class="cipher-plain">${plain}</span><span class="cipher-arrow">&#8595;</span><span class="cipher-encoded">${enc}</span>`;
+      grid.appendChild(div);
+    }
+  }
+
+  buildGrid();
+</script>
+</body>
+</html>
