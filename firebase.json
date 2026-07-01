@@ -16,6 +16,10 @@
         "destination": "/projects/electronic-mail/index.html"
       },
       {
+        "source": "/projects/playball/**",
+        "destination": "/projects/playball/index.html"
+      },
+      {
         "source": "!/projects/**",
         "destination": "/index.html"
       }

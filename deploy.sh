@@ -6,6 +6,7 @@
 #   ./deploy.sh portfolio    - Build portfolio only, deploy hosting
 #   ./deploy.sh email        - Build email app, copy to portfolio, deploy hosting
 #   ./deploy.sh moments      - Build moment-capture, copy to portfolio, deploy hosting
+#   ./deploy.sh playball     - Copy playball (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
 #
@@ -13,6 +14,7 @@
 #   apps/portfolio/   - Main React portfolio SPA (CRA)
 #   apps/email/       - Gmail reader app (CRA) → served at /projects/electronic-mail
 #   apps/moment-capture/ - Moment capture app (Vite) → served at /projects/moments
+#   apps/playball/    - Playball walk-up music app (static) → served at /projects/playball
 #
 # Firebase deploys from: apps/portfolio/build/
 # All sub-apps are built into apps/portfolio/public/ before portfolio builds.
@@ -23,6 +25,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORTFOLIO_DIR="$ROOT_DIR/apps/portfolio"
 EMAIL_DIR="$ROOT_DIR/apps/email"
 MOMENTS_DIR="$ROOT_DIR/apps/moment-capture"
+PLAYBALL_DIR="$ROOT_DIR/apps/playball"
 
 log() { echo ""; echo "==> $1"; }
 success() { echo "✅ $1"; }
@@ -55,6 +58,15 @@ build_moments() {
     success "moment-capture copied"
 }
 
+build_playball() {
+    log "Copying playball to portfolio/public/projects/playball (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/playball"
+    rm -rf "$PORTFOLIO_DIR/public/projects/playball"/*
+    cp -r "$PLAYBALL_DIR"/* "$PORTFOLIO_DIR/public/projects/playball/"
+    rm -f "$PORTFOLIO_DIR/public/projects/playball/README.md"
+    success "playball copied"
+}
+
 build_portfolio() {
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
@@ -72,6 +84,7 @@ deploy_hosting() {
     echo "  Portfolio:      https://www.joshcocciardi.com"
     echo "  Email:          https://www.joshcocciardi.com/projects/electronic-mail"
     echo "  Moments:        https://www.joshcocciardi.com/projects/moments"
+    echo "  Playball:       https://www.joshcocciardi.com/projects/playball"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
@@ -97,6 +110,7 @@ case "${1:-all}" in
         echo "========================================"
         build_email
         build_moments
+        build_playball
         build_portfolio
         deploy_firestore
         deploy_hosting
@@ -124,6 +138,14 @@ case "${1:-all}" in
         build_portfolio
         deploy_hosting
         ;;
+    playball)
+        echo "========================================"
+        echo "  Deploying playball"
+        echo "========================================"
+        build_playball
+        build_portfolio
+        deploy_hosting
+        ;;
     firestore)
         echo "========================================"
         echo "  Deploying Firestore only"
@@ -138,7 +160,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|firestore|storage]"
         exit 1
         ;;
 esac
