@@ -27,6 +27,14 @@ service cloud.firestore {
       match /meta/{docId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+
+      // Playball: timed playlists + batting-order lineups
+      match /playball_playlists/{playlistId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /playball_lineups/{lineupId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
     
     // Radar metadata - read access for clients

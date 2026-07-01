@@ -14,6 +14,12 @@ const Projects = () => {
       link: "/projects/moments",
     },
     {
+      title: "⚾ Playball",
+      description: "Walk-up music manager for game day. Pull in Spotify playlists, set start/stop times per song, assign players to songs, and drag the batting order — the playlist re-syncs to Spotify automatically.",
+      tech: ["JavaScript", "Spotify API", "Firebase Auth", "Firestore", "PWA"],
+      link: "/projects/playball",
+    },
+    {
       title: "✉️ Electronic Mail",
       description: "An iMessage-styled Gmail client with Google OAuth, thread-based chat UI, and Firestore-backed email caching for fast loads.",
       tech: ["React", "Firebase", "Google OAuth", "Gmail API"],
