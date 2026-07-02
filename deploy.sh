@@ -7,6 +7,7 @@
 #   ./deploy.sh email        - Build email app, copy to portfolio, deploy hosting
 #   ./deploy.sh moments      - Build moment-capture, copy to portfolio, deploy hosting
 #   ./deploy.sh playball     - Copy playball (no build), copy to portfolio, deploy hosting
+#   ./deploy.sh canitwo      - Copy canitwo (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
 #
@@ -15,6 +16,7 @@
 #   apps/email/       - Gmail reader app (CRA) → served at /projects/electronic-mail
 #   apps/moment-capture/ - Moment capture app (Vite) → served at /projects/moments
 #   apps/playball/    - Playball walk-up music app (static) → served at /projects/playball
+#   apps/canitwo/     - CanITwo bathroom finder (static) → served at /projects/canitwo
 #
 # Firebase deploys from: apps/portfolio/build/
 # All sub-apps are built into apps/portfolio/public/ before portfolio builds.
@@ -26,6 +28,7 @@ PORTFOLIO_DIR="$ROOT_DIR/apps/portfolio"
 EMAIL_DIR="$ROOT_DIR/apps/email"
 MOMENTS_DIR="$ROOT_DIR/apps/moment-capture"
 PLAYBALL_DIR="$ROOT_DIR/apps/playball"
+CANITWO_DIR="$ROOT_DIR/apps/canitwo"
 
 log() { echo ""; echo "==> $1"; }
 success() { echo "✅ $1"; }
@@ -67,6 +70,15 @@ build_playball() {
     success "playball copied"
 }
 
+build_canitwo() {
+    log "Copying canitwo to portfolio/public/projects/canitwo (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/canitwo"
+    rm -rf "$PORTFOLIO_DIR/public/projects/canitwo"/*
+    cp -r "$CANITWO_DIR"/* "$PORTFOLIO_DIR/public/projects/canitwo/"
+    rm -f "$PORTFOLIO_DIR/public/projects/canitwo/README.md"
+    success "canitwo copied"
+}
+
 build_portfolio() {
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
@@ -85,6 +97,7 @@ deploy_hosting() {
     echo "  Email:          https://www.joshcocciardi.com/projects/electronic-mail"
     echo "  Moments:        https://www.joshcocciardi.com/projects/moments"
     echo "  Playball:       https://www.joshcocciardi.com/projects/playball"
+    echo "  CanITwo:        https://www.joshcocciardi.com/projects/canitwo"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
@@ -111,6 +124,7 @@ case "${1:-all}" in
         build_email
         build_moments
         build_playball
+        build_canitwo
         build_portfolio
         deploy_firestore
         deploy_hosting
@@ -146,6 +160,14 @@ case "${1:-all}" in
         build_portfolio
         deploy_hosting
         ;;
+    canitwo)
+        echo "========================================"
+        echo "  Deploying canitwo"
+        echo "========================================"
+        build_canitwo
+        build_portfolio
+        deploy_hosting
+        ;;
     firestore)
         echo "========================================"
         echo "  Deploying Firestore only"
@@ -160,7 +182,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|canitwo|firestore|storage]"
         exit 1
         ;;
 esac

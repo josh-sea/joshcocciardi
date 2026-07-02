@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0b7a75"/>
+  <circle cx="256" cy="208" r="128" fill="#ffffff" opacity="0.14"/>
+  <text x="256" y="300" font-size="256" text-anchor="middle" font-family="system-ui, sans-serif">🚽</text>
+  <text x="256" y="452" font-size="72" font-weight="800" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif">CanITwo</text>
+</svg>

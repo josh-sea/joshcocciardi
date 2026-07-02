@@ -20,6 +20,12 @@ const Projects = () => {
       link: "/projects/playball",
     },
     {
+      title: "🚽 CanITwo",
+      description: "Community bathroom finder for travelers. See nearby gas stations, stores, and cafes on a map, report whether they have a toilet, rate and review it, and launch directions when nature calls.",
+      tech: ["JavaScript", "Leaflet", "OpenStreetMap", "Firebase Auth", "Firestore", "PWA"],
+      link: "/projects/canitwo",
+    },
+    {
       title: "✉️ Electronic Mail",
       description: "An iMessage-styled Gmail client with Google OAuth, thread-based chat UI, and Firestore-backed email caching for fast loads.",
       tech: ["React", "Firebase", "Google OAuth", "Gmail API"],
