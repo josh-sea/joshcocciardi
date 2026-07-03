@@ -98,6 +98,7 @@ service cloud.firestore {
                'rating': resource.data.get('rating', null),
                'text': resource.data.get('text', ''),
                'tags': resource.data.get('tags', []),
+               'facility': resource.data.get('facility', null),
                'at': resource.data.updatedAt
              };
         allow delete: if false;
