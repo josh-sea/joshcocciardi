@@ -20,6 +20,10 @@
         "destination": "/projects/playball/index.html"
       },
       {
+        "source": "/projects/canitwo/**",
+        "destination": "/projects/canitwo/index.html"
+      },
+      {
         "source": "!/projects/**",
         "destination": "/index.html"
       }

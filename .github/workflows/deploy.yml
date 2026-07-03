@@ -1,0 +1,67 @@
+# Deploys the site to Firebase whenever a PR merges to master
+# (or on manual trigger from the Actions tab).
+#
+# One-time setup — add the deploy credential as a repo secret:
+#   1. Firebase console → ⚙️ Project settings → Service accounts
+#      → "Generate new private key" (downloads a JSON file)
+#   2. GitHub repo → Settings → Secrets and variables → Actions
+#      → New repository secret, name: FIREBASE_SERVICE_ACCOUNT,
+#      value: the entire contents of that JSON file
+#
+# What it deploys (mirrors ./deploy.sh):
+#   - copies the static apps (playball, canitwo) into portfolio/public
+#   - builds the portfolio (built copies of email/moments are already
+#     committed under apps/portfolio/public/projects/)
+#   - firebase deploy --only hosting,firestore
+
+name: Deploy to Firebase
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/portfolio/package-lock.json
+
+      - name: Copy static apps into portfolio
+        run: |
+          for app in playball canitwo; do
+            mkdir -p "apps/portfolio/public/projects/$app"
+            rm -rf "apps/portfolio/public/projects/$app"
+            cp -r "apps/$app" "apps/portfolio/public/projects/$app"
+            rm -f "apps/portfolio/public/projects/$app/README.md"
+          done
+
+      - name: Build portfolio
+        working-directory: apps/portfolio
+        env:
+          CI: "false" # CRA fails on lint warnings when CI=true
+        run: |
+          npm ci
+          npm run build
+
+      - name: Deploy hosting + Firestore rules
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SA" ]; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT secret is not set — see the comment at the top of .github/workflows/deploy.yml"
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          npx firebase-tools@13 deploy --only hosting,firestore --project josh-cocciardi --non-interactive

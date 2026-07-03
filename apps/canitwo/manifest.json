@@ -1,0 +1,19 @@
+{
+  "name": "CanITwo — Bathroom Finder",
+  "short_name": "CanITwo",
+  "description": "Community bathroom finder. See which gas stations, stores, and cafes near you have a toilet — rated and reviewed by real people.",
+  "start_url": "/projects/canitwo/",
+  "scope": "/projects/canitwo/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0b7a75",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

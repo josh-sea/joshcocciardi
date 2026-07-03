@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>CanITwo — Find a Bathroom Near You</title>
+  <meta name="description" content="Community bathroom finder. See which gas stations, stores, and cafes nearby have a toilet — rated and reviewed by real people." />
+  <meta name="theme-color" content="#0b7a75" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CanITwo" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script>
+    // Resolved by js/store.js (a module, so it runs after the classic scripts).
+    window.StoreReady = new Promise(r => { window.__storeResolve = r; });
+  </script>
+</head>
+<body>
+
+<!-- ── Map ───────────────────────────────────────────────────────────────── -->
+<div id="map"></div>
+
+<!-- ── Top bar ───────────────────────────────────────────────────────────── -->
+<header id="topbar">
+  <div class="topbar-row">
+    <div class="brand" title="CanITwo — can I… number two?">🚽 <span>CanITwo</span></div>
+    <button id="account-btn" class="account-btn">Sign in</button>
+  </div>
+  <div class="chip-row" id="filter-chips">
+    <button class="chip active" data-min-rating="0">All</button>
+    <button class="chip" data-min-rating="3">3★+</button>
+    <button class="chip" data-min-rating="4">4★+</button>
+    <button class="chip" data-min-rating="4.5">4.5★+</button>
+    <button class="chip chip-toggle active" id="chip-unrated" title="Show unrated map spots you can be the first to review">Unrated spots</button>
+  </div>
+</header>
+
+<!-- ── Floating controls ─────────────────────────────────────────────────── -->
+<button id="search-area-btn" class="search-area-btn hidden">🔍 Search this area</button>
+<div class="fab-stack">
+  <button id="add-place-btn" class="fab" title="Add a place at the map center">➕</button>
+  <button id="locate-btn" class="fab" title="Go to my location">📍</button>
+</div>
+<div id="status-pill" class="status-pill hidden"></div>
+
+<!-- ── Bottom sheet: place details ───────────────────────────────────────── -->
+<div id="sheet" class="sheet hidden">
+  <div class="sheet-handle" id="sheet-handle"><span></span></div>
+  <div class="sheet-body" id="sheet-body"><!-- rendered by app.js --></div>
+</div>
+
+<!-- ── Modal: report / review form ───────────────────────────────────────── -->
+<div id="report-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <button class="modal-close" data-close="report-modal">✕</button>
+    <h2 id="report-title">Bathroom report</h2>
+    <p class="modal-place-name" id="report-place-name"></p>
+
+    <div class="field">
+      <label>Is there a bathroom you can use here?</label>
+      <div class="yn-row">
+        <button id="yn-yes" class="yn-btn">🚽 Yes</button>
+        <button id="yn-no" class="yn-btn">🚫 No</button>
+      </div>
+    </div>
+
+    <div class="field hidden" id="rating-field">
+      <label>How is it? <span class="hint-inline">(cleanliness, access, TP situation…)</span></label>
+      <div class="star-input" id="star-input">
+        <button data-star="1">★</button><button data-star="2">★</button><button data-star="3">★</button><button data-star="4">★</button><button data-star="5">★</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="report-text">Review <span class="hint-inline">(optional)</span></label>
+      <textarea id="report-text" rows="3" maxlength="500" placeholder="Code on the door? Customers only? Sparkling clean? Spill the details."></textarea>
+    </div>
+
+    <div class="modal-error hidden" id="report-error"></div>
+    <button id="report-submit" class="btn btn-primary">Post report</button>
+  </div>
+</div>
+
+<!-- ── Modal: add custom place ───────────────────────────────────────────── -->
+<div id="add-place-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <button class="modal-close" data-close="add-place-modal">✕</button>
+    <h2>Add a place</h2>
+    <p class="hint">Pin will drop at <span id="add-place-coords"></span>. Long-press the map (or right-click) to pick a different spot.</p>
+    <div class="field">
+      <label for="add-place-name">Name</label>
+      <input id="add-place-name" type="text" maxlength="80" placeholder="e.g. Shell on Route 9" />
+    </div>
+    <div class="field">
+      <label for="add-place-category">Type</label>
+      <select id="add-place-category"></select>
+    </div>
+    <div class="modal-error hidden" id="add-place-error"></div>
+    <button id="add-place-submit" class="btn btn-primary">Add &amp; write report</button>
+  </div>
+</div>
+
+<!-- ── Modal: sign in ────────────────────────────────────────────────────── -->
+<div id="auth-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <button class="modal-close" data-close="auth-modal">✕</button>
+    <div class="auth-logo">🚽</div>
+    <h2 style="text-align:center">Sign in to CanITwo</h2>
+    <p class="hint" style="text-align:center">Anyone can browse. Sign in to post bathroom reports — only your username is ever shown.</p>
+
+    <button id="google-btn" class="btn btn-google">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
+      Continue with Google
+    </button>
+
+    <div class="auth-divider">or use email</div>
+
+    <div class="field">
+      <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <input id="auth-password" type="password" autocomplete="current-password" placeholder="Password" />
+    </div>
+    <div class="modal-error hidden" id="auth-error"></div>
+    <div class="auth-btn-row">
+      <button id="email-signin-btn" class="btn btn-primary">Sign in</button>
+      <button id="email-signup-btn" class="btn btn-secondary">Create account</button>
+    </div>
+    <button id="forgot-btn" class="link-btn">Forgot password?</button>
+  </div>
+</div>
+
+<!-- ── Modal: pick username ──────────────────────────────────────────────── -->
+<div id="username-modal" class="modal-overlay hidden">
+  <div class="modal-card">
+    <h2>Pick a username</h2>
+    <p class="hint">This is the only thing shown on your reports — your email stays private.</p>
+    <div class="field">
+      <input id="username-input" type="text" maxlength="20" autocomplete="off" placeholder="e.g. RoadsideRelief" />
+    </div>
+    <div class="modal-error hidden" id="username-error"></div>
+    <button id="username-submit" class="btn btn-primary">Claim username</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="config.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module" src="js/store.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -37,6 +37,30 @@ service cloud.firestore {
       }
     }
     
+    // CanITwo: community bathroom finder
+    // Public read so travelers can browse without an account;
+    // authenticated writes only. Emails are never stored in these docs.
+    match /canitwo_users/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /canitwo_usernames/{name} {
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+    match /canitwo_places/{placeId} {
+      allow read: if true;
+      allow create, update: if request.auth != null;
+      allow delete: if false;
+
+      // One review per user: doc id must be the reviewer's uid
+      match /reviews/{reviewerUid} {
+        allow read: if true;
+        allow create, update, delete: if request.auth != null && request.auth.uid == reviewerUid;
+      }
+    }
+
     // Radar metadata - read access for clients
     match /radar_sites/{siteId} {
       allow read: if true;
