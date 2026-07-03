@@ -1,10 +1,47 @@
 // ─── CanITwo Configuration ───────────────────────────────────────────────────
-// No API keys required:
-//   • Map tiles come from OpenStreetMap.
-//   • Nearby places (gas stations, stores, cafes…) come from the Overpass API.
+//   • Map tiles come from OpenStreetMap (no key).
+//   • Nearby places come from Google Places API (New) when a key is set below,
+//     with the free Overpass API as automatic fallback (and as the only source
+//     if the key is ever removed).
 //   • Firebase web config lives in js/store.js (web config values are public).
 
 window.APP_CONFIG = {
+  // Google Places API (New) key — safe to publish: restricted to
+  // joshcocciardi.com referrers and to the Places API only.
+  // Set to '' to disable and use Overpass exclusively.
+  google_places_api_key: 'AIzaSyAa-LSU-Xca_2q-wCcuLpho4OXlE3Ibwmc',
+
+  // Each group is one Nearby Search request (max 20 results each).
+  // Grouped so a "Search this area" tap costs 3 requests → ~1,600 free
+  // searches/month on the Places API (New) Pro SKU free tier.
+  google_type_groups: [
+    ['gas_station', 'convenience_store', 'supermarket', 'grocery_store', 'rest_stop', 'truck_stop'],
+    ['cafe', 'coffee_shop', 'restaurant', 'fast_food_restaurant', 'bakery', 'bar'],
+    ['shopping_mall', 'department_store', 'hotel', 'motel', 'library', 'public_bathroom'],
+  ],
+
+  // Google place type → category key (first match in the types array wins).
+  google_type_to_category: {
+    public_bathroom: 'toilets',
+    gas_station: 'fuel',
+    truck_stop: 'fuel',
+    rest_stop: 'rest_area',
+    convenience_store: 'convenience',
+    supermarket: 'supermarket',
+    grocery_store: 'supermarket',
+    cafe: 'cafe',
+    coffee_shop: 'cafe',
+    bakery: 'cafe',
+    fast_food_restaurant: 'fast_food',
+    restaurant: 'restaurant',
+    bar: 'bar',
+    pub: 'bar',
+    shopping_mall: 'mall',
+    department_store: 'mall',
+    hotel: 'hotel',
+    motel: 'hotel',
+    library: 'library',
+  },
   // Overpass endpoints — queried in parallel, fastest response wins.
   overpass_endpoints: [
     'https://overpass.kumi.systems/api/interpreter',
