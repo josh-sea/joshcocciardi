@@ -34,7 +34,7 @@ Static app, no build step (same pattern as Playball):
 | Piece | Choice |
 |---|---|
 | Map | [Leaflet](https://leafletjs.com) + OpenStreetMap tiles (no API key) |
-| Nearby place search | [Overpass API](https://overpass-api.de) (no API key) |
+| Nearby place search | Google Places API (New) Nearby Search, with the [Overpass API](https://overpass-api.de) as automatic fallback (key in `config.js`, referrer-restricted) |
 | Auth | Firebase Auth (Google popup/redirect + email/password) |
 | Data | Firestore |
 | Geo queries | `geofire-common` geohash bounds on `canitwo_places.geohash` |

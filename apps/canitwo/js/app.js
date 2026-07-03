@@ -152,6 +152,55 @@
     return parts.join(', ') || null;
   }
 
+  // Google Places API (New) Nearby Search. Returns an array of spots, or
+  // null if the key is missing / every request failed (→ Overpass fallback).
+  async function searchGooglePlaces(center, radius) {
+    const key = cfg.google_places_api_key;
+    if (!key) return null;
+    const results = await Promise.allSettled(cfg.google_type_groups.map(types =>
+      fetch('https://places.googleapis.com/v1/places:searchNearby', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': key,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.location,places.types,places.shortFormattedAddress',
+        },
+        body: JSON.stringify({
+          includedTypes: types,
+          maxResultCount: 20,
+          locationRestriction: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius } },
+        }),
+      }).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+    ));
+
+    let anyOk = false;
+    const spots = [];
+    for (const r of results) {
+      if (r.status !== 'fulfilled') { console.warn('[CanITwo] places group failed:', r.reason?.message); continue; }
+      anyOk = true;
+      for (const p of r.value.places || []) {
+        const lat = p.location?.latitude, lng = p.location?.longitude;
+        if (typeof lat !== 'number' || typeof lng !== 'number') continue;
+        const catKey = (p.types || []).map(t => cfg.google_type_to_category[t]).find(Boolean) || 'other';
+        const cat = cfg.categories.find(c2 => c2.key === catKey) || cfg.categories[cfg.categories.length - 1];
+        spots.push({
+          id: `gp-${p.id}`,
+          lat, lng,
+          name: p.displayName?.text || cat.label,
+          category: cat.label,
+          emoji: cat.emoji,
+          address: p.shortFormattedAddress || null,
+          source: 'google',
+          unrated: true,
+        });
+      }
+    }
+    return anyOk && spots.length ? spots : null;
+  }
+
   async function searchArea() {
     if (map.getZoom() < cfg.overpass_min_zoom) {
       toast('Zoom in a bit more, then search 🔍');
@@ -161,14 +210,30 @@
     const corner = map.getBounds().getNorthEast();
     const radius = Math.min(cfg.overpass_max_radius_m, Math.round(c.distanceTo(corner)));
 
+    status('Finding places nearby…');
+    $('search-area-btn').classList.add('hidden');
+
+    // Google Places first (fast, great coverage); Overpass if it can't help.
+    let googleSpots = null;
+    try { googleSpots = await searchGooglePlaces(c, radius); } catch { /* fall through */ }
+    if (googleSpots) {
+      status(null);
+      let added = 0;
+      for (const s of googleSpots) {
+        if (!osmSpots.has(s.id)) added++;
+        osmSpots.set(s.id, s);
+      }
+      renderMarkers();
+      toast(added ? `Found ${added} new spot${added === 1 ? '' : 's'} — grey dots are unrated.`
+                  : 'No new spots here. Try the ➕ button to add one.');
+      return;
+    }
+
     // nw (not nwr): skip relations — rarely useful for these POIs, much
     // faster. "qt" = quadtile output order, far cheaper than the default
     // id sort on large result sets.
     const around = `(around:${radius},${c.lat.toFixed(6)},${c.lng.toFixed(6)})`;
     const body = `[out:json][timeout:15];(${OVERPASS_SELECTORS.map(s => `nw${s}${around};`).join('')});out center tags qt 150;`;
-
-    status('Finding places nearby…');
-    $('search-area-btn').classList.add('hidden');
 
     // Race all endpoints; first OK response wins.
     const attempt = endpoint => {
