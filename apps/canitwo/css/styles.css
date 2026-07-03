@@ -621,18 +621,28 @@ textarea { resize: vertical; }
 .yn-btn.selected-yes { border-color: var(--good); background: #e3f5e9; color: var(--good); }
 .yn-btn.selected-no  { border-color: var(--none); background: #fdeaea; color: var(--none); }
 
+/* Optional amenity tags: one thin, horizontally scrolling row below the
+   review box — deliberately unobtrusive so posting stays instant. */
+.tags-field { margin: 2px 0 14px; }
 .tag-input {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0;
 }
+.tag-input::-webkit-scrollbar { display: none; }
 .tag-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
   border: 1.5px solid var(--line);
   background: #fbfcfd;
   border-radius: 999px;
-  padding: 7px 12px;
+  padding: 6px 11px;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--muted);
   cursor: pointer;
