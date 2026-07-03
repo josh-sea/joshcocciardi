@@ -12,7 +12,7 @@
 #   - copies the static apps (playball, canitwo) into portfolio/public
 #   - builds the portfolio (built copies of email/moments are already
 #     committed under apps/portfolio/public/projects/)
-#   - firebase deploy --only hosting,firestore:rules
+#   - firebase deploy --only hosting,firestore:rules,functions:rules
 #
 # Indexes are deliberately NOT deployed from CI: the project has indexes
 # that aren't captured in firestore.indexes.json, and a non-interactive
@@ -60,6 +60,10 @@ jobs:
           npm ci
           npm run build
 
+      - name: Install Cloud Functions dependencies
+        working-directory: functions
+        run: npm ci
+
       - name: Deploy hosting + Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
@@ -70,4 +74,4 @@ jobs:
             exit 1
           fi
           printf '%s' "$FIREBASE_SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
-          npx firebase-tools@13 deploy --only hosting,firestore:rules --project josh-cocciardi --non-interactive
+          npx firebase-tools@13 deploy --only hosting,firestore:rules,functions --project josh-cocciardi --non-interactive --force

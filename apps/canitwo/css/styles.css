@@ -465,6 +465,21 @@ html, body {
   font-style: italic;
 }
 
+.review-flag-link { opacity: 0.65; }
+
+.flagged-review {
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+.flagged-review summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  user-select: none;
+}
+.flagged-review .review { border-top: none; opacity: 0.75; }
+
 .review-edit-link {
   border: none;
   background: none;

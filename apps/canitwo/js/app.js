@@ -557,13 +557,14 @@
       const myUid = user?.uid;
       const mine = myUid && reviews.some(r => r.uid === myUid);
       if (mine) $('sheet-report-btn').innerHTML = '✏️ Edit your report';
-      reviewsEl.innerHTML = `
-        <div class="reviews-title">Reports (${reviews.length})</div>
-        ${reviews.map(r => `
+
+      const reviewHtml = r => `
           <div class="review">
             <div class="review-head">
               <span class="review-user">${esc(r.username || 'anonymous')}${r.uid === myUid ? '<span class="you-tag">YOU</span>' : ''}</span>
-              <span class="review-meta">${reviewDate(r)}${r.history?.length ? ' · <span class="edited-tag">edited</span>' : ''}${r.uid === myUid ? ' · <button class="review-edit-link" data-edit-review>edit</button>' : ''}</span>
+              <span class="review-meta">${reviewDate(r)}${r.history?.length ? ' · <span class="edited-tag">edited</span>' : ''}${r.uid === myUid
+                ? ' · <button class="review-edit-link" data-edit-review>edit</button>'
+                : ` · <button class="review-edit-link review-flag-link" data-flag="${esc(r.uid)}" title="Flag as inappropriate">🚩</button>`}</span>
             </div>
             <div>${r.hasBathroom
               ? (typeof r.rating === 'number' ? `<span class="review-stars">${starsHtml(r.rating)}</span>` : '<span class="badge badge-yes">🚽 Has bathroom</span>')
@@ -571,10 +572,27 @@
             ${reviewTagsHtml(r)}
             ${r.text ? `<p class="review-text">${esc(r.text)}</p>` : ''}
             ${historyHtml(r)}
-          </div>`).join('')}
+          </div>`;
+
+      reviewsEl.innerHTML = `
+        <div class="reviews-title">Reports (${reviews.length})</div>
+        ${reviews.map(r => (r.flagCount || 0) >= 3
+          ? `<details class="flagged-review"><summary>🚩 Hidden — flagged by the community. Show anyway</summary>${reviewHtml(r)}</details>`
+          : reviewHtml(r)).join('')}
       `;
       reviewsEl.querySelector('[data-edit-review]')
         ?.addEventListener('click', () => requireUser(() => openReportModal(place)));
+      reviewsEl.querySelectorAll('[data-flag]').forEach(b => {
+        b.addEventListener('click', () => requireUser(async () => {
+          if (!confirm('Flag this report as inappropriate or false?')) return;
+          try {
+            await Store.flagReview(place.id, b.dataset.flag);
+            toast('Flagged — thanks for keeping things honest. 🚩');
+          } catch {
+            toast('You already flagged this one.');
+          }
+        }));
+      });
     } catch (e) {
       console.warn('[CanITwo] reviews failed:', e);
       reviewsEl.innerHTML = `<p class="empty-note">Couldn't load reviews.</p>`;
@@ -681,6 +699,17 @@
   $('sheet-handle').addEventListener('click', closeSheet);
   map.on('click', closeSheet);
 
+  // ── Profanity guard ──────────────────────────────────────────────────────
+  // Soft gate, not real moderation — flags + edit history handle the rest.
+  const PROFANITY = /\b(?:fuck|shit+|bitch|cunt|asshole|dickhead|nigg|fagg?ot|retard|whore|slut|cocksuck|wanker|piss off)/i;
+  function cleanText(el, text) {
+    if (PROFANITY.test(text)) {
+      showErr(el, "Let's keep it family-friendly — travelers of all ages use this.");
+      return false;
+    }
+    return true;
+  }
+
   // ── Report modal ─────────────────────────────────────────────────────────
   function openReportModal(place) {
     reportDraft = { place, hasBathroom: null, rating: 0, tags: new Set() };
@@ -754,6 +783,7 @@
     err.classList.add('hidden');
     if (reportDraft.hasBathroom === null) return showErr(err, 'Tell us: bathroom or no bathroom?');
     if (reportDraft.hasBathroom && !reportDraft.rating) return showErr(err, 'Give it a star rating (1–5).');
+    if (!cleanText(err, $('report-text').value)) return;
 
     const btn = $('report-submit');
     const btnLabel = btn.textContent;
@@ -932,6 +962,7 @@
     const err = $('username-error');
     err.classList.add('hidden');
     const btn = $('username-submit');
+    if (!cleanText(err, $('username-input').value)) return;
     btn.disabled = true;
     try {
       const username = await Store.claimUsername($('username-input').value.trim());
