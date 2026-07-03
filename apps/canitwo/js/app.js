@@ -282,6 +282,128 @@
 
   $('search-area-btn').addEventListener('click', searchArea);
 
+  // ── Place / town search box ──────────────────────────────────────────────
+  const AREA_TYPES = ['locality', 'sublocality', 'neighborhood', 'postal_code', 'country',
+    'administrative_area_level_1', 'administrative_area_level_2', 'administrative_area_level_3'];
+
+  // Google Text Search → [{id,name,emoji,category,address,lat,lng,isArea}] | null
+  async function textSearchGoogle(query) {
+    const key = cfg.google_places_api_key;
+    if (!key) return null;
+    const c = map.getCenter();
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.location,places.types,places.formattedAddress',
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        maxResultCount: 8,
+        locationBias: { circle: { center: { latitude: c.lat, longitude: c.lng }, radius: 50000 } },
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return (data.places || []).map(p => {
+      const lat = p.location?.latitude, lng = p.location?.longitude;
+      if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+      const isArea = (p.types || []).some(t => AREA_TYPES.includes(t));
+      const catKey = (p.types || []).map(t => cfg.google_type_to_category[t]).find(Boolean) || 'other';
+      const cat = cfg.categories.find(c2 => c2.key === catKey) || cfg.categories[cfg.categories.length - 1];
+      return {
+        id: `gp-${p.id}`, lat, lng, isArea,
+        name: p.displayName?.text || cat.label,
+        category: isArea ? 'Area' : cat.label,
+        emoji: isArea ? '🏙️' : cat.emoji,
+        address: p.formattedAddress || null,
+        source: 'google',
+      };
+    }).filter(Boolean);
+  }
+
+  // Nominatim (OSM geocoder) fallback — same shape, ids match Overpass's.
+  async function textSearchNominatim(query) {
+    const c = map.getCenter();
+    const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=0&limit=8'
+      + `&q=${encodeURIComponent(query)}&viewbox=${c.lng - 0.5},${c.lat + 0.5},${c.lng + 0.5},${c.lat - 0.5}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data.map(r => {
+      const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+      if (!isFinite(lat) || !isFinite(lng)) return null;
+      const isArea = r.class === 'place' || r.class === 'boundary';
+      const cat = categorize({ [r.class]: r.type });
+      const parts = (r.display_name || '').split(', ');
+      return {
+        id: `osm-${r.osm_type}-${r.osm_id}`, lat, lng, isArea,
+        name: parts[0] || cat.label,
+        category: isArea ? 'Area' : cat.label,
+        emoji: isArea ? '🏙️' : cat.emoji,
+        address: parts.slice(1, 4).join(', ') || null,
+        source: 'osm',
+      };
+    }).filter(Boolean);
+  }
+
+  function hideSearchResults() { $('search-results').classList.add('hidden'); }
+
+  function showSearchResults(results) {
+    const el = $('search-results');
+    el.innerHTML = results.map((r, i) => `
+      <div class="search-result" data-i="${i}">
+        <span class="sr-emoji">${esc(r.emoji)}</span>
+        <div style="min-width:0">
+          <div class="sr-name">${esc(r.name)}</div>
+          <div class="sr-addr">${esc(r.category)}${r.address ? ' · ' + esc(r.address) : ''}</div>
+        </div>
+      </div>`).join('');
+    el.classList.remove('hidden');
+    el.querySelectorAll('.search-result').forEach(row => {
+      row.addEventListener('click', () => pickSearchResult(results[Number(row.dataset.i)]));
+    });
+  }
+
+  function pickSearchResult(r) {
+    hideSearchResults();
+    $('place-search').blur();
+    if (r.isArea) {
+      // Fly to the area, then find what's around it.
+      map.setView([r.lat, r.lng], Math.max(map.getZoom(), 14));
+      setTimeout(searchArea, 700);
+      return;
+    }
+    const spot = { ...r, unrated: true };
+    delete spot.isArea;
+    if (!ratedPlaces.has(spot.id)) osmSpots.set(spot.id, spot);
+    renderMarkers();
+    map.setView([r.lat, r.lng], Math.max(map.getZoom(), 17));
+    openSheet(ratedPlaces.get(spot.id) || spot);
+  }
+
+  async function runPlaceSearch() {
+    const q = $('place-search').value.trim();
+    if (q.length < 2) return;
+    hideSearchResults();
+    status('Searching…');
+    let results = null;
+    try { results = await textSearchGoogle(q); } catch (e) { console.warn('[CanITwo] text search:', e.message); }
+    if (!results || !results.length) {
+      try { results = await textSearchNominatim(q); } catch (e) { console.warn('[CanITwo] nominatim:', e.message); }
+    }
+    status(null);
+    if (!results || !results.length) { toast('Nothing found — try a different search.'); return; }
+    showSearchResults(results);
+  }
+
+  $('place-search').addEventListener('keydown', e => { if (e.key === 'Enter') runPlaceSearch(); });
+  $('place-search-btn').addEventListener('click', runPlaceSearch);
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.search-row')) hideSearchResults();
+  });
+
   // ── Geolocation ──────────────────────────────────────────────────────────
   function locate(firstLoad) {
     if (!navigator.geolocation) { toast('Location not available on this device.'); return; }
