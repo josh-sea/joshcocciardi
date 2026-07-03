@@ -54,10 +54,31 @@ service cloud.firestore {
       allow create, update: if request.auth != null;
       allow delete: if false;
 
-      // One review per user: doc id must be the reviewer's uid
+      // One review per user: doc id must be the reviewer's uid.
+      // Edits are tamper-evident: every update must append the exact
+      // previous version to `history`, must not alter existing history
+      // entries or the original createdAt, and reviews can't be deleted
+      // (delete-and-repost would launder the history).
       match /reviews/{reviewerUid} {
         allow read: if true;
-        allow create, update, delete: if request.auth != null && request.auth.uid == reviewerUid;
+        allow create: if request.auth != null
+          && request.auth.uid == reviewerUid
+          && request.resource.data.get('history', []) == [];
+        allow update: if request.auth != null
+          && request.auth.uid == reviewerUid
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.history is list
+          && request.resource.data.history.size() == resource.data.get('history', []).size() + 1
+          && request.resource.data.history.size() <= 20
+          && (resource.data.get('history', []).size() == 0
+              || request.resource.data.history[0:resource.data.get('history', []).size()] == resource.data.history)
+          && request.resource.data.history[request.resource.data.history.size() - 1] == {
+               'hasBathroom': resource.data.hasBathroom,
+               'rating': resource.data.get('rating', null),
+               'text': resource.data.get('text', ''),
+               'at': resource.data.updatedAt
+             };
+        allow delete: if false;
       }
     }
 
@@ -77,9 +98,13 @@ service cloud.firestore {
       allow read, write: if true;
     }
     
-    // Default authenticated access for other collections
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Default authenticated access for other collections.
+    // CanITwo collections are excluded — without this carve-out, the
+    // catch-all would override their stricter rules above (in Firestore,
+    // any matching `allow` wins).
+    match /{collection}/{document=**} {
+      allow read, write: if request.auth != null
+        && !collection.matches('canitwo_.*');
     }
   }
 }

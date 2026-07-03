@@ -460,6 +460,41 @@ html, body {
   word-break: break-word;
 }
 
+.edited-tag {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.edit-history {
+  margin-top: 8px;
+  border-left: 2.5px solid var(--line);
+  padding-left: 10px;
+}
+.edit-history summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  user-select: none;
+}
+.hist-entry { padding: 8px 0 2px; }
+.hist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+.hist-text {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.hist-empty { font-style: italic; }
+
 .empty-note {
   color: var(--muted);
   font-size: 0.88rem;
