@@ -34,10 +34,10 @@
     <button id="account-btn" class="account-btn">Sign in</button>
   </div>
   <div class="search-row">
-    <div class="search-box">
+    <form class="search-box" id="search-form" action="">
       <input id="place-search" type="search" placeholder="Search a place or town…" autocomplete="off" enterkeyhint="search" />
-      <button id="place-search-btn" title="Search">🔍</button>
-    </div>
+      <button id="place-search-btn" type="submit" title="Search">🔍</button>
+    </form>
     <div id="search-results" class="search-results hidden"></div>
   </div>
   <div class="chip-row" id="filter-chips">

@@ -350,6 +350,13 @@
 
   function hideSearchResults() { $('search-results').classList.add('hidden'); }
 
+  function distanceLabel(r) {
+    const meters = map.getCenter().distanceTo([r.lat, r.lng]);
+    const mi = meters / 1609.34;
+    if (mi < 0.1) return 'right here';
+    return (mi < 10 ? mi.toFixed(1) : Math.round(mi).toLocaleString()) + ' mi';
+  }
+
   function showSearchResults(results) {
     const el = $('search-results');
     el.innerHTML = results.map((r, i) => `
@@ -357,7 +364,7 @@
         <span class="sr-emoji">${esc(r.emoji)}</span>
         <div style="min-width:0">
           <div class="sr-name">${esc(r.name)}</div>
-          <div class="sr-addr">${esc(r.category)}${r.address ? ' · ' + esc(r.address) : ''}</div>
+          <div class="sr-addr">${esc(distanceLabel(r))} · ${esc(r.category)}${r.address ? ' · ' + esc(r.address) : ''}</div>
         </div>
       </div>`).join('');
     el.classList.remove('hidden');
@@ -398,8 +405,12 @@
     showSearchResults(results);
   }
 
-  $('place-search').addEventListener('keydown', e => { if (e.key === 'Enter') runPlaceSearch(); });
-  $('place-search-btn').addEventListener('click', runPlaceSearch);
+  // Form submit catches both the 🔍 button and every flavor of mobile
+  // keyboard "search"/"go"/Enter key.
+  $('search-form').addEventListener('submit', e => {
+    e.preventDefault();
+    runPlaceSearch();
+  });
   document.addEventListener('click', e => {
     if (!e.target.closest('.search-row')) hideSearchResults();
   });
