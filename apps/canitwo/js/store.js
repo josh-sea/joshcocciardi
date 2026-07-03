@@ -11,7 +11,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc,
-  query, orderBy, startAt, endAt, serverTimestamp,
+  query, orderBy, startAt, endAt, serverTimestamp, runTransaction,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import {
   geohashForLocation, geohashQueryBounds, distanceBetween,
@@ -43,6 +43,10 @@ const _placeDoc  = id => doc(db, 'canitwo_places', id);
 const _reviewsCol = placeId => collection(db, 'canitwo_places', placeId, 'reviews');
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+
+// Profile cache so submitting a report doesn't re-fetch it every time.
+let _profileCache = null;
+let _profileCacheUid = null;
 
 const Store = {
   currentUser() { return auth.currentUser; },
@@ -84,8 +88,12 @@ const Store = {
 
   async getMyProfile() {
     if (!auth.currentUser) return null;
-    const snap = await getDoc(doc(db, 'canitwo_users', auth.currentUser.uid));
-    return snap.exists() ? snap.data() : null;
+    const uid = auth.currentUser.uid;
+    if (_profileCache && _profileCacheUid === uid) return _profileCache;
+    const snap = await getDoc(doc(db, 'canitwo_users', uid));
+    const profile = snap.exists() ? snap.data() : null;
+    if (profile) { _profileCache = profile; _profileCacheUid = uid; }
+    return profile;
   },
 
   validateUsername(username) {
@@ -109,6 +117,8 @@ const Store = {
     await setDoc(doc(db, 'canitwo_users', uid), {
       username, updatedAt: serverTimestamp(),
     }, { merge: true });
+    _profileCache = { username };
+    _profileCacheUid = uid;
     return username;
   },
 
@@ -165,8 +175,10 @@ const Store = {
     return snap.exists() ? { uid: snap.id, ...snap.data() } : null;
   },
 
-  // Upserts the place, writes/updates the caller's review, then recomputes
-  // the place's rating aggregates from all reviews.
+  // Upserts the place and the caller's review in ONE transaction, adjusting
+  // the place's denormalized aggregates incrementally (subtract the old
+  // review's contribution, add the new one). Two round trips total instead
+  // of six, and concurrent reports can't clobber each other's counts.
   //
   // place:  { id, name, category, emoji, lat, lng, address?, source }
   // report: { hasBathroom: bool, rating: 1–5|null, text: string }
@@ -176,48 +188,67 @@ const Store = {
     if (!profile?.username) throw new Error('Pick a username before posting.');
 
     const placeRef = _placeDoc(place.id);
-    await setDoc(placeRef, {
-      name: place.name,
-      category: place.category,
-      emoji: place.emoji,
-      lat: place.lat,
-      lng: place.lng,
-      geohash: geohashForLocation([place.lat, place.lng]),
-      address: place.address || null,
-      source: place.source || 'osm',
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-
     const reviewRef = doc(_reviewsCol(place.id), uid);
-    const existing = await getDoc(reviewRef);
-    await setDoc(reviewRef, {
+    const newReview = {
       hasBathroom: !!report.hasBathroom,
       rating: report.hasBathroom && report.rating ? report.rating : null,
       text: (report.text || '').trim(),
       username: profile.username,
-      createdAt: existing.exists() ? existing.data().createdAt : serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    // Recompute aggregates from all reviews (fine at this scale; a Cloud
-    // Function could take over if volume ever demands it).
-    const all = await getDocs(_reviewsCol(place.id));
-    let yes = 0, no = 0, sum = 0, count = 0;
-    all.forEach(d => {
-      const r = d.data();
-      r.hasBathroom ? yes++ : no++;
-      if (typeof r.rating === 'number') { sum += r.rating; count++; }
-    });
-    const aggregates = {
-      yesCount: yes,
-      noCount: no,
-      reviewCount: all.size,
-      ratingCount: count,
-      avgRating: count ? Math.round((sum / count) * 10) / 10 : null,
-      updatedAt: serverTimestamp(),
     };
-    await setDoc(placeRef, aggregates, { merge: true });
-    return aggregates;
+
+    return runTransaction(db, async tx => {
+      const [placeSnap, reviewSnap] = await Promise.all([
+        tx.get(placeRef), tx.get(reviewRef),
+      ]);
+      const prevAgg = placeSnap.exists() ? placeSnap.data() : {};
+      const old = reviewSnap.exists() ? reviewSnap.data() : null;
+
+      let yes = prevAgg.yesCount || 0;
+      let no = prevAgg.noCount || 0;
+      let reviewCount = prevAgg.reviewCount || 0;
+      let ratingCount = prevAgg.ratingCount || 0;
+      let ratingSum = typeof prevAgg.ratingSum === 'number'
+        ? prevAgg.ratingSum
+        : (prevAgg.avgRating || 0) * ratingCount;
+
+      if (old) {
+        old.hasBathroom ? yes-- : no--;
+        reviewCount--;
+        if (typeof old.rating === 'number') { ratingSum -= old.rating; ratingCount--; }
+      }
+      newReview.hasBathroom ? yes++ : no++;
+      reviewCount++;
+      if (typeof newReview.rating === 'number') { ratingSum += newReview.rating; ratingCount++; }
+
+      const aggregates = {
+        yesCount: Math.max(0, yes),
+        noCount: Math.max(0, no),
+        reviewCount: Math.max(0, reviewCount),
+        ratingCount: Math.max(0, ratingCount),
+        ratingSum: Math.max(0, ratingSum),
+        avgRating: ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : null,
+      };
+
+      tx.set(reviewRef, {
+        ...newReview,
+        createdAt: old ? old.createdAt : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      tx.set(placeRef, {
+        name: place.name,
+        category: place.category,
+        emoji: place.emoji,
+        lat: place.lat,
+        lng: place.lng,
+        geohash: geohashForLocation([place.lat, place.lng]),
+        address: place.address || null,
+        source: place.source || 'osm',
+        ...aggregates,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
+      return aggregates;
+    });
   },
 };
 

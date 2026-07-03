@@ -161,22 +161,33 @@
     const corner = map.getBounds().getNorthEast();
     const radius = Math.min(cfg.overpass_max_radius_m, Math.round(c.distanceTo(corner)));
 
+    // nw (not nwr): skip relations — rarely useful for these POIs, much
+    // faster. "qt" = quadtile output order, far cheaper than the default
+    // id sort on large result sets.
     const around = `(around:${radius},${c.lat.toFixed(6)},${c.lng.toFixed(6)})`;
-    const body = `[out:json][timeout:25];(${OVERPASS_SELECTORS.map(s => `nwr${s}${around};`).join('')});out center tags 150;`;
+    const body = `[out:json][timeout:15];(${OVERPASS_SELECTORS.map(s => `nw${s}${around};`).join('')});out center tags qt 150;`;
 
     status('Finding places nearby…');
     $('search-area-btn').classList.add('hidden');
+
+    // Race all endpoints; first OK response wins.
+    const attempt = endpoint => {
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), 20000);
+      return fetch(endpoint, {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(body),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        signal: abort.signal,
+      }).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }).finally(() => clearTimeout(timer));
+    };
     let data = null;
-    for (const endpoint of cfg.overpass_endpoints) {
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          body: 'data=' + encodeURIComponent(body),
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
-        if (res.ok) { data = await res.json(); break; }
-      } catch { /* try next endpoint */ }
-    }
+    try {
+      data = await Promise.any(cfg.overpass_endpoints.map(attempt));
+    } catch { /* all endpoints failed */ }
     status(null);
     if (!data) { toast('Place search is busy right now — try again in a minute.'); return; }
 
@@ -378,7 +389,9 @@
     if (reportDraft.hasBathroom && !reportDraft.rating) return showErr(err, 'Give it a star rating (1–5).');
 
     const btn = $('report-submit');
+    const btnLabel = btn.textContent;
     btn.disabled = true;
+    btn.textContent = 'Posting…';
     try {
       const agg = await Store.submitReport(reportDraft.place, {
         hasBathroom: reportDraft.hasBathroom,
@@ -396,6 +409,7 @@
       showErr(err, e.message);
     } finally {
       btn.disabled = false;
+      btn.textContent = btnLabel;
     }
   });
 

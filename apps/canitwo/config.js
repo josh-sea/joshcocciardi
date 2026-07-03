@@ -5,14 +5,15 @@
 //   • Firebase web config lives in js/store.js (web config values are public).
 
 window.APP_CONFIG = {
-  // Overpass endpoints, tried in order until one responds.
+  // Overpass endpoints — queried in parallel, fastest response wins.
   overpass_endpoints: [
-    'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
   ],
 
   // Max radius (meters) for an Overpass "search this area" query.
-  overpass_max_radius_m: 4000,
+  overpass_max_radius_m: 3000,
 
   // Minimum zoom before "Search this area" is allowed (keeps queries small).
   overpass_min_zoom: 13,
