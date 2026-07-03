@@ -506,6 +506,22 @@ html, body {
 }
 .hist-empty { font-style: italic; }
 
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.list-row:last-child { border-bottom: none; }
+.list-row:active { background: #f2f5f7; }
+.list-chevron {
+  color: var(--muted);
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
 .empty-note {
   color: var(--muted);
   font-size: 0.88rem;
