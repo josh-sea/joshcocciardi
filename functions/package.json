@@ -1,0 +1,13 @@
+{
+  "name": "joshcocciardi-functions",
+  "description": "Cloud Functions for joshcocciardi.com apps (currently: CanITwo aggregates + flags)",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

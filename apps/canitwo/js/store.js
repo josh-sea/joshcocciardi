@@ -260,12 +260,16 @@ const Store = {
         avgRating: ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : null,
       };
 
+      // merge:true so the function-owned flagCount survives edits.
       tx.set(reviewRef, {
         ...newReview,
         history,
         createdAt: old ? old.createdAt : serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      }, { merge: true });
+
+      // Base fields only — aggregates are recomputed server-side by the
+      // canitwoAggregates Cloud Function (rules reject client writes to them).
       tx.set(placeRef, {
         name: place.name,
         category: place.category,
@@ -275,11 +279,25 @@ const Store = {
         geohash: geohashForLocation([place.lat, place.lng]),
         address: place.address || null,
         source: place.source || 'osm',
-        ...aggregates,
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
+      // Returned for optimistic UI only; the function's recount is the
+      // authoritative version and lands moments later.
       return aggregates;
+    });
+  },
+
+  // ── Flags: canitwo_flags/{placeId}__{reviewUid}__{flaggerUid} ────────────
+  async flagReview(placeId, reviewUid) {
+    const uid = _uid();
+    if (uid === reviewUid) throw new Error("You can't flag your own report.");
+    const flagId = `${placeId}__${reviewUid}__${uid}`;
+    await setDoc(doc(db, 'canitwo_flags', flagId), {
+      placeId,
+      reviewUid,
+      by: uid,
+      createdAt: serverTimestamp(),
     });
   },
 };

@@ -37,6 +37,19 @@ service cloud.firestore {
       }
     }
     
+    // CanITwo: community flags on reviews. Create-only, one per user per
+    // review, enforced by requiring the doc id to embed the flagger's uid.
+    // flagCount tallies are written by the canitwoFlags Cloud Function.
+    match /canitwo_flags/{flagId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.by == request.auth.uid
+        && flagId == request.resource.data.placeId + '__'
+                   + request.resource.data.reviewUid + '__'
+                   + request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // CanITwo: community bathroom finder
     // Public read so travelers can browse without an account;
     // authenticated writes only. Emails are never stored in these docs.
@@ -51,7 +64,15 @@ service cloud.firestore {
     }
     match /canitwo_places/{placeId} {
       allow read: if true;
-      allow create, update: if request.auth != null;
+      // Clients may only write base place fields — the rating aggregates
+      // (yesCount, avgRating, tagCounts, flag counts…) are owned by the
+      // canitwoAggregates Cloud Function, which bypasses these rules.
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(
+             ['name', 'category', 'emoji', 'lat', 'lng', 'geohash', 'address', 'source', 'updatedAt']);
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['name', 'category', 'emoji', 'lat', 'lng', 'geohash', 'address', 'source', 'updatedAt']);
       allow delete: if false;
 
       // One review per user: doc id must be the reviewer's uid.
