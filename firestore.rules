@@ -76,6 +76,7 @@ service cloud.firestore {
                'hasBathroom': resource.data.hasBathroom,
                'rating': resource.data.get('rating', null),
                'text': resource.data.get('text', ''),
+               'tags': resource.data.get('tags', []),
                'at': resource.data.updatedAt
              };
         allow delete: if false;
