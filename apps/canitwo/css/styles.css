@@ -465,6 +465,17 @@ html, body {
   font-style: italic;
 }
 
+.review-edit-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--brand);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .edit-history {
   margin-top: 8px;
   border-left: 2.5px solid var(--line);

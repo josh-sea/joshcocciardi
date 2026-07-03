@@ -534,13 +534,15 @@
         return;
       }
       const myUid = user?.uid;
+      const mine = myUid && reviews.some(r => r.uid === myUid);
+      if (mine) $('sheet-report-btn').innerHTML = '✏️ Edit your report';
       reviewsEl.innerHTML = `
         <div class="reviews-title">Reports (${reviews.length})</div>
         ${reviews.map(r => `
           <div class="review">
             <div class="review-head">
               <span class="review-user">${esc(r.username || 'anonymous')}${r.uid === myUid ? '<span class="you-tag">YOU</span>' : ''}</span>
-              <span class="review-meta">${reviewDate(r)}${r.history?.length ? ' · <span class="edited-tag">edited</span>' : ''}</span>
+              <span class="review-meta">${reviewDate(r)}${r.history?.length ? ' · <span class="edited-tag">edited</span>' : ''}${r.uid === myUid ? ' · <button class="review-edit-link" data-edit-review>edit</button>' : ''}</span>
             </div>
             <div>${r.hasBathroom
               ? (typeof r.rating === 'number' ? `<span class="review-stars">${starsHtml(r.rating)}</span>` : '<span class="badge badge-yes">🚽 Has bathroom</span>')
@@ -549,6 +551,8 @@
             ${historyHtml(r)}
           </div>`).join('')}
       `;
+      reviewsEl.querySelector('[data-edit-review]')
+        ?.addEventListener('click', () => requireUser(() => openReportModal(place)));
     } catch (e) {
       console.warn('[CanITwo] reviews failed:', e);
       reviewsEl.innerHTML = `<p class="empty-note">Couldn't load reviews.</p>`;
@@ -577,8 +581,10 @@
       setYN(r.hasBathroom);
       setStars(r.rating || 0);
       $('report-text').value = r.text || '';
+      $('report-title').textContent = 'Edit your report';
       $('report-submit').textContent = 'Update report';
     });
+    $('report-title').textContent = 'Bathroom report';
     $('report-submit').textContent = 'Post report';
     $('report-modal').classList.remove('hidden');
   }
