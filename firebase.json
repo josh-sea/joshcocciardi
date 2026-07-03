@@ -41,6 +41,15 @@
             "value": "require-corp"
           }
         ]
+      },
+      {
+        "source": "/projects/canitwo/**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ]
   },

@@ -513,12 +513,14 @@
         </div>` : ''}
       <div class="sheet-actions">
         <button class="btn btn-primary" id="sheet-report-btn">✍️ ${rated ? 'Add your report' : 'Be the first to report'}</button>
+        <button class="btn btn-secondary" id="sheet-share-btn" title="Share this place">↗️</button>
       </div>
       ${directionsHtml(place)}
       <div id="sheet-reviews"><p class="empty-note">Loading reviews…</p></div>
     `;
     $('sheet').classList.remove('hidden');
     $('sheet-report-btn').addEventListener('click', () => requireUser(() => openReportModal(place)));
+    $('sheet-share-btn').addEventListener('click', () => sharePlace(place));
 
     // Load reviews (rated places only — unrated OSM spots have none yet).
     const reviewsEl = $('sheet-reviews');
@@ -558,6 +560,99 @@
       reviewsEl.innerHTML = `<p class="empty-note">Couldn't load reviews.</p>`;
     }
   }
+
+  // ── Share links ──────────────────────────────────────────────────────────
+  function sharePlace(p) {
+    const params = new URLSearchParams({ place: p.id, lat: p.lat.toFixed(6), lng: p.lng.toFixed(6) });
+    if (p.unrated) {
+      params.set('name', p.name);
+      params.set('cat', p.category || 'Place');
+      params.set('emoji', p.emoji || '📍');
+    }
+    const url = `${location.origin}${location.pathname}?${params}`;
+    if (navigator.share) {
+      navigator.share({ title: `${p.name} — CanITwo`, url }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => toast('Link copied! 📋'), () => toast(url));
+    } else {
+      toast(url);
+    }
+  }
+
+  // Open a ?place=… deep link. Rated places resolve from Firestore; unrated
+  // spots reconstruct from the coords/name baked into the share URL.
+  async function openDeepLink() {
+    const q = new URLSearchParams(location.search);
+    const id = q.get('place');
+    if (!id) return false;
+    let place = null;
+    try { place = await Store.getPlace(id); } catch { /* offline etc. */ }
+    if (place) {
+      ratedPlaces.set(place.id, place);
+    } else if (q.get('lat') && q.get('lng')) {
+      place = {
+        id,
+        lat: Number(q.get('lat')),
+        lng: Number(q.get('lng')),
+        name: q.get('name') || 'Shared place',
+        category: q.get('cat') || 'Place',
+        emoji: q.get('emoji') || '📍',
+        source: 'shared',
+        unrated: true,
+      };
+      if (!isFinite(place.lat) || !isFinite(place.lng)) return false;
+      osmSpots.set(place.id, place);
+    } else {
+      return false;
+    }
+    renderMarkers();
+    map.setView([place.lat, place.lng], 17);
+    openSheet(place);
+    return true;
+  }
+
+  // ── Nearby list view ─────────────────────────────────────────────────────
+  function openListSheet() {
+    const c = map.getCenter();
+    const spots = [];
+    for (const p of ratedPlaces.values()) if (passesFilter(p)) spots.push(p);
+    if (filters.showUnrated && filters.minRating <= 0) {
+      for (const s of osmSpots.values()) if (!ratedPlaces.has(s.id)) spots.push(s);
+    }
+    const top = spots
+      .map(s => ({ s, d: c.distanceTo([s.lat, s.lng]) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 50)
+      .map(x => x.s);
+
+    const body = $('sheet-body');
+    if (!top.length) {
+      body.innerHTML = '<p class="empty-note">Nothing loaded yet — hit “🔍 Search this area” first, then open the list.</p>';
+    } else {
+      body.innerHTML = `
+        <div class="reviews-title">Nearby (${top.length})</div>
+        ${top.map((s, i) => `
+          <div class="list-row" data-i="${i}">
+            <span class="sr-emoji">${esc(s.emoji || '📍')}</span>
+            <div style="min-width:0;flex:1">
+              <div class="sr-name">${esc(s.name)}</div>
+              <div class="sr-addr">${esc(distanceLabel(s))} · ${
+                typeof s.avgRating === 'number' ? `★ ${s.avgRating.toFixed(1)}`
+                : ((s.noCount || 0) > (s.yesCount || 0) ? '🚫 no bathroom' : 'unrated')
+              }${s.address ? ' · ' + esc(s.address) : ''}</div>
+            </div>
+            <span class="list-chevron">›</span>
+          </div>`).join('')}
+      `;
+      body.querySelectorAll('.list-row').forEach(row => {
+        row.addEventListener('click', () => openSheet(top[Number(row.dataset.i)]));
+      });
+    }
+    $('sheet').classList.remove('hidden');
+    currentPlace = null;
+  }
+
+  $('chip-list').addEventListener('click', openListSheet);
 
   function closeSheet() {
     $('sheet').classList.add('hidden');
@@ -839,5 +934,5 @@
 
   // ── Boot ─────────────────────────────────────────────────────────────────
   loadRatedPlaces();
-  locate(true);
+  openDeepLink().then(opened => { if (!opened) locate(true); });
 })();
