@@ -79,6 +79,10 @@
       </div>
     </div>
 
+    <div class="field hidden" id="facility-field">
+      <div class="facility-row" id="facility-input"><!-- populated from config by app.js --></div>
+    </div>
+
     <div class="field hidden" id="rating-field">
       <label>How is it? <span class="hint-inline">(cleanliness, access, TP situation…)</span></label>
       <div class="star-input" id="star-input">
@@ -93,6 +97,7 @@
 
     <div class="tags-field hidden" id="tags-field">
       <div class="tag-input" id="tag-input"><!-- populated from config by app.js --></div>
+      <div class="tag-input hidden" id="a11y-input"><!-- accessibility details, shown when ♿ selected --></div>
     </div>
 
     <div class="modal-error hidden" id="report-error"></div>

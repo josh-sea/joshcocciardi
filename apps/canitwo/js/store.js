@@ -194,6 +194,7 @@ const Store = {
       rating: report.hasBathroom && report.rating ? report.rating : null,
       text: (report.text || '').trim(),
       tags: report.hasBathroom ? [...(report.tags || [])].sort() : [],
+      facility: report.hasBathroom ? (report.facility || 'all') : null,
       username: profile.username,
     };
 
@@ -209,6 +210,7 @@ const Store = {
           old.hasBathroom === newReview.hasBathroom &&
           (old.rating ?? null) === newReview.rating &&
           (old.text || '') === newReview.text &&
+          (old.facility ?? null) === newReview.facility &&
           JSON.stringify([...(old.tags || [])].sort()) === JSON.stringify(newReview.tags)) {
         return prevAgg;
       }
@@ -221,6 +223,7 @@ const Store = {
             rating: old.rating ?? null,
             text: old.text || '',
             tags: old.tags || [],
+            facility: old.facility ?? null,
             at: old.updatedAt,
           }]
         : [];

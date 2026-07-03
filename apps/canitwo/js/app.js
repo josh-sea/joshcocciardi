@@ -62,7 +62,40 @@
     return '🚽';
   }
 
+  // Quality color scale (matches the pin-* CSS classes) — used for the
+  // facility-split pin, where each half is colored by ITS score. Color
+  // always means quality; the W/M letters say whose room.
+  const QUALITY_COLORS = { good: '#1e9e50', ok: '#7ab648', meh: '#e0a800', bad: '#e0662a' };
+  function qualityColor(rating) {
+    if (rating >= 4.5) return QUALITY_COLORS.good;
+    if (rating >= 3.5) return QUALITY_COLORS.ok;
+    if (rating >= 2.5) return QUALITY_COLORS.meh;
+    return QUALITY_COLORS.bad;
+  }
+
+  function hasSplitScores(p) {
+    return (p.ratingCountWomens || 0) > 0 && (p.ratingCountMens || 0) > 0;
+  }
+
   function ratedIcon(p) {
+    if (hasSplitScores(p)) {
+      // Diagonal split: upper-left = women's, lower-right = men's, each half
+      // colored by its own score on the shared quality scale.
+      const w = qualityColor(p.avgRatingWomens);
+      const m = qualityColor(p.avgRatingMens);
+      return L.divIcon({
+        className: '',
+        html: `
+          <div class="pin pin-split" style="background:linear-gradient(180deg, ${w} 0 50%, ${m} 50% 100%)">
+            <div class="pin-inner pin-split-inner">
+              <span class="ps ps-w">W ${p.avgRatingWomens.toFixed(1)}</span>
+              <span class="ps ps-m">M ${p.avgRatingMens.toFixed(1)}</span>
+            </div>
+          </div>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 42],
+      });
+    }
     return L.divIcon({
       className: '',
       html: `<div class="pin ${pinClassFor(p)}"><div class="pin-inner">${pinLabelFor(p)}</div></div>`,
@@ -467,6 +500,25 @@
     return chips.length ? `<div class="place-tags">${chips.join('')}</div>` : '';
   }
 
+  // Per-facility averages ("🚺 4.8 (3) · 🚹 2.1 (2)") when the women's and
+  // men's rooms have been rated separately.
+  function facilitySplitHtml(p) {
+    const parts = [];
+    if ((p.ratingCountWomens || 0) > 0) {
+      parts.push(`<span class="fac-score">🚺 <b>${p.avgRatingWomens.toFixed(1)}</b> (${p.ratingCountWomens})</span>`);
+    }
+    if ((p.ratingCountMens || 0) > 0) {
+      parts.push(`<span class="fac-score">🚹 <b>${p.avgRatingMens.toFixed(1)}</b> (${p.ratingCountMens})</span>`);
+    }
+    return parts.length >= 2 ? `<div class="fac-split">${parts.join('<span class="fac-dot">·</span>')}</div>` : '';
+  }
+
+  function facilityChip(r) {
+    const f = cfg.facilities.find(x => x.key === r.facility);
+    if (!f || f.key === 'all') return '';
+    return ` <span class="fac-chip">${f.emoji} ${esc(f.label)}</span>`;
+  }
+
   function reviewTagsHtml(r) {
     if (!r.tags?.length) return '';
     const chips = r.tags
@@ -529,6 +581,7 @@
           <span class="stars">${starsHtml(place.avgRating)}</span>
           <span class="rating-count">${place.ratingCount} rating${place.ratingCount === 1 ? '' : 's'}</span>
         </div>` : ''}
+      ${facilitySplitHtml(place)}
       ${tagChipsHtml(place)}
       <div class="sheet-actions">
         <button class="btn btn-primary" id="sheet-report-btn">✍️ ${rated ? 'Add your report' : 'Be the first to report'}</button>
@@ -568,7 +621,7 @@
             </div>
             <div>${r.hasBathroom
               ? (typeof r.rating === 'number' ? `<span class="review-stars">${starsHtml(r.rating)}</span>` : '<span class="badge badge-yes">🚽 Has bathroom</span>')
-              : '<span class="review-nobathroom">🚫 Reported no bathroom</span>'}</div>
+              : '<span class="review-nobathroom">🚫 Reported no bathroom</span>'}${facilityChip(r)}</div>
             ${reviewTagsHtml(r)}
             ${r.text ? `<p class="review-text">${esc(r.text)}</p>` : ''}
             ${historyHtml(r)}
@@ -712,13 +765,14 @@
 
   // ── Report modal ─────────────────────────────────────────────────────────
   function openReportModal(place) {
-    reportDraft = { place, hasBathroom: null, rating: 0, tags: new Set() };
+    reportDraft = { place, hasBathroom: null, rating: 0, tags: new Set(), facility: 'all' };
     $('report-place-name').textContent = `${place.emoji || '📍'} ${place.name}`;
     $('report-text').value = '';
     $('report-error').classList.add('hidden');
     setYN(null);
     setStars(0);
     setTags([]);
+    setFacility('all');
 
     // Prefill if the user already reviewed this place.
     Store.getMyReview(place.id).then(r => {
@@ -726,6 +780,7 @@
       setYN(r.hasBathroom);
       setStars(r.rating || 0);
       setTags(r.tags || []);
+      setFacility(r.facility || 'all');
       $('report-text').value = r.text || '';
       $('report-title').textContent = 'Edit your report';
       $('report-submit').textContent = 'Update report';
@@ -739,13 +794,37 @@
     reportDraft.hasBathroom = val;
     $('yn-yes').classList.toggle('selected-yes', val === true);
     $('yn-no').classList.toggle('selected-no', val === false);
+    $('facility-field').classList.toggle('hidden', val !== true);
     $('rating-field').classList.toggle('hidden', val !== true);
     $('tags-field').classList.toggle('hidden', val !== true);
   }
 
-  // Amenity tag toggles (buttons built once from config)
+  // Which restroom is being rated (segmented control, defaults to All/single)
+  const facilityInput = $('facility-input');
+  cfg.facilities.forEach(f => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'facility-btn';
+    b.dataset.facility = f.key;
+    b.textContent = `${f.emoji} ${f.label}`;
+    b.addEventListener('click', () => setFacility(f.key));
+    facilityInput.appendChild(b);
+  });
+
+  function setFacility(key) {
+    reportDraft.facility = key;
+    facilityInput.querySelectorAll('.facility-btn').forEach(b => {
+      b.classList.toggle('selected', b.dataset.facility === key);
+    });
+  }
+
+  // Amenity tag toggles (buttons built once from config). Selecting
+  // ♿ Accessible reveals a second row of optional accessibility details.
   const tagInput = $('tag-input');
-  cfg.report_tags.forEach(t => {
+  const a11yInput = $('a11y-input');
+  const A11Y_KEYS = cfg.a11y_tags.map(t => t.key);
+
+  function makeTagBtn(t, container) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'tag-btn';
@@ -754,16 +833,26 @@
     b.addEventListener('click', () => {
       if (reportDraft.tags.has(t.key)) reportDraft.tags.delete(t.key);
       else reportDraft.tags.add(t.key);
-      b.classList.toggle('selected', reportDraft.tags.has(t.key));
+      if (t.key === 'accessible' && !reportDraft.tags.has('accessible')) {
+        A11Y_KEYS.forEach(k => reportDraft.tags.delete(k)); // details need ♿
+      }
+      syncTagButtons();
     });
-    tagInput.appendChild(b);
-  });
+    container.appendChild(b);
+  }
+  cfg.report_tags.forEach(t => makeTagBtn(t, tagInput));
+  cfg.a11y_tags.forEach(t => makeTagBtn(t, a11yInput));
+
+  function syncTagButtons() {
+    document.querySelectorAll('#tag-input .tag-btn, #a11y-input .tag-btn').forEach(b => {
+      b.classList.toggle('selected', reportDraft.tags.has(b.dataset.tag));
+    });
+    a11yInput.classList.toggle('hidden', !reportDraft.tags.has('accessible'));
+  }
 
   function setTags(keys) {
     reportDraft.tags = new Set(keys || []);
-    tagInput.querySelectorAll('.tag-btn').forEach(b => {
-      b.classList.toggle('selected', reportDraft.tags.has(b.dataset.tag));
-    });
+    syncTagButtons();
   }
   $('yn-yes').addEventListener('click', () => setYN(true));
   $('yn-no').addEventListener('click', () => setYN(false));
@@ -795,6 +884,7 @@
         rating: reportDraft.rating,
         text: $('report-text').value,
         tags: [...reportDraft.tags],
+        facility: reportDraft.facility,
       });
       const updated = { ...reportDraft.place, ...agg, unrated: false, updatedAt: null };
       ratedPlaces.set(updated.id, updated);

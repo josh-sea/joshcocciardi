@@ -58,6 +58,14 @@ window.APP_CONFIG = {
   // Max radius (km) for loading rated places from Firestore around the map view.
   firestore_max_radius_km: 60,
 
+  // Which restroom the report is about. Ratings aggregate per facility so
+  // travelers can see when the women's and men's rooms score differently.
+  facilities: [
+    { key: 'all',    emoji: '🚻', label: 'All/single' },
+    { key: 'womens', emoji: '🚺', label: "Women's", letter: 'W' },
+    { key: 'mens',   emoji: '🚹', label: "Men's",   letter: 'M' },
+  ],
+
   // Amenity tags a reporter can attach when a place has a bathroom.
   report_tags: [
     { key: 'accessible',     emoji: '♿',  label: 'Accessible' },
@@ -65,6 +73,14 @@ window.APP_CONFIG = {
     { key: 'code_needed',    emoji: '🔑', label: 'Code/key needed' },
     { key: 'customers_only', emoji: '🛍️', label: 'Customers only' },
     { key: 'gender_neutral', emoji: '⚧️', label: 'Gender-neutral' },
+  ],
+
+  // Optional accessibility details, revealed when ♿ Accessible is selected.
+  a11y_tags: [
+    { key: 'grab_bars',   emoji: '🫲', label: 'Grab bars' },
+    { key: 'wide_stall',  emoji: '🚪', label: 'Roll-in/wide stall' },
+    { key: 'family_room', emoji: '👨‍👩‍👧', label: 'Family restroom' },
+    { key: 'auto_door',   emoji: '🔘', label: 'Push-button door' },
   ],
 
   // OSM tag → category. Order matters: first match wins.

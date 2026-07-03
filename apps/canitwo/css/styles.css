@@ -275,6 +275,51 @@ html, body {
 .pin-none { background: var(--none); }
 .pin-new  { background: var(--brand); }
 
+/* Facility-split pin: same quality color scale on both halves (set inline
+   as a gradient), W upper-left / M lower-right after the -45° rotation. */
+.pin-split {
+  width: 44px;
+  height: 44px;
+}
+.pin-split-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.ps {
+  position: absolute;
+  font-size: 0.56rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+  white-space: nowrap;
+}
+.ps-w { top: 7px; left: 1px; }
+.ps-m { bottom: 7px; right: 1px; }
+
+.fac-split {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 2px;
+  font-size: 0.88rem;
+}
+.fac-score b { font-weight: 800; }
+.fac-dot { color: var(--muted); }
+
+.fac-chip {
+  display: inline-block;
+  margin-left: 6px;
+  background: #eef1f4;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
 .pin-osm {
   width: 26px;
   height: 26px;
@@ -635,6 +680,31 @@ textarea { resize: vertical; }
 }
 .yn-btn.selected-yes { border-color: var(--good); background: #e3f5e9; color: var(--good); }
 .yn-btn.selected-no  { border-color: var(--none); background: #fdeaea; color: var(--none); }
+
+/* Which restroom is being rated: compact segmented control */
+#facility-field { margin: 12px 0; }
+.facility-row {
+  display: flex;
+  gap: 7px;
+}
+.facility-btn {
+  flex: 1;
+  white-space: nowrap;
+  border: 1.5px solid var(--line);
+  background: #fbfcfd;
+  border-radius: 999px;
+  padding: 8px 6px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.facility-btn.selected {
+  border-color: var(--brand);
+  background: #e5f2f1;
+  color: var(--brand-dark);
+}
 
 /* Optional amenity tags: one thin, horizontally scrolling row below the
    review box — deliberately unobtrusive so posting stays instant. */

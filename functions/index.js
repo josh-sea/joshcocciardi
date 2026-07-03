@@ -23,12 +23,18 @@ exports.canitwoAggregates = onDocumentWritten(
 
     let yes = 0, no = 0, sum = 0, count = 0;
     const tagCounts = {};
+    // Per-facility rating splits (women's vs men's rooms can differ).
+    const fac = { womens: { sum: 0, count: 0 }, mens: { sum: 0, count: 0 } };
     reviews.forEach((d) => {
       const r = d.data();
       if (r.hasBathroom) yes++; else no++;
-      if (typeof r.rating === 'number') { sum += r.rating; count++; }
+      if (typeof r.rating === 'number') {
+        sum += r.rating; count++;
+        if (fac[r.facility]) { fac[r.facility].sum += r.rating; fac[r.facility].count++; }
+      }
       for (const t of r.tags || []) tagCounts[t] = (tagCounts[t] || 0) + 1;
     });
+    const avg = (s, c) => (c ? Math.round((s / c) * 10) / 10 : null);
 
     await placeRef.set({
       yesCount: yes,
@@ -36,7 +42,11 @@ exports.canitwoAggregates = onDocumentWritten(
       reviewCount: reviews.size,
       ratingCount: count,
       ratingSum: sum,
-      avgRating: count ? Math.round((sum / count) * 10) / 10 : null,
+      avgRating: avg(sum, count),
+      avgRatingWomens: avg(fac.womens.sum, fac.womens.count),
+      ratingCountWomens: fac.womens.count,
+      avgRatingMens: avg(fac.mens.sum, fac.mens.count),
+      ratingCountMens: fac.mens.count,
       tagCounts,
       aggregatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
