@@ -193,6 +193,7 @@ const Store = {
       hasBathroom: !!report.hasBathroom,
       rating: report.hasBathroom && report.rating ? report.rating : null,
       text: (report.text || '').trim(),
+      tags: report.hasBathroom ? [...(report.tags || [])].sort() : [],
       username: profile.username,
     };
 
@@ -207,7 +208,8 @@ const Store = {
       if (old &&
           old.hasBathroom === newReview.hasBathroom &&
           (old.rating ?? null) === newReview.rating &&
-          (old.text || '') === newReview.text) {
+          (old.text || '') === newReview.text &&
+          JSON.stringify([...(old.tags || [])].sort()) === JSON.stringify(newReview.tags)) {
         return prevAgg;
       }
 
@@ -218,6 +220,7 @@ const Store = {
             hasBathroom: old.hasBathroom,
             rating: old.rating ?? null,
             text: old.text || '',
+            tags: old.tags || [],
             at: old.updatedAt,
           }]
         : [];
@@ -242,7 +245,13 @@ const Store = {
       reviewCount++;
       if (typeof newReview.rating === 'number') { ratingSum += newReview.rating; ratingCount++; }
 
+      // Amenity tag counts, adjusted the same subtract-old/add-new way.
+      const tagCounts = { ...(prevAgg.tagCounts || {}) };
+      for (const t of (old?.tags || [])) tagCounts[t] = Math.max(0, (tagCounts[t] || 0) - 1);
+      for (const t of newReview.tags) tagCounts[t] = (tagCounts[t] || 0) + 1;
+
       const aggregates = {
+        tagCounts,
         yesCount: Math.max(0, yes),
         noCount: Math.max(0, no),
         reviewCount: Math.max(0, reviewCount),

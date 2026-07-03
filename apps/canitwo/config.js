@@ -58,6 +58,15 @@ window.APP_CONFIG = {
   // Max radius (km) for loading rated places from Firestore around the map view.
   firestore_max_radius_km: 60,
 
+  // Amenity tags a reporter can attach when a place has a bathroom.
+  report_tags: [
+    { key: 'accessible',     emoji: '♿',  label: 'Accessible' },
+    { key: 'changing_table', emoji: '🚼', label: 'Changing table' },
+    { key: 'code_needed',    emoji: '🔑', label: 'Code/key needed' },
+    { key: 'customers_only', emoji: '🛍️', label: 'Customers only' },
+    { key: 'gender_neutral', emoji: '⚧️', label: 'Gender-neutral' },
+  ],
+
   // OSM tag → category. Order matters: first match wins.
   categories: [
     { key: 'toilets',     match: t => t.amenity === 'toilets',                              label: 'Public Toilet',     emoji: '🚻' },

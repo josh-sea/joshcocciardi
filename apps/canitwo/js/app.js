@@ -458,6 +458,24 @@
       </div>`;
   }
 
+  // Tag chips for the sheet, from the place's aggregated tagCounts.
+  function tagChipsHtml(p) {
+    const counts = p.tagCounts || {};
+    const chips = cfg.report_tags
+      .filter(t => (counts[t.key] || 0) > 0)
+      .map(t => `<span class="place-tag">${t.emoji} ${esc(t.label)} (${counts[t.key]})</span>`);
+    return chips.length ? `<div class="place-tags">${chips.join('')}</div>` : '';
+  }
+
+  function reviewTagsHtml(r) {
+    if (!r.tags?.length) return '';
+    const chips = r.tags
+      .map(k => cfg.report_tags.find(t => t.key === k))
+      .filter(Boolean)
+      .map(t => `<span class="place-tag place-tag-sm">${t.emoji} ${esc(t.label)}</span>`);
+    return chips.length ? `<div class="place-tags">${chips.join('')}</div>` : '';
+  }
+
   function bathroomBadge(p) {
     const yes = p.yesCount || 0, no = p.noCount || 0;
     if (yes === 0 && no === 0) return '<span class="badge badge-unknown">🤷 No reports yet</span>';
@@ -511,6 +529,7 @@
           <span class="stars">${starsHtml(place.avgRating)}</span>
           <span class="rating-count">${place.ratingCount} rating${place.ratingCount === 1 ? '' : 's'}</span>
         </div>` : ''}
+      ${tagChipsHtml(place)}
       <div class="sheet-actions">
         <button class="btn btn-primary" id="sheet-report-btn">✍️ ${rated ? 'Add your report' : 'Be the first to report'}</button>
         <button class="btn btn-secondary" id="sheet-share-btn" title="Share this place">↗️</button>
@@ -549,6 +568,7 @@
             <div>${r.hasBathroom
               ? (typeof r.rating === 'number' ? `<span class="review-stars">${starsHtml(r.rating)}</span>` : '<span class="badge badge-yes">🚽 Has bathroom</span>')
               : '<span class="review-nobathroom">🚫 Reported no bathroom</span>'}</div>
+            ${reviewTagsHtml(r)}
             ${r.text ? `<p class="review-text">${esc(r.text)}</p>` : ''}
             ${historyHtml(r)}
           </div>`).join('')}
@@ -663,18 +683,20 @@
 
   // ── Report modal ─────────────────────────────────────────────────────────
   function openReportModal(place) {
-    reportDraft = { place, hasBathroom: null, rating: 0 };
+    reportDraft = { place, hasBathroom: null, rating: 0, tags: new Set() };
     $('report-place-name').textContent = `${place.emoji || '📍'} ${place.name}`;
     $('report-text').value = '';
     $('report-error').classList.add('hidden');
     setYN(null);
     setStars(0);
+    setTags([]);
 
     // Prefill if the user already reviewed this place.
     Store.getMyReview(place.id).then(r => {
       if (!r || reportDraft?.place.id !== place.id) return;
       setYN(r.hasBathroom);
       setStars(r.rating || 0);
+      setTags(r.tags || []);
       $('report-text').value = r.text || '';
       $('report-title').textContent = 'Edit your report';
       $('report-submit').textContent = 'Update report';
@@ -689,6 +711,30 @@
     $('yn-yes').classList.toggle('selected-yes', val === true);
     $('yn-no').classList.toggle('selected-no', val === false);
     $('rating-field').classList.toggle('hidden', val !== true);
+    $('tags-field').classList.toggle('hidden', val !== true);
+  }
+
+  // Amenity tag toggles (buttons built once from config)
+  const tagInput = $('tag-input');
+  cfg.report_tags.forEach(t => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tag-btn';
+    b.dataset.tag = t.key;
+    b.textContent = `${t.emoji} ${t.label}`;
+    b.addEventListener('click', () => {
+      if (reportDraft.tags.has(t.key)) reportDraft.tags.delete(t.key);
+      else reportDraft.tags.add(t.key);
+      b.classList.toggle('selected', reportDraft.tags.has(t.key));
+    });
+    tagInput.appendChild(b);
+  });
+
+  function setTags(keys) {
+    reportDraft.tags = new Set(keys || []);
+    tagInput.querySelectorAll('.tag-btn').forEach(b => {
+      b.classList.toggle('selected', reportDraft.tags.has(b.dataset.tag));
+    });
   }
   $('yn-yes').addEventListener('click', () => setYN(true));
   $('yn-no').addEventListener('click', () => setYN(false));
@@ -718,6 +764,7 @@
         hasBathroom: reportDraft.hasBathroom,
         rating: reportDraft.rating,
         text: $('report-text').value,
+        tags: [...reportDraft.tags],
       });
       const updated = { ...reportDraft.place, ...agg, unrated: false, updatedAt: null };
       ratedPlaces.set(updated.id, updated);

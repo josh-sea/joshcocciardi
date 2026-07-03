@@ -621,6 +621,47 @@ textarea { resize: vertical; }
 .yn-btn.selected-yes { border-color: var(--good); background: #e3f5e9; color: var(--good); }
 .yn-btn.selected-no  { border-color: var(--none); background: #fdeaea; color: var(--none); }
 
+.tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.tag-btn {
+  border: 1.5px solid var(--line);
+  background: #fbfcfd;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tag-btn.selected {
+  border-color: var(--brand);
+  background: #e5f2f1;
+  color: var(--brand-dark);
+}
+
+.place-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 2px;
+}
+.place-tag {
+  background: #eef1f4;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+.place-tag-sm {
+  padding: 2px 8px;
+  font-size: 0.72rem;
+}
+
 .star-input { display: flex; gap: 4px; }
 .star-input button {
   border: none;
