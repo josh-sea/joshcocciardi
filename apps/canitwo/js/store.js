@@ -203,6 +203,28 @@ const Store = {
       const prevAgg = placeSnap.exists() ? placeSnap.data() : {};
       const old = reviewSnap.exists() ? reviewSnap.data() : null;
 
+      // No-op edit: don't write anything (and don't pollute edit history).
+      if (old &&
+          old.hasBathroom === newReview.hasBathroom &&
+          (old.rating ?? null) === newReview.rating &&
+          (old.text || '') === newReview.text) {
+        return prevAgg;
+      }
+
+      // Edits append the previous version to history — the security rules
+      // reject updates that don't, so past versions can't be rewritten.
+      const history = old
+        ? [...(old.history || []), {
+            hasBathroom: old.hasBathroom,
+            rating: old.rating ?? null,
+            text: old.text || '',
+            at: old.updatedAt,
+          }]
+        : [];
+      if (history.length >= 20) {
+        throw new Error('This review has reached its edit limit.');
+      }
+
       let yes = prevAgg.yesCount || 0;
       let no = prevAgg.noCount || 0;
       let reviewCount = prevAgg.reviewCount || 0;
@@ -231,6 +253,7 @@ const Store = {
 
       tx.set(reviewRef, {
         ...newReview,
+        history,
         createdAt: old ? old.createdAt : serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

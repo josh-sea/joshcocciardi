@@ -465,10 +465,31 @@
     return `<span class="badge badge-yes">🚽 Has bathroom (${yes})</span>`;
   }
 
-  function reviewDate(r) {
-    const secs = r.updatedAt?.seconds;
+  function fmtDate(ts) {
+    const secs = ts?.seconds;
     if (!secs) return '';
     return new Date(secs * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function reviewDate(r) { return fmtDate(r.updatedAt); }
+
+  function historyHtml(r) {
+    if (!r.history?.length) return '';
+    const entries = [...r.history].reverse().map(h => `
+      <div class="hist-entry">
+        <div class="hist-head">
+          <span>${h.hasBathroom
+            ? (typeof h.rating === 'number' ? `<span class="review-stars">${starsHtml(h.rating)}</span>` : '🚽 had bathroom')
+            : '<span class="review-nobathroom">🚫 no bathroom</span>'}</span>
+          <span class="review-meta">${esc(fmtDate(h.at))}</span>
+        </div>
+        ${h.text ? `<p class="hist-text">${esc(h.text)}</p>` : '<p class="hist-text hist-empty">(no comment)</p>'}
+      </div>`).join('');
+    return `
+      <details class="edit-history">
+        <summary>Edit history (${r.history.length} earlier version${r.history.length === 1 ? '' : 's'})</summary>
+        ${entries}
+      </details>`;
   }
 
   async function openSheet(place) {
@@ -519,12 +540,13 @@
           <div class="review">
             <div class="review-head">
               <span class="review-user">${esc(r.username || 'anonymous')}${r.uid === myUid ? '<span class="you-tag">YOU</span>' : ''}</span>
-              <span class="review-meta">${reviewDate(r)}</span>
+              <span class="review-meta">${reviewDate(r)}${r.history?.length ? ' · <span class="edited-tag">edited</span>' : ''}</span>
             </div>
             <div>${r.hasBathroom
               ? (typeof r.rating === 'number' ? `<span class="review-stars">${starsHtml(r.rating)}</span>` : '<span class="badge badge-yes">🚽 Has bathroom</span>')
               : '<span class="review-nobathroom">🚫 Reported no bathroom</span>'}</div>
             ${r.text ? `<p class="review-text">${esc(r.text)}</p>` : ''}
+            ${historyHtml(r)}
           </div>`).join('')}
       `;
     } catch (e) {
