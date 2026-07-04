@@ -1,8 +1,9 @@
 /* ─── CanITwo styles ────────────────────────────────────────────────────── */
 
 :root {
-  --brand: #a21caf;
-  --brand-dark: #86198f;
+  --brand: #c400c4;
+  --brand-hot: #ff00ff;
+  --brand-dark: #9c009c;
   --ink: #1c2530;
   --muted: #66707c;
   --card: #ffffff;
@@ -450,7 +451,7 @@ html, body {
 .btn-primary {
   /* Subtle top-lit gradient + inner highlight: a light skeuomorphic nod
      that keeps the flat, minimal look. */
-  background: linear-gradient(180deg, #c026d3, var(--brand) 55%, #8d1a99);
+  background: linear-gradient(180deg, var(--brand-hot), var(--brand) 45%, var(--brand-dark));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 2px 8px rgba(162, 28, 175, 0.30);
   color: #fff;
   flex: 1;
@@ -708,8 +709,8 @@ textarea { resize: vertical; }
   cursor: pointer;
 }
 .facility-btn.selected {
-  border-color: var(--brand);
-  background: #fae8ff;
+  border-color: var(--brand-hot);
+  background: #ffe9ff;
   color: var(--brand-dark);
 }
 
@@ -740,8 +741,8 @@ textarea { resize: vertical; }
   cursor: pointer;
 }
 .tag-btn.selected {
-  border-color: var(--brand);
-  background: #fae8ff;
+  border-color: var(--brand-hot);
+  background: #ffe9ff;
   color: var(--brand-dark);
 }
 
