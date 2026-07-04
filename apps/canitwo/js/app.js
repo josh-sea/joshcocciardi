@@ -491,10 +491,15 @@
       </div>`;
   }
 
+  // All displayable tag definitions: primary amenity tags + the ♿ detail
+  // tags (grab bars, wide stall, …). Both kinds live in review.tags and the
+  // aggregated tagCounts, so display must know the full set.
+  const ALL_TAG_DEFS = [...cfg.report_tags, ...cfg.a11y_tags];
+
   // Tag chips for the sheet, from the place's aggregated tagCounts.
   function tagChipsHtml(p) {
     const counts = p.tagCounts || {};
-    const chips = cfg.report_tags
+    const chips = ALL_TAG_DEFS
       .filter(t => (counts[t.key] || 0) > 0)
       .map(t => `<span class="place-tag">${t.emoji} ${esc(t.label)} (${counts[t.key]})</span>`);
     return chips.length ? `<div class="place-tags">${chips.join('')}</div>` : '';
@@ -522,7 +527,7 @@
   function reviewTagsHtml(r) {
     if (!r.tags?.length) return '';
     const chips = r.tags
-      .map(k => cfg.report_tags.find(t => t.key === k))
+      .map(k => ALL_TAG_DEFS.find(t => t.key === k))
       .filter(Boolean)
       .map(t => `<span class="place-tag place-tag-sm">${t.emoji} ${esc(t.label)}</span>`);
     return chips.length ? `<div class="place-tags">${chips.join('')}</div>` : '';
