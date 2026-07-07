@@ -74,6 +74,20 @@ a { color: var(--red-deep); }
 }
 .account-btn:hover { background: var(--red-deep); color: #fff; }
 
+/* Hamburger — hidden on desktop, replaces the tab row on phones. */
+.menu-btn {
+  position: relative;
+  display: none;
+  border: 1.5px solid var(--paper-edge); background: var(--paper); color: var(--ink);
+  font-size: 1.05rem; line-height: 1;
+  padding: .4rem .65rem; border-radius: 8px; cursor: pointer;
+}
+.menu-btn.menu-btn-alert::after {
+  content: ''; position: absolute; top: -4px; right: -4px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--red); border: 2px solid var(--bg);
+}
+
 /* ── Buttons & chips ─────────────────────────────────────────────────────── */
 
 .btn {
@@ -359,9 +373,20 @@ a { color: var(--red-deep); }
 
 /* ── Small screens ───────────────────────────────────────────────────────── */
 
-@media (max-width: 560px) {
-  #topbar { flex-wrap: wrap; padding-bottom: .5rem; }
+@media (max-width: 640px) {
   .brand { font-size: 1.35rem; }
-  .tabs { order: 3; width: 100%; }
   .page-head h1 { font-size: 1.9rem; }
+
+  /* The tab row becomes a hamburger-opened dropdown panel. */
+  .menu-btn:not(.hidden) { display: inline-flex; }
+  #tabs {
+    position: absolute; top: 100%; left: 0; right: 0;
+    display: none; flex-direction: column; gap: .15rem;
+    background: var(--paper); border-bottom: 1px solid var(--paper-edge);
+    padding: .5rem .7rem .7rem;
+    box-shadow: 0 10px 20px rgba(80, 55, 30, .15);
+    overflow-x: visible;
+  }
+  body.menu-open #tabs:not(.hidden) { display: flex; }
+  .tabs a { font-size: 1rem; padding: .65rem .8rem; border-radius: 8px; }
 }

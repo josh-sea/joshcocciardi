@@ -32,6 +32,11 @@ no build step, Firebase SDK from the CDN.
 | `recipebox_connections/{a__b}` | both uids, sorted | friendship: `pending` → `accepted` |
 | `recipebox_recipes/{id}` | auto | one card; `sharedWith: [uid]` gates reads |
 
+A shared card can be **copied into your own box** ("Copy to my box"): a new
+doc owned by you, with media bytes re-uploaded into your own Storage area and
+`copiedFrom` recording whose card it was — so the copy survives unsharing,
+deletion, or the original owner's account going away.
+
 Queries filter on a single field only (`ownerUid ==`, `array-contains`) so no
 composite indexes are needed; sorting is client-side. Rules live in the root
 `firestore.rules`.
