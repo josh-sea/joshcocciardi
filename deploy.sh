@@ -8,6 +8,7 @@
 #   ./deploy.sh moments      - Build moment-capture, copy to portfolio, deploy hosting
 #   ./deploy.sh playball     - Copy playball (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh canitwo      - Copy canitwo (no build), copy to portfolio, deploy hosting
+#   ./deploy.sh recipebox    - Copy recipebox (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
 #
@@ -17,6 +18,7 @@
 #   apps/moment-capture/ - Moment capture app (Vite) → served at /projects/moments
 #   apps/playball/    - Playball walk-up music app (static) → served at /projects/playball
 #   apps/canitwo/     - CanITwo bathroom finder (static) → served at /projects/canitwo
+#   apps/recipebox/   - Recipe Box family recipe cards (static) → served at /projects/recipebox
 #
 # Firebase deploys from: apps/portfolio/build/
 # All sub-apps are built into apps/portfolio/public/ before portfolio builds.
@@ -29,6 +31,7 @@ EMAIL_DIR="$ROOT_DIR/apps/email"
 MOMENTS_DIR="$ROOT_DIR/apps/moment-capture"
 PLAYBALL_DIR="$ROOT_DIR/apps/playball"
 CANITWO_DIR="$ROOT_DIR/apps/canitwo"
+RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
 
 log() { echo ""; echo "==> $1"; }
 success() { echo "✅ $1"; }
@@ -79,6 +82,15 @@ build_canitwo() {
     success "canitwo copied"
 }
 
+build_recipebox() {
+    log "Copying recipebox to portfolio/public/projects/recipebox (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/recipebox"
+    rm -rf "$PORTFOLIO_DIR/public/projects/recipebox"/*
+    cp -r "$RECIPEBOX_DIR"/* "$PORTFOLIO_DIR/public/projects/recipebox/"
+    rm -f "$PORTFOLIO_DIR/public/projects/recipebox/README.md"
+    success "recipebox copied"
+}
+
 build_portfolio() {
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
@@ -98,6 +110,7 @@ deploy_hosting() {
     echo "  Moments:        https://www.joshcocciardi.com/projects/moments"
     echo "  Playball:       https://www.joshcocciardi.com/projects/playball"
     echo "  CanITwo:        https://www.joshcocciardi.com/projects/canitwo"
+    echo "  Recipe Box:     https://www.joshcocciardi.com/projects/recipebox"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
@@ -125,6 +138,7 @@ case "${1:-all}" in
         build_moments
         build_playball
         build_canitwo
+        build_recipebox
         build_portfolio
         deploy_firestore
         deploy_hosting
@@ -168,6 +182,14 @@ case "${1:-all}" in
         build_portfolio
         deploy_hosting
         ;;
+    recipebox)
+        echo "========================================"
+        echo "  Deploying recipebox"
+        echo "========================================"
+        build_recipebox
+        build_portfolio
+        deploy_hosting
+        ;;
     firestore)
         echo "========================================"
         echo "  Deploying Firestore only"
@@ -182,7 +204,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|canitwo|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|canitwo|recipebox|firestore|storage]"
         exit 1
         ;;
 esac
