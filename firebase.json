@@ -24,6 +24,10 @@
         "destination": "/projects/canitwo/index.html"
       },
       {
+        "source": "/projects/recipebox/**",
+        "destination": "/projects/recipebox/index.html"
+      },
+      {
         "source": "!/projects/**",
         "destination": "/index.html"
       }
@@ -44,6 +48,15 @@
       },
       {
         "source": "/projects/canitwo/**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/projects/recipebox/**/*.@(js|css)",
         "headers": [
           {
             "key": "Cache-Control",

@@ -45,7 +45,7 @@ jobs:
 
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo; do
+          for app in playball canitwo recipebox; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"

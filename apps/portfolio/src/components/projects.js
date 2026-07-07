@@ -26,6 +26,12 @@ const Projects = () => {
       link: "/projects/canitwo",
     },
     {
+      title: "🗃️ Recipe Box",
+      description: "The family recipe box, digitized. Write recipes onto simple cards, attach photos or videos of the people who make them, connect with family, and hand cards — or your whole box — to each other. No blogs, no ads, just the cards.",
+      tech: ["JavaScript", "Firebase Auth", "Firestore", "Storage", "PWA"],
+      link: "/projects/recipebox",
+    },
+    {
       title: "✉️ Electronic Mail",
       description: "An iMessage-styled Gmail client with Google OAuth, thread-based chat UI, and Firestore-backed email caching for fast loads.",
       tech: ["React", "Firebase", "Google OAuth", "Gmail API"],
