@@ -256,6 +256,51 @@ const Store = {
     return ref.id;
   },
 
+  // Copy a card someone shared with me into my own box, so it survives even
+  // if the original is unshared, thrown out, or the owner's account goes
+  // away. Media bytes are re-uploaded into MY storage (best-effort) — a copy
+  // that still points at the original owner's files wouldn't outlive them.
+  async copyToMyBox(recipe) {
+    const uid = _uid();
+    const me = await this.getMyProfile();
+    const ref = await addDoc(_recipesCol(), {
+      title: recipe.title || 'Untitled',
+      category: recipe.category || '',
+      description: recipe.description || '',
+      ingredients: [...(recipe.ingredients || [])],
+      steps: [...(recipe.steps || [])],
+      notes: recipe.notes || '',
+      copiedFrom: recipe.ownerUsername || '',
+      ownerUid: uid,
+      ownerUsername: me?.username || '',
+      media: [],
+      sharedWith: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    const copied = [];
+    for (const m of (recipe.media || [])) {
+      try {
+        const resp = await fetch(m.url);
+        if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+        const blob = await resp.blob();
+        const contentType = blob.type || (m.type === 'video' ? 'video/mp4' : 'image/jpeg');
+        const baseName = (m.path || '').split('/').pop() || `${m.type}-${copied.length}`;
+        const path = `users/${uid}/recipebox/${ref.id}/${Date.now()}-${baseName}`;
+        const sref = storageRef(storage, path);
+        await uploadBytes(sref, blob, { contentType });
+        copied.push({ url: await getDownloadURL(sref), path, type: m.type });
+      } catch (e) {
+        console.warn('[Store] media copy failed:', e.message);
+      }
+    }
+    if (copied.length) {
+      await updateDoc(doc(_recipesCol(), ref.id), { media: copied });
+    }
+    return { id: ref.id, copiedMedia: copied.length, totalMedia: (recipe.media || []).length };
+  },
+
   async deleteRecipe(recipe) {
     await Promise.all(
       (recipe.media || [])

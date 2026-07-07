@@ -84,6 +84,7 @@ function route() {
   const hash = location.hash || '#/box';
   const view = $('#view');
   window.scrollTo(0, 0);
+  closeMenu();
 
   if (!state.user) { renderLanding(view); setActiveTab(null); return; }
 
@@ -354,6 +355,13 @@ function updatePeopleBadge() {
   const badge = $('#people-badge');
   badge.textContent = n || '';
   badge.classList.toggle('hidden', !n);
+  // Mirror onto the hamburger, which is all you see of the menu on phones.
+  $('#menu-btn').classList.toggle('menu-btn-alert', n > 0);
+}
+
+function closeMenu() {
+  document.body.classList.remove('menu-open');
+  $('#menu-btn').setAttribute('aria-expanded', 'false');
 }
 
 // ── Recipe detail ──────────────────────────────────────────────────────────
@@ -383,7 +391,9 @@ async function renderRecipe(view, id) {
           <button id="share-btn" class="btn btn-ghost btn-sm">🤝 Share</button>
           <a class="btn btn-ghost btn-sm" href="#/edit/${esc(r.id)}">✏️ Edit</a>
           <button id="delete-btn" class="btn btn-ghost btn-sm btn-danger">🗑 Throw out</button>
-        </span>` : ''}
+        </span>` : `<span class="detail-actions">
+          <button id="copy-btn" class="btn btn-primary btn-sm" title="Make your own copy — it stays in your box even if the original goes away">📥 Copy to my box</button>
+        </span>`}
       </div>
 
       <article class="recipe-detail card-paper">
@@ -393,6 +403,7 @@ async function renderRecipe(view, id) {
           <div class="detail-meta">
             ${r.category ? `<span class="cat-tag">${esc(r.category)}</span>` : ''}
             ${!mine ? `<span class="from-tag">from ${esc(r.ownerUsername || 'family')}’s box</span>` : ''}
+            ${mine && r.copiedFrom ? `<span class="from-tag">copied from ${esc(r.copiedFrom)}</span>` : ''}
             ${mine && (r.sharedWith || []).length ? `<span class="from-tag">shared with ${(r.sharedWith).length}</span>` : ''}
           </div>
           ${r.description ? `<p class="detail-desc">${esc(r.description)}</p>` : ''}
@@ -427,6 +438,20 @@ async function renderRecipe(view, id) {
       : `<img src="${esc(m.url)}" alt="" />`;
     $('#lightbox').classList.remove('hidden');
   }));
+
+  if (!mine) {
+    $('#copy-btn').addEventListener('click', async e => {
+      busy(e.target, true, 'Copying…');
+      try {
+        const res = await Store.copyToMyBox(r);
+        state.myRecipes = null;
+        toast(res.copiedMedia < res.totalMedia
+          ? `Copied — but ${res.totalMedia - res.copiedMedia} of ${res.totalMedia} photos/videos couldn't come along.`
+          : 'Copied — this card is yours now, no matter what.');
+        location.hash = '#/recipe/' + res.id;
+      } catch (err) { toast(err.message, true); busy(e.target, false); }
+    });
+  }
 
   if (mine) {
     $('#share-btn').addEventListener('click', () => openShareModal(r));
@@ -736,6 +761,16 @@ window.StoreReady.then(store => {
     }
   });
 
+  const menuBtn = $('#menu-btn');
+  menuBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = document.body.classList.toggle('menu-open');
+    menuBtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', e => {
+    if (document.body.classList.contains('menu-open') && !e.target.closest('#tabs')) closeMenu();
+  });
+
   $$('.modal-close[data-close]').forEach(b =>
     b.addEventListener('click', () => closeModal(b.dataset.close)));
   $$('.modal-overlay').forEach(m => m.addEventListener('click', e => {
@@ -759,6 +794,7 @@ window.StoreReady.then(store => {
 
     $('#account-btn').textContent = user ? 'Sign out' : 'Sign in';
     $('#tabs').classList.toggle('hidden', !user);
+    $('#menu-btn').classList.toggle('hidden', !user);
 
     if (user) {
       await ensureUsername();
