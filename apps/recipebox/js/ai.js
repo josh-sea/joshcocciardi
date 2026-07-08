@@ -140,14 +140,19 @@ export async function extractFromVoice(blob) {
 function friendly(e) {
   // FirebaseError puts the useful part in e.code (e.g. "AI/api-not-enabled")
   // AND strips the HTTP status from the message, so match both fields.
+  // Order matters: every HTTP failure's message starts "Error fetching from…",
+  // so the generic connectivity check must come last and match narrowly.
   const msg = String(e?.message || e) + ' ' + String(e?.code || '');
+  if (/app check/i.test(msg)) {
+    return 'The project requires App Check, but this app isn’t registered for it. In the Firebase console, either register the web app under App Check or turn off enforcement in AI Logic → Settings.';
+  }
   if (/not.enabled|to be enabled|has not been used|SERVICE_DISABLED|PERMISSION_DENIED|403/i.test(msg)) {
     return 'AI import isn’t switched on for this project yet. In the Firebase console, open "AI Logic" and enable the Gemini Developer API — then try again.';
   }
   if (/quota|RESOURCE_EXHAUSTED|429/i.test(msg)) {
     return 'The AI is over its limit right now. Give it a minute and try again.';
   }
-  if (/network|fetch|Failed to fetch|offline/i.test(msg)) {
+  if (/Failed to fetch|NetworkError|network error|offline|timed? ?out/i.test(msg)) {
     return 'Couldn’t reach the AI — check your connection and try again.';
   }
   console.warn('[ai] extract failed:', e);
