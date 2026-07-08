@@ -149,6 +149,9 @@ function friendly(e) {
   if (/not.enabled|to be enabled|has not been used|SERVICE_DISABLED|PERMISSION_DENIED|403/i.test(msg)) {
     return 'AI import isn’t switched on for this project yet. In the Firebase console, open "AI Logic" and enable the Gemini Developer API — then try again.';
   }
+  if (/prepayment|credits are depleted|billing/i.test(msg)) {
+    return 'The project is out of Gemini credits. Manage the project’s plan and billing in Google AI Studio (ai.studio/projects), then try again.';
+  }
   if (/quota|RESOURCE_EXHAUSTED|429/i.test(msg)) {
     return 'The AI is over its limit right now. Give it a minute and try again.';
   }
