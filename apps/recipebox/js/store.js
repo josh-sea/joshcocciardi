@@ -282,10 +282,11 @@ const Store = {
     return ref.id;
   },
 
-  // Copy a card someone shared with me into my own box, so it survives even
-  // if the original is unshared, thrown out, or the owner's account goes
-  // away. Media bytes are re-uploaded into MY storage (best-effort) — a copy
-  // that still points at the original owner's files wouldn't outlive them.
+  // Copy a card someone shared with me into my own box. The card text is
+  // mine forever; media stays a REFERENCE to the original owner's files
+  // (tokenized URLs work regardless of sharing), so no bytes are duplicated
+  // in Storage. Trade-off: if the owner deletes the card or their account,
+  // the attachments on my copy go dark — the words survive, the media doesn't.
   async copyToMyBox(recipe) {
     const uid = _uid();
     const me = await this.getMyProfile();
@@ -299,41 +300,25 @@ const Store = {
       copiedFrom: recipe.ownerUsername || '',
       ownerUid: uid,
       ownerUsername: me?.username || '',
-      media: [],
+      media: (recipe.media || []).map(m => ({ type: m.type, url: m.url, path: m.path || '' })),
       sharedWith: [],
       sharedGroups: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+    return { id: ref.id };
+  },
 
-    const copied = [];
-    for (const m of (recipe.media || [])) {
-      try {
-        const resp = await fetch(m.url);
-        if (!resp.ok) throw new Error(`fetch ${resp.status}`);
-        const blob = await resp.blob();
-        const contentType = blob.type
-          || { video: 'video/mp4', audio: 'audio/webm', image: 'image/jpeg' }[m.type]
-          || 'application/octet-stream';
-        const baseName = (m.path || '').split('/').pop() || `${m.type}-${copied.length}`;
-        const path = `users/${uid}/recipebox/${ref.id}/${Date.now()}-${baseName}`;
-        const sref = storageRef(storage, path);
-        await uploadBytes(sref, blob, { contentType });
-        copied.push({ url: await getDownloadURL(sref), path, type: m.type });
-      } catch (e) {
-        console.warn('[Store] media copy failed:', e.message);
-      }
-    }
-    if (copied.length) {
-      await updateDoc(doc(_recipesCol(), ref.id), { media: copied });
-    }
-    return { id: ref.id, copiedMedia: copied.length, totalMedia: (recipe.media || []).length };
+  // Only ever delete Storage files that live under MY area — a copied card's
+  // media points at the original owner's files, which aren't mine to delete.
+  _ownsPath(path) {
+    return !!path && path.startsWith(`users/${_uid()}/`);
   },
 
   async deleteRecipe(recipe) {
     await Promise.all(
       (recipe.media || [])
-        .filter(m => m.path)
+        .filter(m => this._ownsPath(m.path))
         .map(m => deleteObject(storageRef(storage, m.path)).catch(() => {}))
     );
     // Take it off any group shelves too (best-effort).
@@ -598,7 +583,7 @@ const Store = {
 
   async removeMedia(recipeId, item) {
     await updateDoc(doc(_recipesCol(), recipeId), { media: arrayRemove(item) });
-    if (item.path) await deleteObject(storageRef(storage, item.path)).catch(() => {});
+    if (this._ownsPath(item.path)) await deleteObject(storageRef(storage, item.path)).catch(() => {});
   },
 };
 

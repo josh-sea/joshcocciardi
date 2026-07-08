@@ -188,6 +188,10 @@ async function renderBox(view) {
   if (state.filterCat && !cats.includes(state.filterCat)) state.filterCat = '';
   const shown = state.filterCat ? recipes.filter(r => r.category === state.filterCat) : recipes;
 
+  const wisdom = (state.profile?.wisdom || []).length
+    ? state.profile.wisdom
+    : recipes.flatMap(tipsOf).slice(0, 3); // until you curate, your cards speak
+
   view.innerHTML = `
     <section class="page">
       <div class="page-head">
@@ -197,6 +201,9 @@ async function renderBox(view) {
           <a class="btn btn-primary" href="#/new">✚ Write a card</a>
         </div>
       </div>
+      <p class="page-sub">This is your page, too — people who look you up see only the cards
+      you've shared with them, topped by your words of wisdom.</p>
+      ${wisdomCardHtml(wisdom, true)}
       ${cats.length ? `<div class="chip-row">
         <button class="chip ${!state.filterCat ? 'active' : ''}" data-cat="">All</button>
         ${cats.map(c => `<button class="chip ${state.filterCat === c ? 'active' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}
@@ -204,10 +211,70 @@ async function renderBox(view) {
       <div class="card-grid">${shown.map(r => recipeCardHtml(r, true)).join('')}</div>
     </section>`;
 
+  wireWisdomCard(wisdom, true);
+
   $$('.chip[data-cat]').forEach(ch => ch.addEventListener('click', () => {
     state.filterCat = ch.dataset.cat;
     route();
   }));
+}
+
+// ── Words of wisdom card (My Box shows yours, editable; bio pages show theirs) ─
+
+function wisdomCardHtml(wisdom, mine) {
+  return `
+      <div class="wisdom-card card-paper">
+        <div class="card-topline"></div>
+        <h2 class="hand">Words of wisdom</h2>
+        <ul class="wisdom-list" id="bio-wisdom">
+          ${wisdom.slice(0, 3).map(t => `<li>${esc(t)}</li>`).join('') || '<li class="muted">Nothing pinned yet.</li>'}
+        </ul>
+        <div class="form-actions">
+          ${wisdom.length > 3 ? `<button id="wisdom-more" class="btn btn-ghost btn-sm">See all ${wisdom.length}</button>` : ''}
+          ${mine ? `<button id="wisdom-edit" class="btn btn-ghost btn-sm hidden">✏️ Edit</button>` : ''}
+        </div>
+        ${mine ? `<form id="wisdom-form" class="hidden">
+          <div class="field">
+            <label for="wisdom-input">One per line, top one first — your page leads with the first three.</label>
+            <textarea id="wisdom-input" rows="6">${esc(wisdom.join('\n'))}</textarea>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+            <button type="button" id="wisdom-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+          </div>
+        </form>` : ''}
+      </div>`;
+}
+
+function wireWisdomCard(wisdom, mine) {
+  const expand = () => {
+    $('#bio-wisdom').innerHTML = wisdom.map(t => `<li>${esc(t)}</li>`).join('');
+    $('#wisdom-more')?.classList.add('hidden');
+    $('#wisdom-edit')?.classList.remove('hidden');
+  };
+  $('#wisdom-more')?.addEventListener('click', expand);
+  if (!mine) return;
+
+  if (wisdom.length <= 3) $('#wisdom-edit')?.classList.remove('hidden');
+  $('#wisdom-edit')?.addEventListener('click', () => {
+    $('#wisdom-form').classList.remove('hidden');
+    $('#wisdom-edit').classList.add('hidden');
+  });
+  $('#wisdom-cancel')?.addEventListener('click', () => {
+    $('#wisdom-form').classList.add('hidden');
+    $('#wisdom-edit').classList.remove('hidden');
+  });
+  $('#wisdom-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type=submit]');
+    busy(btn, true, 'Saving…');
+    try {
+      const saved = await Store.saveWisdom($('#wisdom-input').value.split('\n'));
+      state.profile.wisdom = saved;
+      toast('Your wisdom is on the wall.');
+      route();
+    } catch (err) { toast(err.message, true); busy(btn, false); }
+  });
 }
 
 function recipeCardHtml(r, mine) {
@@ -288,7 +355,6 @@ async function renderPeople(view) {
     <section class="page page-narrow">
       <div class="page-head">
         <h1 class="hand">Family &amp; Friends</h1>
-        ${state.profile?.username ? `<a class="btn btn-ghost btn-sm" href="#/u/${esc(state.profile.username)}">My page</a>` : ''}
       </div>
       <p class="page-sub">Sharing is gated by connections, like real life: you can only hand a card to
       someone who's agreed to know you. Ask for their username.</p>
@@ -500,9 +566,7 @@ async function renderRecipe(view, id) {
       try {
         const res = await Store.copyToMyBox(r);
         state.myRecipes = null;
-        toast(res.copiedMedia < res.totalMedia
-          ? `Copied — but ${res.totalMedia - res.copiedMedia} of ${res.totalMedia} photos/videos couldn't come along.`
-          : 'Copied — this card is yours now, no matter what.');
+        toast('Copied — this card is in your box now.');
         location.hash = '#/recipe/' + res.id;
       } catch (err) { toast(err.message, true); busy(e.target, false); }
     });
@@ -824,41 +888,38 @@ async function openGroupShareModal(group) {
 }
 
 // ── Bio page: #/u/username ─────────────────────────────────────────────────
-// A person's page shows exactly what they've let YOU see: cards shared with
-// you directly plus cards they put on shelves you both stand at — topped by
-// their words of wisdom (curated by them; drawn from their cards until then).
+// Someone else's page shows exactly what they've let YOU see: cards shared
+// with you directly plus cards they put on shelves you both stand at — topped
+// by their words of wisdom (curated by them; drawn from their cards until
+// then). Your own username just goes home: My Box IS your page.
 
 async function renderBio(view, username) {
+  if (state.profile?.username
+      && state.profile.username.toLowerCase() === String(username || '').toLowerCase()) {
+    location.hash = '#/box';
+    return;
+  }
   view.innerHTML = spinner('Finding their box…');
-  const isMe = !!state.profile?.username
-    && state.profile.username.toLowerCase() === String(username || '').toLowerCase();
 
   let person, cards = [];
   try {
-    person = isMe
-      ? { uid: state.user.uid, username: state.profile.username, wisdom: state.profile.wisdom || [] }
-      : await Store.findUserByUsername(username);
+    person = await Store.findUserByUsername(username);
     if (!person) {
       view.innerHTML = `<section class="page"><div class="empty-state"><h2 class="hand">No box with that name</h2>
         <p>Check the spelling — usernames are exact.</p></div></section>`;
       return;
     }
-    if (isMe) {
-      if (state.myRecipes === null) state.myRecipes = await Store.myRecipes();
-      cards = state.myRecipes;
-    } else {
-      if (state.shared === null) state.shared = await Store.sharedWithMe();
-      if (state.groups === null) state.groups = await Store.myGroups();
-      const seen = new Map();
-      for (const r of state.shared.filter(r => r.ownerUid === person.uid)) seen.set(r.id, r);
-      for (const g of state.groups) {
-        const entries = await Store.groupCards(g.id).catch(() => []);
-        for (const e of entries.filter(e => e.ownerUid === person.uid)) {
-          if (!seen.has(e.recipeId)) seen.set(e.recipeId, entryAsCard(e));
-        }
+    if (state.shared === null) state.shared = await Store.sharedWithMe();
+    if (state.groups === null) state.groups = await Store.myGroups();
+    const seen = new Map();
+    for (const r of state.shared.filter(r => r.ownerUid === person.uid)) seen.set(r.id, r);
+    for (const g of state.groups) {
+      const entries = await Store.groupCards(g.id).catch(() => []);
+      for (const e of entries.filter(e => e.ownerUid === person.uid)) {
+        if (!seen.has(e.recipeId)) seen.set(e.recipeId, entryAsCard(e));
       }
-      cards = [...seen.values()];
     }
+    cards = [...seen.values()];
   } catch (e) { view.innerHTML = errorBlock(e); return; }
 
   const wisdom = (person.wisdom || []).length
@@ -869,68 +930,17 @@ async function renderBio(view, username) {
     <section class="page">
       <div class="bio-head">
         <h1 class="hand">📦 ${esc(person.username)}’s box</h1>
-        ${isMe ? `<p class="page-sub">This is your page. Others only ever see the cards you've shared
-          with them — directly or through a group box you're both in.</p>` : ''}
       </div>
 
-      ${wisdom.length || isMe ? `
-      <div class="wisdom-card card-paper">
-        <div class="card-topline"></div>
-        <h2 class="hand">Words of wisdom</h2>
-        <ul class="wisdom-list" id="bio-wisdom">
-          ${wisdom.slice(0, 3).map(t => `<li>${esc(t)}</li>`).join('') || '<li class="muted">Nothing pinned yet.</li>'}
-        </ul>
-        <div class="form-actions">
-          ${wisdom.length > 3 ? `<button id="wisdom-more" class="btn btn-ghost btn-sm">See all ${wisdom.length}</button>` : ''}
-          ${isMe ? `<button id="wisdom-edit" class="btn btn-ghost btn-sm hidden">✏️ Edit</button>` : ''}
-        </div>
-        ${isMe ? `<form id="wisdom-form" class="hidden">
-          <div class="field">
-            <label for="wisdom-input">One per line, top one first — your page leads with the first three.</label>
-            <textarea id="wisdom-input" rows="6">${esc(wisdom.join('\n'))}</textarea>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary btn-sm">Save</button>
-            <button type="button" id="wisdom-cancel" class="btn btn-ghost btn-sm">Cancel</button>
-          </div>
-        </form>` : ''}
-      </div>` : ''}
+      ${wisdom.length ? wisdomCardHtml(wisdom, false) : ''}
 
-      <h2 class="section-head">${isMe ? 'All your cards' : `Cards ${esc(person.username)} has shared with you`}</h2>
+      <h2 class="section-head">Cards ${esc(person.username)} has shared with you</h2>
       ${cards.length
-        ? `<div class="card-grid">${cards.map(r => recipeCardHtml(r, isMe)).join('')}</div>`
-        : `<p class="muted">${isMe ? 'Your box is empty — write a card!' : `Nothing yet. Connect with ${esc(person.username)} or share a group box to swap cards.`}</p>`}
+        ? `<div class="card-grid">${cards.map(r => recipeCardHtml(r, false)).join('')}</div>`
+        : `<p class="muted">Nothing yet. Connect with ${esc(person.username)} or share a group box to swap cards.</p>`}
     </section>`;
 
-  const expand = () => {
-    $('#bio-wisdom').innerHTML = wisdom.map(t => `<li>${esc(t)}</li>`).join('');
-    $('#wisdom-more')?.classList.add('hidden');
-    $('#wisdom-edit')?.classList.remove('hidden');
-  };
-  $('#wisdom-more')?.addEventListener('click', expand);
-  if (isMe && wisdom.length <= 3) $('#wisdom-edit')?.classList.remove('hidden');
-
-  if (isMe) {
-    $('#wisdom-edit')?.addEventListener('click', () => {
-      $('#wisdom-form').classList.remove('hidden');
-      $('#wisdom-edit').classList.add('hidden');
-    });
-    $('#wisdom-cancel')?.addEventListener('click', () => {
-      $('#wisdom-form').classList.add('hidden');
-      $('#wisdom-edit').classList.remove('hidden');
-    });
-    $('#wisdom-form')?.addEventListener('submit', async e => {
-      e.preventDefault();
-      const btn = e.target.querySelector('button[type=submit]');
-      busy(btn, true, 'Saving…');
-      try {
-        const saved = await Store.saveWisdom($('#wisdom-input').value.split('\n'));
-        state.profile.wisdom = saved;
-        toast('Your wisdom is on the wall.');
-        route();
-      } catch (err) { toast(err.message, true); busy(btn, false); }
-    });
-  }
+  wireWisdomCard(wisdom, false);
 }
 
 // ── New / edit card ────────────────────────────────────────────────────────
