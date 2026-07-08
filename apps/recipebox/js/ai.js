@@ -34,10 +34,20 @@ Rules:
 - The recipe may be in ANY language. Keep the whole card in its original
   language — do NOT translate. Set "language" to the English name of that
   language (e.g. "Italian", "Spanish", "English").
-- "ingredients": one entry per ingredient, quantities exactly as given.
+- "ingredients": one entry per ingredient. Keep the cook's amounts, but
+  write them the way a recipe card would: numerals, fractions, and standard
+  abbreviations — "3/4 cup milk", "2 Tbsp shortening, melted", "1/2 tsp
+  salt". Never spell out amounts the way they were said ("three quarter
+  cups", "half a teaspoon").
 - "steps": one entry per step, in cooking order, no numbering prefixes.
+  Write quantities in steps the same card style ("about 3 Tbsp of batter").
 - "tips": the words of wisdom, one per entry — asides, warnings,
   substitutions, family lore ("nonna says never open the pot early").
+  Each tip must make sense on its own, read later out of context: name
+  what it refers to instead of leaving pronouns dangling. If the cook says
+  "I don't like that, I'd use avocado oil" while talking about vegetable
+  oil, the tip is "I don't like vegetable oil — I'd use avocado oil
+  instead." Keep the cook's voice; never invent advice they didn't give.
 - "description": one short appetizing line, in the recipe's language.
 - "category": one English word like Dinner, Dessert, Breakfast, Baking, Bread,
   Sides, Drinks, Sauce.
