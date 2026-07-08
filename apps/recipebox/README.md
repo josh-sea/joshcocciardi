@@ -20,7 +20,8 @@ no build step, Firebase SDK from the CDN.
 
 - `index.html` — shell, modals, `StoreReady` bootstrap
 - `js/store.js` — Firebase auth (Google + email), Firestore, Storage
-- `js/app.js` — hash-routed UI (`#/box`, `#/shared`, `#/people`, `#/recipe/:id`, `#/new`, `#/edit/:id`)
+- `js/app.js` — hash-routed UI (`#/box`, `#/shared`, `#/people`, `#/recipe/:id`, `#/new`, `#/edit/:id`, `#/import`)
+- `js/ai.js` — AI import (lazily loaded; see below)
 - `css/styles.css` — index-card aesthetic
 
 ### Data model (Firestore, `recipebox_` prefix)
@@ -44,6 +45,30 @@ composite indexes are needed; sorting is client-side. Rules live in the root
 Media uploads go to Storage under `users/{uid}/recipebox/{recipeId}/` (covered
 by the existing `storage.rules` size/type limits); docs store tokenized
 download URLs so shared viewers can see them.
+
+### AI import (`#/import`)
+
+Two ways to bring an existing recipe in:
+
+- **From photos** — snap the handwritten card or cookbook page (up to 4
+  photos); the AI reads it into card fields and the original photos are
+  attached to the card, so the handwriting is preserved.
+- **By voice** — record someone talking through the recipe (MediaRecorder,
+  5-minute cap); the AI transcribes and structures it.
+
+Both land on the normal `#/new` edit form as an unsaved draft for human
+review. Recipes in any language are kept in their original language (nonna's
+Italian stays Italian); the detected language is shown on the review banner.
+
+Powered by **Gemini (`gemini-2.5-flash`) via Firebase AI Logic** — the client
+SDK talks to the model through the Firebase project, so no API key ships in
+the code. `js/ai.js` is the only file that knows the provider; to move a path
+to a different model later (e.g. Claude for handwriting), swap its internals.
+
+**One-time setup**: in the Firebase console, open **AI Logic** (Build section)
+and enable the **Gemini Developer API** backend. Until then, imports fail with
+a toast pointing at this step. Optional hardening: enable App Check to keep
+other sites from borrowing the endpoint.
 
 ## Deploying
 

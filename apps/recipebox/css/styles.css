@@ -135,6 +135,7 @@ a { color: var(--red-deep); }
   gap: 1rem; flex-wrap: wrap; margin-bottom: .4rem;
 }
 .page-head h1 { font-size: 2.3rem; }
+.page-head-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
 .page-sub { color: var(--ink-soft); margin-bottom: 1.2rem; max-width: 56ch; }
 .section-head {
   font-size: .8rem; text-transform: uppercase; letter-spacing: .12em;
@@ -389,4 +390,20 @@ a { color: var(--red-deep); }
   }
   body.menu-open #tabs:not(.hidden) { display: flex; }
   .tabs a { font-size: 1rem; padding: .65rem .8rem; border-radius: 8px; }
+}
+
+/* ── Import screen (photos / voice → AI → draft card) ──────────────────── */
+.import-panel { padding: 1.2rem 1.3rem 1.3rem; margin-bottom: 1.1rem; position: relative; }
+.import-panel h2 { font-size: 1.7rem; margin-bottom: .2rem; }
+.import-sub { color: var(--ink-soft); font-size: .92rem; margin-bottom: .8rem; max-width: 52ch; }
+.record-row { display: flex; align-items: center; gap: .8rem; }
+.rec-time { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--red-deep); }
+.recording { animation: rec-pulse 1.2s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: .55; } }
+.rec-review { margin-top: .9rem; }
+.rec-review audio { width: 100%; max-width: 420px; display: block; }
+.ai-note {
+  font-size: .9rem; color: var(--ink-soft); font-style: italic;
+  background: rgba(164, 85, 46, .07); border-radius: 8px;
+  padding: .45rem .7rem; margin-bottom: .9rem;
 }

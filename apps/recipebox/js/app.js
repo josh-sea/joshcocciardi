@@ -17,6 +17,7 @@ const state = {
   connections: null,
   filterCat: '',
   editDraft: null,     // pending uploads while editing
+  importDraft: null,   // AI-read card waiting for review on #/new
 };
 
 // The sample card offered when a box is empty — a real family recipe to show
@@ -85,14 +86,15 @@ function route() {
   const view = $('#view');
   window.scrollTo(0, 0);
   closeMenu();
+  stopRecording(true); // never leave the mic running across a navigation
 
   if (!state.user) { renderLanding(view); setActiveTab(null); return; }
 
-  const m = hash.match(/^#\/(box|shared|people|new|recipe|edit)(?:\/(.+))?$/);
+  const m = hash.match(/^#\/(box|shared|people|new|recipe|edit|import)(?:\/(.+))?$/);
   const page = m ? m[1] : 'box';
   const arg = m ? m[2] : null;
 
-  setActiveTab(page === 'box' || page === 'new' ? 'box'
+  setActiveTab(page === 'box' || page === 'new' || page === 'import' ? 'box'
              : page === 'shared' ? 'shared'
              : page === 'people' ? 'people' : null);
 
@@ -101,6 +103,7 @@ function route() {
   if (page === 'people') return renderPeople(view);
   if (page === 'new')    return renderEdit(view, null);
   if (page === 'edit')   return renderEdit(view, arg);
+  if (page === 'import') return renderImport(view);
   if (page === 'recipe') return renderRecipe(view, arg);
   renderBox(view);
 }
@@ -151,6 +154,7 @@ async function renderBox(view) {
           <p>Write your first card, or start with the house sample.</p>
           <div class="empty-actions">
             <a class="btn btn-primary" href="#/new">✚ Write a card</a>
+            <a class="btn btn-ghost" href="#/import">✨ Import from photo or voice</a>
             <button id="add-starter" class="btn btn-ghost">Add “${esc(STARTER_RECIPE.title)}”</button>
           </div>
         </div>
@@ -175,7 +179,10 @@ async function renderBox(view) {
     <section class="page">
       <div class="page-head">
         <h1 class="hand">My Box <span class="count">(${recipes.length} card${recipes.length === 1 ? '' : 's'})</span></h1>
-        <a class="btn btn-primary" href="#/new">✚ Write a card</a>
+        <div class="page-head-actions">
+          <a class="btn btn-ghost" href="#/import">✨ Import</a>
+          <a class="btn btn-primary" href="#/new">✚ Write a card</a>
+        </div>
       </div>
       ${cats.length ? `<div class="chip-row">
         <button class="chip ${!state.filterCat ? 'active' : ''}" data-cat="">All</button>
@@ -514,6 +521,175 @@ async function openShareModal(recipe) {
 
 // ── New / edit card ────────────────────────────────────────────────────────
 
+// ── Import: photos or voice → AI → prefilled card for review ───────────────
+// The heavy lifting lives in js/ai.js, dynamically imported so nobody pays
+// for it until they use it. Whatever comes back lands on the normal edit
+// screen (#/new) as an unsaved draft — the human always reviews before boxing.
+
+let recState = null; // { rec, chunks, timer, startedAt, blob } while recording
+
+function renderImport(view) {
+  stopRecording(true);
+  state.importDraft = null;
+  const photoFiles = [];
+
+  view.innerHTML = `
+    <section class="page page-narrow">
+      <div class="detail-nav"><a class="linklike" href="#/box">← Back to my box</a></div>
+      <h1 class="hand">Bring a recipe in</h1>
+      <p class="page-sub">Point your camera at the old card or the cookbook page — or just say the
+      recipe out loud. Any language: if nonna gives it in Italian, the card comes out in Italian.
+      You'll get a filled-out card to look over before it goes in your box.</p>
+
+      <div class="import-panel card-paper">
+        <div class="card-topline"></div>
+        <h2 class="hand">📸 From photos</h2>
+        <p class="import-sub">The handwritten card, the splattered page, the newspaper clipping —
+        up to 4 photos of the same recipe. The originals get attached to the card, so the
+        handwriting is never lost.</p>
+        <label class="btn btn-ghost file-btn">📎 Choose or take photos
+          <input id="import-photos" type="file" accept="image/*" multiple hidden />
+        </label>
+        <div id="import-photo-list" class="pending-files"></div>
+        <div class="form-actions">
+          <button id="import-photos-go" class="btn btn-primary" disabled>✨ Read the card</button>
+        </div>
+      </div>
+
+      <div class="import-panel card-paper">
+        <div class="card-topline"></div>
+        <h2 class="hand">🎙️ By voice</h2>
+        <p class="import-sub">Hit record and talk it through — ingredients, steps, the little
+        secrets. Up to 5 minutes.</p>
+        <div class="record-row">
+          <button id="rec-btn" class="btn btn-primary">● Start recording</button>
+          <span id="rec-time" class="rec-time hidden">0:00</span>
+        </div>
+        <div id="rec-review" class="rec-review hidden">
+          <audio id="rec-audio" controls></audio>
+          <div class="form-actions">
+            <button id="rec-use" class="btn btn-primary">✨ Make my card</button>
+            <button id="rec-again" class="btn btn-ghost">Record again</button>
+          </div>
+        </div>
+      </div>
+
+      <p id="import-error" class="form-error hidden"></p>
+    </section>`;
+
+  const showError = msg => {
+    const el = $('#import-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  };
+
+  // ── Photos ──
+  $('#import-photos').addEventListener('change', e => {
+    for (const f of e.target.files) {
+      if (!f.type.startsWith('image/')) continue;
+      if (photoFiles.length < 4) photoFiles.push(f);
+    }
+    e.target.value = '';
+    renderPhotoList();
+  });
+
+  function renderPhotoList() {
+    $('#import-photo-list').innerHTML = photoFiles.map((f, i) =>
+      `<span class="pending-file">📷 ${esc(f.name)}
+        <button type="button" data-unqueue="${i}" title="Remove">✕</button></span>`).join('');
+    $$('#import-photo-list [data-unqueue]').forEach(b => b.addEventListener('click', () => {
+      photoFiles.splice(Number(b.dataset.unqueue), 1);
+      renderPhotoList();
+    }));
+    $('#import-photos-go').disabled = !photoFiles.length;
+  }
+
+  $('#import-photos-go').addEventListener('click', async e => {
+    $('#import-error').classList.add('hidden');
+    busy(e.target, true, 'Reading the handwriting…');
+    try {
+      const AI = await import('./ai.js');
+      const data = await AI.extractFromPhotos(photoFiles);
+      state.importDraft = { data, files: [...photoFiles] };
+      location.hash = '#/new';
+    } catch (err) { showError(err.message); busy(e.target, false); }
+  });
+
+  // ── Voice ──
+  $('#rec-btn').addEventListener('click', async e => {
+    $('#import-error').classList.add('hidden');
+    if (recState?.rec?.state === 'recording') { recState.rec.stop(); return; }
+    try { await startRecording(); }
+    catch (err) {
+      showError(err.name === 'NotAllowedError'
+        ? 'The microphone is blocked. Allow mic access for this site and try again.'
+        : 'Couldn’t start the microphone: ' + err.message);
+    }
+  });
+
+  $('#rec-again').addEventListener('click', () => {
+    $('#rec-review').classList.add('hidden');
+    recState = null;
+  });
+
+  $('#rec-use').addEventListener('click', async e => {
+    if (!recState?.blob) return;
+    $('#import-error').classList.add('hidden');
+    busy(e.target, true, 'Listening closely…');
+    try {
+      const AI = await import('./ai.js');
+      const data = await AI.extractFromVoice(recState.blob);
+      state.importDraft = { data, files: [] };
+      recState = null;
+      location.hash = '#/new';
+    } catch (err) { showError(err.message); busy(e.target, false); }
+  });
+}
+
+async function startRecording() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+    .find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  recState = { rec, chunks: [], timer: null, startedAt: Date.now(), blob: null };
+
+  rec.ondataavailable = ev => { if (ev.data.size) recState.chunks.push(ev.data); };
+  rec.onstop = () => {
+    clearInterval(recState.timer);
+    stream.getTracks().forEach(t => t.stop());
+    const btn = $('#rec-btn'), time = $('#rec-time');
+    if (btn) { btn.textContent = '● Start recording'; btn.classList.remove('recording'); }
+    if (time) time.classList.add('hidden');
+    recState.blob = new Blob(recState.chunks, { type: rec.mimeType || 'audio/webm' });
+    const audio = $('#rec-audio');
+    if (audio && recState.blob.size) {
+      audio.src = URL.createObjectURL(recState.blob);
+      $('#rec-review').classList.remove('hidden');
+    }
+  };
+
+  rec.start();
+  $('#rec-btn').textContent = '■ Stop';
+  $('#rec-btn').classList.add('recording');
+  $('#rec-review').classList.add('hidden');
+  const time = $('#rec-time');
+  time.classList.remove('hidden');
+  time.textContent = '0:00';
+  recState.timer = setInterval(() => {
+    const s = Math.floor((Date.now() - recState.startedAt) / 1000);
+    time.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (s >= 300) recState.rec.stop(); // 5-minute cap
+  }, 500);
+}
+
+// Leaving the page mid-recording shouldn't leave the mic on.
+function stopRecording(silent) {
+  if (recState?.rec && recState.rec.state === 'recording') {
+    try { recState.rec.stream.getTracks().forEach(t => t.stop()); recState.rec.stop(); } catch {}
+  }
+  if (silent) recState = null;
+}
+
 async function renderEdit(view, id) {
   let r = null;
   if (id) {
@@ -521,7 +697,17 @@ async function renderEdit(view, id) {
     r = (state.myRecipes || []).find(x => x.id === id) || await Store.getRecipe(id).catch(() => null);
     if (!r || r.ownerUid !== state.user.uid) { location.hash = '#/box'; return; }
   }
-  state.editDraft = { files: [] };
+
+  // An AI-read card arrives here as a prefilled, unsaved draft: same form,
+  // human eyes before it goes in the box. Its photos join the upload queue
+  // so the originals end up attached to the card.
+  let imported = null;
+  if (!id && state.importDraft) {
+    imported = state.importDraft;
+    state.importDraft = null;
+    r = imported.data;
+  }
+  state.editDraft = { files: imported ? [...imported.files] : [] };
 
   const cats = [...new Set([...(state.myRecipes || []).map(x => x.category).filter(Boolean),
                             'Dinner', 'Dessert', 'Breakfast', 'Baking', 'Sides', 'Drinks'])];
@@ -532,6 +718,8 @@ async function renderEdit(view, id) {
       <form id="recipe-form" class="recipe-form card-paper">
         <div class="card-topline"></div>
         <h1 class="hand">${id ? 'Edit card' : 'A new card'}</h1>
+        ${imported ? `<p class="ai-note">✨ Read by AI${imported.data.language && imported.data.language !== 'English'
+          ? ` — heard in ${esc(imported.data.language)}` : ''}. Give it a once-over before it goes in the box.</p>` : ''}
 
         <div class="field">
           <label for="f-title">Title</label>
@@ -605,6 +793,7 @@ async function renderEdit(view, id) {
     e.target.value = '';
     renderPendingFiles();
   });
+  if (state.editDraft.files.length) renderPendingFiles(); // photos from an import
 
   function renderPendingFiles() {
     $('#pending-files').innerHTML = state.editDraft.files.map((f, i) =>
