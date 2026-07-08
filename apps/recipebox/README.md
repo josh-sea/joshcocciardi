@@ -20,7 +20,8 @@ no build step, Firebase SDK from the CDN.
 
 - `index.html` — shell, modals, `StoreReady` bootstrap
 - `js/store.js` — Firebase auth (Google + email), Firestore, Storage
-- `js/app.js` — hash-routed UI (`#/box`, `#/shared`, `#/people`, `#/recipe/:id`, `#/new`, `#/edit/:id`, `#/import`)
+- `js/app.js` — hash-routed UI (`#/box`, `#/shared`, `#/groups`, `#/group/:id`,
+  `#/people`, `#/u/:username`, `#/recipe/:id`, `#/new`, `#/edit/:id`, `#/import`)
 - `js/ai.js` — AI import (lazily loaded; see below)
 - `css/styles.css` — index-card aesthetic
 
@@ -28,10 +29,29 @@ no build step, Firebase SDK from the CDN.
 
 | Collection | Doc id | Purpose |
 |---|---|---|
-| `recipebox_users/{uid}` | auth uid | profile (username) |
+| `recipebox_users/{uid}` | auth uid | profile (username, curated `wisdom`) |
 | `recipebox_usernames/{name}` | lowercase username | unique-claim + lookup |
 | `recipebox_connections/{a__b}` | both uids, sorted | friendship: `pending` → `accepted` |
-| `recipebox_recipes/{id}` | auto | one card; `sharedWith: [uid]` gates reads |
+| `recipebox_recipes/{id}` | auto | one card; `sharedWith: [uid]` + `sharedGroups: [gid]` gate reads |
+| `recipebox_groups/{id}` | auto | group box: name, `createdBy` admin, `members` |
+| `recipebox_groups/{id}/cards/{rid}` | recipe id | the shelf: snapshot per shared card |
+| `recipebox_group_invites/{gid__uid}` | group + invitee | one invite per person per box |
+
+Cards carry **words of wisdom** (`tips: [string]`, rendered as a list; legacy
+freeform `notes` shows as a single tip and migrates on next save).
+
+**Bio pages** (`#/u/username`): a person's page shows exactly what they've let
+you see — cards shared with you directly plus cards on group shelves you both
+stand at — topped by their words of wisdom (curated via `wisdom` on their
+profile; drawn from their visible cards until they curate).
+
+**Group boxes** are shared shelves, deliberately separate from friendships:
+joining one never touches anyone's connections list. Everyone keeps exactly
+one personal box; a group box holds *access* to cards members chose to put on
+it. Only the creator invites/removes (invites by username, accept/decline);
+creating a box requires inviting at least one person (a box for one is just a
+tag). A card can sit in at most 4 group boxes — the security rules check
+membership with a fixed number of indexed lookups, since rules can't loop.
 
 A shared card can be **copied into your own box** ("Copy to my box"): a new
 doc owned by you, with media bytes re-uploaded into your own Storage area and

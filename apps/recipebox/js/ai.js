@@ -20,7 +20,7 @@ const RECIPE_SCHEMA = Schema.object({
     description: Schema.string(),
     ingredients: Schema.array({ items: Schema.string() }),
     steps: Schema.array({ items: Schema.string() }),
-    notes: Schema.string(),
+    tips: Schema.array({ items: Schema.string() }),
     language: Schema.string(),
   },
 });
@@ -36,7 +36,8 @@ Rules:
   language (e.g. "Italian", "Spanish", "English").
 - "ingredients": one entry per ingredient, quantities exactly as given.
 - "steps": one entry per step, in cooking order, no numbering prefixes.
-- "notes": the asides — tips, warnings, substitutions, family wisdom.
+- "tips": the words of wisdom, one per entry — asides, warnings,
+  substitutions, family lore ("nonna says never open the pot early").
 - "description": one short appetizing line, in the recipe's language.
 - "category": one English word like Dinner, Dessert, Breakfast, Baking, Bread,
   Sides, Drinks, Sauce.
@@ -112,7 +113,7 @@ async function run(parts, taskIntro) {
     description: data.description || '',
     ingredients: (data.ingredients || []).map(s => String(s).trim()).filter(Boolean),
     steps: (data.steps || []).map(s => String(s).trim()).filter(Boolean),
-    notes: data.notes || '',
+    tips: (data.tips || []).map(s => String(s).trim()).filter(Boolean),
     language: data.language || '',
   };
 }
@@ -131,7 +132,7 @@ export async function extractFromVoice(blob) {
   return run([part],
     'Attached is a recording of someone saying a recipe out loud, in whatever language they speak. ' +
     'Transcribe it faithfully first, then structure it into one card. ' +
-    'Spoken asides that are not ingredients or steps belong in "notes".');
+    'Spoken asides that are not ingredients or steps belong in "tips".');
 }
 
 // ── Errors, translated to human ────────────────────────────────────────────
