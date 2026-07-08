@@ -74,4 +74,4 @@ jobs:
             exit 1
           fi
           printf '%s' "$FIREBASE_SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
-          npx firebase-tools@13 deploy --only hosting,firestore:rules,functions --project josh-cocciardi --non-interactive --force
+          npx firebase-tools@13 deploy --only hosting,firestore:rules,storage,functions --project josh-cocciardi --non-interactive --force

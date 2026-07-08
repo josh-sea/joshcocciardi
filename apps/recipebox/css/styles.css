@@ -396,12 +396,24 @@ a { color: var(--red-deep); }
 .import-panel { padding: 1.2rem 1.3rem 1.3rem; margin-bottom: 1.1rem; position: relative; }
 .import-panel h2 { font-size: 1.7rem; margin-bottom: .2rem; }
 .import-sub { color: var(--ink-soft); font-size: .92rem; margin-bottom: .8rem; max-width: 52ch; }
-.record-row { display: flex; align-items: center; gap: .8rem; }
+.record-row { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
 .rec-time { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--red-deep); }
 .recording { animation: rec-pulse 1.2s ease-in-out infinite; }
 @keyframes rec-pulse { 50% { opacity: .55; } }
 .rec-review { margin-top: .9rem; }
 .rec-review audio { width: 100%; max-width: 420px; display: block; }
+.rec-name { font-size: .85rem; color: var(--ink-soft); margin: 0 0 .4rem; }
+
+/* Audio attached to a card */
+.audio-section { margin: 1rem 0 .2rem; }
+.audio-section h2 { font-size: 1.05rem; margin-bottom: .2rem; }
+.audio-row { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; }
+.audio-row audio { flex: 1; min-width: 0; height: 40px; }
+.audio-chip {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%; font-size: 1.5rem;
+  background: rgba(164, 85, 46, .08);
+}
 .ai-note {
   font-size: .9rem; color: var(--ink-soft); font-style: italic;
   background: rgba(164, 85, 46, .07); border-radius: 8px;
