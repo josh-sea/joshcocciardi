@@ -145,15 +145,30 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.uid in resource.data.users;
     }
 
-    // Recipe cards. Only the owner writes; the owner plus anyone the card
-    // has been handed to (sharedWith) can read. Ownership can't be moved.
+    // Recipe cards. Only the owner writes; readable by the owner, anyone the
+    // card was handed to (sharedWith), and members of any group box the card
+    // sits in (sharedGroups). Ownership can't be moved.
+    //
+    // Group membership is checked with indexed lookups because rules can't
+    // loop — hence the fixed cap of 4 group boxes per card (mirrored in the
+    // client). exists() guards make a deleted group fail closed, and
+    // .get('sharedGroups', []) tolerates older docs without the field.
+    function recipeInGroup(data, i) {
+      return data.get('sharedGroups', []).size() > i
+        && exists(/databases/$(database)/documents/recipebox_groups/$(data.sharedGroups[i]))
+        && request.auth.uid in get(/databases/$(database)/documents/recipebox_groups/$(data.sharedGroups[i])).data.members;
+    }
     match /recipebox_recipes/{recipeId} {
-      // As above: tolerate get() on a missing doc so a deleted/unshared card
-      // reads as "not found" instead of a permissions error.
+      // `resource == null` tolerates get() on a missing doc so a deleted or
+      // unshared card reads as "not found" instead of a permissions error.
       allow read: if request.auth != null
         && (resource == null
             || request.auth.uid == resource.data.ownerUid
-            || request.auth.uid in resource.data.sharedWith);
+            || request.auth.uid in resource.data.sharedWith
+            || recipeInGroup(resource.data, 0)
+            || recipeInGroup(resource.data, 1)
+            || recipeInGroup(resource.data, 2)
+            || recipeInGroup(resource.data, 3));
       allow create: if request.auth != null
         && request.resource.data.ownerUid == request.auth.uid;
       allow update: if request.auth != null
@@ -161,6 +176,72 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid;
       allow delete: if request.auth != null
         && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Group boxes: a shared shelf. Membership (not friendship) gates reading
+    // what's on it; joining a box never touches anyone's connections. The
+    // creator is the admin: only they invite, remove members, or delete.
+    match /recipebox_groups/{groupId} {
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid in resource.data.members);
+      allow create: if request.auth != null
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 60;
+      allow update: if request.auth != null && (
+        // Admin housekeeping (rename, remove members) — the box can't be
+        // reassigned and the admin stays a member.
+        (resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.auth.uid in request.resource.data.members)
+        ||
+        // Self-join, with a standing invite as the ticket: may only add self.
+        (exists(/databases/$(database)/documents/recipebox_group_invites/$(groupId + '__' + request.auth.uid))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberNames'])
+          && request.resource.data.members.removeAll(resource.data.members) == [request.auth.uid]
+          && request.resource.data.members.size() == resource.data.members.size() + 1)
+        ||
+        // Self-leave: may only remove self (the admin can't leave, only delete).
+        (request.auth.uid != resource.data.createdBy
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberNames'])
+          && resource.data.members.removeAll(request.resource.data.members) == [request.auth.uid]
+          && resource.data.members.size() == request.resource.data.members.size() + 1)
+      );
+      allow delete: if request.auth != null && resource.data.createdBy == request.auth.uid;
+
+      // The cards on the shelf: an index of recipes members have shared in,
+      // with snapshot fields for the grid (the recipe doc stays the truth).
+      match /cards/{recipeId} {
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/recipebox_groups/$(groupId)).data.members;
+        allow create, update: if request.auth != null
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.recipeId == recipeId
+          && request.auth.uid in get(/databases/$(database)/documents/recipebox_groups/$(groupId)).data.members;
+        allow delete: if request.auth != null
+          && (resource.data.ownerUid == request.auth.uid
+              || get(/databases/$(database)/documents/recipebox_groups/$(groupId)).data.createdBy == request.auth.uid);
+      }
+    }
+
+    // Group invites: doc id is groupId__inviteeUid, so one invite per person
+    // per box. Only the box admin creates them; the invitee accepts (by
+    // joining the group, above) or declines, and the admin can revoke.
+    match /recipebox_group_invites/{inviteId} {
+      allow read: if request.auth != null
+        && (resource == null
+            || request.auth.uid == resource.data.to
+            || request.auth.uid == resource.data.from);
+      allow create: if request.auth != null
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to != request.auth.uid
+        && inviteId == request.resource.data.groupId + '__' + request.resource.data.to
+        && get(/databases/$(database)/documents/recipebox_groups/$(request.resource.data.groupId)).data.createdBy == request.auth.uid;
+      allow update: if false;
+      allow delete: if request.auth != null
+        && (request.auth.uid == resource.data.to || request.auth.uid == resource.data.from);
     }
 
     // Radar metadata - read access for clients
