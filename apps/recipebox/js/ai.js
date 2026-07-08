@@ -138,8 +138,10 @@ export async function extractFromVoice(blob) {
 // ── Errors, translated to human ────────────────────────────────────────────
 
 function friendly(e) {
-  const msg = String(e?.message || e);
-  if (/not enabled|has not been used|SERVICE_DISABLED|PERMISSION_DENIED|403/i.test(msg)) {
+  // FirebaseError puts the useful part in e.code (e.g. "AI/api-not-enabled")
+  // AND strips the HTTP status from the message, so match both fields.
+  const msg = String(e?.message || e) + ' ' + String(e?.code || '');
+  if (/not.enabled|to be enabled|has not been used|SERVICE_DISABLED|PERMISSION_DENIED|403/i.test(msg)) {
     return 'AI import isn’t switched on for this project yet. In the Firebase console, open "AI Logic" and enable the Gemini Developer API — then try again.';
   }
   if (/quota|RESOURCE_EXHAUSTED|429/i.test(msg)) {
@@ -149,5 +151,6 @@ function friendly(e) {
     return 'Couldn’t reach the AI — check your connection and try again.';
   }
   console.warn('[ai] extract failed:', e);
-  return 'The AI couldn’t read that one. Try again, or with clearer photos.';
+  const code = e?.code ? ` (${e.code})` : '';
+  return `The AI hit an unexpected error${code}. Try again in a minute.`;
 }
