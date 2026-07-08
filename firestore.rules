@@ -123,7 +123,11 @@ service cloud.firestore {
     // 'pending'; only the *other* person can flip it to 'accepted'; either
     // side can delete (decline / cancel / disconnect).
     match /recipebox_connections/{connId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.users;
+      // `resource == null` lets a signed-in user get() a connection doc that
+      // doesn't exist yet (they just see "not found") — without it, the
+      // duplicate-check before sending a request is denied outright.
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid in resource.data.users);
       allow create: if request.auth != null
         && request.resource.data.requestedBy == request.auth.uid
         && request.auth.uid in request.resource.data.users
@@ -144,8 +148,11 @@ service cloud.firestore {
     // Recipe cards. Only the owner writes; the owner plus anyone the card
     // has been handed to (sharedWith) can read. Ownership can't be moved.
     match /recipebox_recipes/{recipeId} {
+      // As above: tolerate get() on a missing doc so a deleted/unshared card
+      // reads as "not found" instead of a permissions error.
       allow read: if request.auth != null
-        && (request.auth.uid == resource.data.ownerUid
+        && (resource == null
+            || request.auth.uid == resource.data.ownerUid
             || request.auth.uid in resource.data.sharedWith);
       allow create: if request.auth != null
         && request.resource.data.ownerUid == request.auth.uid;
