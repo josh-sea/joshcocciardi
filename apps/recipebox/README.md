@@ -1,6 +1,9 @@
-# Recipe Box
+# Gram & Pop's Recipe Box
 
-An electronic family recipe box, served at **/projects/recipebox**.
+An electronic family recipe box, served at **gramandpops.com** (its own
+Firebase Hosting site, target `gramandpops`, this directory at the root) and
+mirrored at **joshcocciardi.com/projects/recipebox** for the portfolio.
+Named for Josh's grandparents — Gram, and his grandpa, Pop.
 
 The idea: recipe cards, not recipe blogs. You write your recipes onto cards and
 keep them in your own box. Family and friends make their own boxes, you connect
