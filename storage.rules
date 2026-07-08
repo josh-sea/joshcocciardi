@@ -22,14 +22,20 @@ service firebase.storage {
       return request.resource.size < 5 * 1024 * 1024 // 5MB max
              && request.resource.contentType.matches('image/.*');
     }
-    
+
+    // Helper function to validate audio file (voice recordings)
+    function isValidAudio() {
+      return request.resource.size < 25 * 1024 * 1024 // 25MB max
+             && request.resource.contentType.matches('audio/.*');
+    }
+
     // User files path: users/{userId}/**
     match /users/{userId}/{allPaths=**} {
       // Allow read if authenticated user owns the files
       allow read: if isOwner(userId);
       
       // Allow write if authenticated user owns the files and file is valid
-      allow write: if isOwner(userId) && (isValidVideo() || isValidImage());
+      allow write: if isOwner(userId) && (isValidVideo() || isValidImage() || isValidAudio());
       
       // Allow delete if authenticated user owns the files
       allow delete: if isOwner(userId);

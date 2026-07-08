@@ -224,7 +224,7 @@ function recipeCardHtml(r, mine) {
         ${mine
           ? (sharedCount ? `<span title="Shared with ${sharedCount}">🤝 ${sharedCount}</span>` : '<span></span>')
           : `<span class="from-tag">from ${esc(r.ownerUsername || 'family')}’s box</span>`}
-        <span>${(r.media || []).some(m => m.type === 'video') ? '🎬' : ''}${photo ? '📷' : ''}</span>
+        <span>${(r.media || []).some(m => m.type === 'video') ? '🎬' : ''}${(r.media || []).some(m => m.type === 'audio') ? '🎙️' : ''}${photo ? '📷' : ''}</span>
       </div>
     </a>`;
 }
@@ -438,11 +438,20 @@ async function renderRecipe(view, id) {
           ${r.description ? `<p class="detail-desc">${esc(r.description)}</p>` : ''}
         </header>
 
-        ${media.length ? `<div class="media-strip">${media.map((m, i) =>
-          m.type === 'video'
+        ${media.some(m => m.type !== 'audio') ? `<div class="media-strip">${media.map((m, i) =>
+          m.type === 'audio' ? ''
+            : m.type === 'video'
             ? `<video class="media-thumb" src="${esc(m.url)}" data-media="${i}" preload="metadata" muted playsinline></video>`
             : `<img class="media-thumb" src="${esc(m.url)}" data-media="${i}" alt="" loading="lazy" />`
         ).join('')}</div>` : ''}
+
+        ${media.some(m => m.type === 'audio') ? `<section class="audio-section">
+          <h2>The recording</h2>
+          ${media.map((m, i) => m.type !== 'audio' ? '' : `<div class="audio-row">
+            <audio controls preload="none" src="${esc(m.url)}"></audio>
+            <button class="btn btn-ghost btn-sm" data-dl="${i}" title="Save the audio to this device">⬇ Save</button>
+          </div>`).join('')}
+        </section>` : ''}
 
         <div class="detail-columns">
           <section class="detail-ingredients">
@@ -459,6 +468,22 @@ async function renderRecipe(view, id) {
           <ul class="wisdom-list">${tipsOf(r).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>` : ''}
       </article>
     </section>`;
+
+  // Cross-origin <a download> is ignored by browsers, so pull the bytes and
+  // hand them over as a local object URL instead.
+  $$('[data-dl]').forEach(b => b.addEventListener('click', async () => {
+    const m = media[Number(b.dataset.dl)];
+    b.disabled = true;
+    try {
+      const blob = await (await fetch(m.url)).blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = ((m.path || '').split('/').pop() || 'recipe-audio').replace(/^\d+-/, '');
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    } catch { toast('Couldn’t fetch the audio to save it. Try again.', true); }
+    b.disabled = false;
+  }));
 
   $$('[data-media]').forEach(el => el.addEventListener('click', () => {
     const m = media[Number(el.dataset.media)];
@@ -949,16 +974,22 @@ function renderImport(view) {
         <div class="card-topline"></div>
         <h2 class="hand">🎙️ By voice</h2>
         <p class="import-sub">Hit record and talk it through — ingredients, steps, the little
-        secrets. Up to 5 minutes.</p>
+        secrets. Up to 5 minutes. Or bring a recording made somewhere else. Either way, the
+        audio gets attached to the card, so the voice is never lost.</p>
         <div class="record-row">
           <button id="rec-btn" class="btn btn-primary">● Start recording</button>
           <span id="rec-time" class="rec-time hidden">0:00</span>
+          <label class="btn btn-ghost file-btn">📎 Choose an audio file
+            <input id="import-audio" type="file" accept="audio/*" hidden />
+          </label>
         </div>
         <div id="rec-review" class="rec-review hidden">
+          <p id="rec-name" class="rec-name"></p>
           <audio id="rec-audio" controls></audio>
           <div class="form-actions">
             <button id="rec-use" class="btn btn-primary">✨ Make my card</button>
-            <button id="rec-again" class="btn btn-ghost">Record again</button>
+            <a id="rec-download" class="btn btn-ghost" download>⬇ Save audio</a>
+            <button id="rec-again" class="btn btn-ghost">Start over</button>
           </div>
         </div>
       </div>
@@ -1005,6 +1036,16 @@ function renderImport(view) {
   });
 
   // ── Voice ──
+  $('#import-audio').addEventListener('change', e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!f.type.startsWith('audio/')) { showError(`“${f.name}” isn't an audio file.`); return; }
+    $('#import-error').classList.add('hidden');
+    stopRecording(true);
+    showAudioReview(f, f.name);
+  });
+
   $('#rec-btn').addEventListener('click', async e => {
     $('#import-error').classList.add('hidden');
     if (recState?.rec?.state === 'recording') { recState.rec.stop(); return; }
@@ -1028,12 +1069,34 @@ function renderImport(view) {
     try {
       const AI = await import('./ai.js');
       const data = await AI.extractFromVoice(recState.blob);
-      state.importDraft = { data, files: [] };
+      // The recording rides along and gets attached to the card on save.
+      const audio = recState.blob instanceof File ? recState.blob
+        : new File([recState.blob], recState.name || 'recipe-recording.webm',
+                   { type: recState.blob.type || 'audio/webm' });
+      state.importDraft = { data, files: [], audio };
       recState = null;
       location.hash = '#/new';
     } catch (err) { showError(err.message); busy(e.target, false); }
   });
 }
+
+// Show a finished recording (or a chosen file) for review: playback, a
+// download link so it can be saved off the phone, and "make my card".
+function showAudioReview(blob, name) {
+  recState = { rec: null, chunks: [], timer: null, startedAt: 0, blob, name };
+  const url = URL.createObjectURL(blob);
+  $('#rec-audio').src = url;
+  const dl = $('#rec-download');
+  dl.href = url;
+  dl.download = name;
+  $('#rec-name').textContent = `🎙️ ${name}`;
+  $('#rec-review').classList.remove('hidden');
+}
+
+const extForMime = t => ({
+  'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a',
+  'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/wav': 'wav',
+}[(t || '').split(';')[0]] || 'webm');
 
 async function startRecording() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1049,11 +1112,10 @@ async function startRecording() {
     const btn = $('#rec-btn'), time = $('#rec-time');
     if (btn) { btn.textContent = '● Start recording'; btn.classList.remove('recording'); }
     if (time) time.classList.add('hidden');
-    recState.blob = new Blob(recState.chunks, { type: rec.mimeType || 'audio/webm' });
-    const audio = $('#rec-audio');
-    if (audio && recState.blob.size) {
-      audio.src = URL.createObjectURL(recState.blob);
-      $('#rec-review').classList.remove('hidden');
+    const blob = new Blob(recState.chunks, { type: rec.mimeType || 'audio/webm' });
+    if ($('#rec-audio') && blob.size) {
+      showAudioReview(blob,
+        `recipe-recording-${new Date().toISOString().slice(0, 10)}.${extForMime(blob.type)}`);
     }
   };
 
@@ -1096,7 +1158,8 @@ async function renderEdit(view, id) {
     state.importDraft = null;
     r = imported.data;
   }
-  state.editDraft = { files: imported ? [...imported.files] : [] };
+  state.editDraft = { files: imported
+    ? [...imported.files, ...(imported.audio ? [imported.audio] : [])] : [] };
 
   const cats = [...new Set([...(state.myRecipes || []).map(x => x.category).filter(Boolean),
                             'Dinner', 'Dessert', 'Breakfast', 'Baking', 'Sides', 'Drinks'])];
@@ -1144,12 +1207,12 @@ async function renderEdit(view, id) {
         </div>
 
         <div class="field">
-          <label>Photos &amp; videos <span class="opt">(photos ≤ 5 MB, videos ≤ 50 MB)</span></label>
+          <label>Photos, videos &amp; audio <span class="opt">(photos ≤ 5 MB, audio ≤ 25 MB, videos ≤ 50 MB)</span></label>
           <div id="media-list" class="media-edit-list">
             ${(r?.media || []).map((m, i) => mediaEditThumb(m, i)).join('')}
           </div>
-          <label class="btn btn-ghost btn-sm file-btn">📎 Add photo / video
-            <input id="f-media" type="file" accept="image/*,video/*" multiple hidden />
+          <label class="btn btn-ghost btn-sm file-btn">📎 Add photo / video / audio
+            <input id="f-media" type="file" accept="image/*,video/*,audio/*" multiple hidden />
           </label>
           <div id="pending-files" class="pending-files"></div>
         </div>
@@ -1186,7 +1249,7 @@ async function renderEdit(view, id) {
 
   function renderPendingFiles() {
     $('#pending-files').innerHTML = state.editDraft.files.map((f, i) =>
-      `<span class="pending-file">${f.type.startsWith('video/') ? '🎬' : '📷'} ${esc(f.name)}
+      `<span class="pending-file">${f.type.startsWith('video/') ? '🎬' : f.type.startsWith('audio/') ? '🎙️' : '📷'} ${esc(f.name)}
         <button type="button" data-unqueue="${i}" title="Remove">✕</button></span>`).join('');
     $$('[data-unqueue]').forEach(b => b.addEventListener('click', () => {
       state.editDraft.files.splice(Number(b.dataset.unqueue), 1);
@@ -1232,6 +1295,8 @@ async function renderEdit(view, id) {
 function mediaEditThumb(m, i) {
   const inner = m.type === 'video'
     ? `<video src="${esc(m.url)}" preload="metadata" muted playsinline></video>`
+    : m.type === 'audio'
+    ? `<span class="audio-chip" title="Audio recording">🎙️</span>`
     : `<img src="${esc(m.url)}" alt="" loading="lazy" />`;
   return `<span class="media-edit-thumb">${inner}
     <button type="button" class="media-edit-remove" data-idx="${i}" title="Remove">✕</button></span>`;

@@ -55,6 +55,7 @@ const MAX_GROUPS_PER_RECIPE = 4;
 // Mirrors the limits enforced by storage.rules.
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+const AUDIO_MAX_BYTES = 25 * 1024 * 1024;
 
 // Profile cache so every save doesn't re-fetch it.
 let _profileCache = null;
@@ -311,7 +312,9 @@ const Store = {
         const resp = await fetch(m.url);
         if (!resp.ok) throw new Error(`fetch ${resp.status}`);
         const blob = await resp.blob();
-        const contentType = blob.type || (m.type === 'video' ? 'video/mp4' : 'image/jpeg');
+        const contentType = blob.type
+          || { video: 'video/mp4', audio: 'audio/webm', image: 'image/jpeg' }[m.type]
+          || 'application/octet-stream';
         const baseName = (m.path || '').split('/').pop() || `${m.type}-${copied.length}`;
         const path = `users/${uid}/recipebox/${ref.id}/${Date.now()}-${baseName}`;
         const sref = storageRef(storage, path);
@@ -569,18 +572,23 @@ const Store = {
 
   async uploadMedia(recipeId, file) {
     const uid = _uid();
-    const isVideo = file.type.startsWith('video/');
-    const isImage = file.type.startsWith('image/');
-    if (!isVideo && !isImage) throw new Error(`“${file.name}” isn't a photo or video.`);
-    if (isImage && file.size > IMAGE_MAX_BYTES) throw new Error(`Photos are capped at 5 MB — “${file.name}” is too big.`);
-    if (isVideo && file.size > VIDEO_MAX_BYTES) throw new Error(`Videos are capped at 50 MB — “${file.name}” is too big.`);
+    const kind = file.type.startsWith('video/') ? 'video'
+      : file.type.startsWith('audio/') ? 'audio'
+      : file.type.startsWith('image/') ? 'image' : null;
+    if (!kind) throw new Error(`“${file.name}” isn't a photo, video, or audio clip.`);
+    const caps = {
+      image: [IMAGE_MAX_BYTES, 'Photos are capped at 5 MB'],
+      audio: [AUDIO_MAX_BYTES, 'Audio is capped at 25 MB'],
+      video: [VIDEO_MAX_BYTES, 'Videos are capped at 50 MB'],
+    };
+    if (file.size > caps[kind][0]) throw new Error(`${caps[kind][1]} — “${file.name}” is too big.`);
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-60);
     const path = `users/${uid}/recipebox/${recipeId}/${Date.now()}-${safeName}`;
     const ref = storageRef(storage, path);
     await uploadBytes(ref, file, { contentType: file.type });
     const url = await getDownloadURL(ref);
-    return { url, path, type: isVideo ? 'video' : 'image' };
+    return { url, path, type: kind };
   },
 
   async addMedia(recipeId, items) {

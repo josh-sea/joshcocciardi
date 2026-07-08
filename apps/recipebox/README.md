@@ -62,9 +62,10 @@ Queries filter on a single field only (`ownerUid ==`, `array-contains`) so no
 composite indexes are needed; sorting is client-side. Rules live in the root
 `firestore.rules`.
 
-Media uploads go to Storage under `users/{uid}/recipebox/{recipeId}/` (covered
-by the existing `storage.rules` size/type limits); docs store tokenized
-download URLs so shared viewers can see them.
+Media uploads go to Storage under `users/{uid}/recipebox/{recipeId}/` (root
+`storage.rules` caps: photos 5 MB, audio 25 MB, videos 50 MB); docs store
+tokenized download URLs so shared viewers can see them. Media items carry
+`type: image | video | audio`.
 
 ### AI import (`#/import`)
 
@@ -74,7 +75,10 @@ Two ways to bring an existing recipe in:
   photos); the AI reads it into card fields and the original photos are
   attached to the card, so the handwriting is preserved.
 - **By voice** — record someone talking through the recipe (MediaRecorder,
-  5-minute cap); the AI transcribes and structures it.
+  5-minute cap), or upload a recording made elsewhere; the AI transcribes
+  and structures it. The audio itself is attached to the card (so the voice
+  is preserved alongside the recipe) and can be saved back to a device from
+  the review screen or the card's "The recording" section.
 
 Both land on the normal `#/new` edit form as an unsaved draft for human
 review. Recipes in any language are kept in their original language (nonna's
