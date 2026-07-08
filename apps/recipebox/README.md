@@ -43,7 +43,9 @@ freeform `notes` shows as a single tip and migrates on next save).
 **Bio pages** (`#/u/username`): a person's page shows exactly what they've let
 you see — cards shared with you directly plus cards on group shelves you both
 stand at — topped by their words of wisdom (curated via `wisdom` on their
-profile; drawn from their visible cards until they curate).
+profile; drawn from their visible cards until they curate). Your own username
+redirects to My Box, which doubles as your page: the same wisdom card sits
+(editable) above your cards, so there's exactly one layout for "a box".
 
 **Group boxes** are shared shelves, deliberately separate from friendships:
 joining one never touches anyone's connections list. Everyone keeps exactly
@@ -54,9 +56,13 @@ tag). A card can sit in at most 4 group boxes — the security rules check
 membership with a fixed number of indexed lookups, since rules can't loop.
 
 A shared card can be **copied into your own box** ("Copy to my box"): a new
-doc owned by you, with media bytes re-uploaded into your own Storage area and
-`copiedFrom` recording whose card it was — so the copy survives unsharing,
-deletion, or the original owner's account going away.
+doc owned by you, with `copiedFrom` recording whose card it was. The card
+text is yours forever; media stays a *reference* to the original owner's
+files (tokenized URLs keep working regardless of sharing), so storage bytes
+are never duplicated — the trade-off is that if the owner deletes the card or
+their account, the attachments on the copy go dark. Deleting or editing a
+copy never touches the original's files: only Storage paths under your own
+`users/{uid}/` are ever deleted.
 
 Queries filter on a single field only (`ownerUid ==`, `array-contains`) so no
 composite indexes are needed; sorting is client-side. Rules live in the root
