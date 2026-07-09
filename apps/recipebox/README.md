@@ -72,9 +72,17 @@ composite indexes are needed; sorting is client-side. Rules live in the root
 `firestore.rules`.
 
 Media uploads go to Storage under `users/{uid}/recipebox/{recipeId}/` (root
-`storage.rules` caps: photos 5 MB, audio 25 MB, videos 50 MB); docs store
-tokenized download URLs so shared viewers can see them. Media items carry
-`type: image | video | audio`.
+`storage.rules` caps: photos 5 MB, audio 25 MB, videos 200 MB — a couple of
+minutes of phone footage); docs store tokenized download URLs so shared
+viewers can see them. Media items carry `type: image | video | audio`.
+Uploads are resumable with a live percentage on the save button, since a
+video-sized upload behind a plain spinner reads as a hang.
+
+**Video** is for preserving technique — how Gram mixes the dough by hand.
+The card form's "🎥 Record a video" button is a `capture` file input, so on a
+phone it opens the camera directly in video mode (on desktop it's a file
+picker); the clip queues alongside other attachments and uploads on save.
+Video thumbnails get a ▶ badge and open in the lightbox with controls.
 
 ### AI import (`#/import`)
 

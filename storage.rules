@@ -12,8 +12,10 @@ service firebase.storage {
     }
     
     // Helper function to validate video file
+    // (200MB ≈ a couple of minutes of phone footage — enough for a
+    // "how Gram mixes the dough" technique clip)
     function isValidVideo() {
-      return request.resource.size < 50 * 1024 * 1024 // 50MB max
+      return request.resource.size < 200 * 1024 * 1024 // 200MB max
              && request.resource.contentType.matches('video/.*');
     }
     

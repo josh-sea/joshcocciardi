@@ -507,7 +507,9 @@ async function renderRecipe(view, id) {
         ${media.some(m => m.type !== 'audio') ? `<div class="media-strip">${media.map((m, i) =>
           m.type === 'audio' ? ''
             : m.type === 'video'
-            ? `<video class="media-thumb" src="${esc(m.url)}" data-media="${i}" preload="metadata" muted playsinline></video>`
+            // #t=0.1 nudges iOS Safari into showing a first frame instead of a
+            // black box; the ▶ badge says "this one moves" at a glance.
+            ? `<span class="video-thumb" data-media="${i}"><video class="media-thumb" src="${esc(m.url)}#t=0.1" preload="metadata" muted playsinline></video><span class="play-badge">▶</span></span>`
             : `<img class="media-thumb" src="${esc(m.url)}" data-media="${i}" alt="" loading="lazy" />`
         ).join('')}</div>` : ''}
 
@@ -1217,13 +1219,19 @@ async function renderEdit(view, id) {
         </div>
 
         <div class="field">
-          <label>Photos, videos &amp; audio <span class="opt">(photos ≤ 5 MB, audio ≤ 25 MB, videos ≤ 50 MB)</span></label>
+          <label>Photos, videos &amp; audio <span class="opt">(photos ≤ 5 MB, audio ≤ 25 MB, videos ≤ 200 MB)</span></label>
           <div id="media-list" class="media-edit-list">
             ${(r?.media || []).map((m, i) => mediaEditThumb(m, i)).join('')}
           </div>
-          <label class="btn btn-ghost btn-sm file-btn">📎 Add photo / video / audio
-            <input id="f-media" type="file" accept="image/*,video/*,audio/*" multiple hidden />
-          </label>
+          <div class="media-add-btns">
+            <label class="btn btn-ghost btn-sm file-btn">📎 Add photo / video / audio
+              <input id="f-media" type="file" accept="image/*,video/*,audio/*" multiple hidden />
+            </label>
+            <label class="btn btn-ghost btn-sm file-btn">🎥 Record a video
+              <input id="f-video-capture" type="file" accept="video/*" capture="environment" hidden />
+            </label>
+          </div>
+          <p class="media-hint">A quick clip of the technique — how Gram mixes the dough by hand — belongs on the card. On a phone, “Record a video” opens the camera.</p>
           <div id="pending-files" class="pending-files"></div>
         </div>
 
@@ -1249,12 +1257,13 @@ async function renderEdit(view, id) {
     } catch (err) { toast(err.message, true); btn.disabled = false; }
   }));
 
-  // Queue new files; they upload on save.
-  $('#f-media').addEventListener('change', e => {
+  // Queue new files; they upload on save. The capture input is the same flow —
+  // on phones it opens the camera in video mode, on desktop it's a file picker.
+  ['f-media', 'f-video-capture'].forEach(fid => $('#' + fid).addEventListener('change', e => {
     for (const f of e.target.files) state.editDraft.files.push(f);
     e.target.value = '';
     renderPendingFiles();
-  });
+  }));
   if (state.editDraft.files.length) renderPendingFiles(); // photos from an import
 
   function renderPendingFiles() {
@@ -1284,8 +1293,13 @@ async function renderEdit(view, id) {
       };
       const recipeId = await Store.saveRecipe(id, data);
       if (state.editDraft.files.length) {
+        const files = state.editDraft.files;
         const items = [];
-        for (const f of state.editDraft.files) items.push(await Store.uploadMedia(recipeId, f));
+        for (const [i, f] of files.entries()) {
+          items.push(await Store.uploadMedia(recipeId, f, frac => {
+            btn.textContent = `Uploading ${i + 1} of ${files.length} — ${Math.round(frac * 100)}%`;
+          }));
+        }
         await Store.addMedia(recipeId, items);
       }
       // Keep group shelves showing the edited card (best-effort, off-path).
@@ -1304,7 +1318,7 @@ async function renderEdit(view, id) {
 
 function mediaEditThumb(m, i) {
   const inner = m.type === 'video'
-    ? `<video src="${esc(m.url)}" preload="metadata" muted playsinline></video>`
+    ? `<video src="${esc(m.url)}#t=0.1" preload="metadata" muted playsinline></video>`
     : m.type === 'audio'
     ? `<span class="audio-chip" title="Audio recording">🎙️</span>`
     : `<img src="${esc(m.url)}" alt="" loading="lazy" />`;
