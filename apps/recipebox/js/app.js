@@ -97,6 +97,9 @@ function route() {
   closeMenu();
   stopRecording(true); // never leave the mic running across a navigation
 
+  // The story behind the name — readable with or without a box of your own.
+  if (hash === '#/about') { setActiveTab(null); return renderAbout(view); }
+
   if (!state.user) { renderLanding(view); setActiveTab(null); return; }
 
   const m = hash.match(/^#\/(box|shared|people|new|recipe|edit|import|groups|group|u)(?:\/(.+))?$/);
@@ -143,9 +146,101 @@ function renderLanding(view) {
           <li>🚫 No blogs, no ads, no life story before the ingredients</li>
         </ul>
         <button id="landing-signin" class="btn btn-primary btn-big">Open your box</button>
+        <p class="landing-about"><a href="#/about">The story behind the name — about Gram &amp; Pop →</a></p>
       </div>
     </section>`;
   $('#landing-signin').addEventListener('click', () => openModal('auth-modal'));
+}
+
+// ── About: an ode to Gram & Pop ────────────────────────────────────────────
+
+function renderAbout(view) {
+  view.innerHTML = `
+    <section class="page page-narrow">
+      <article class="about-page card-paper">
+        <div class="card-topline"></div>
+        <h1 class="hand">About Gram &amp; Pop</h1>
+
+        <p class="about-lead">Gram &amp; Pop are the heart behind GramAndPops.com.</p>
+
+        <p>This website is in honor of and named after my grandparents, whose home
+        taught me that food is so much more than what ends up on your plate. It’s
+        love. It’s family. It’s tradition. It’s the stories we tell around the table
+        and the memories we carry long after the meal is over.</p>
+
+        <p>Growing up, every holiday meant gathering at Gram and Pop’s house. Before
+        dinner was even close to being ready, the kitchen was already overflowing
+        with incredible food. Both wall ovens were working overtime, every burner on
+        the stovetop had a pot or pan going, and every inch of counter space held
+        something delicious waiting to be served.</p>
+
+        <p>There were fresh mozzarella slices, crispy chicken cutlets, Swedish
+        meatballs, and countless family favorites that somehow disappeared before we
+        ever sat down for dinner. We always ate far too much before the meal
+        officially began — but no one could resist. Everything Gram made tasted
+        like home.</p>
+
+        <p>My grandparents owned a neighborhood deli for many years, where my dad
+        worked growing up. Their love of food, cooking, and bringing people together
+        became part of our family’s DNA, and it eventually became part of mine.</p>
+
+        <p>Walking into their house was its own tradition. My brothers and I would
+        ring the doorbell over and over, flick the porch lights, and wait for the
+        inevitable reaction. Gram would excitedly call out from inside while Pop
+        would open the door with the biggest smile and his unmistakable greeting:</p>
+
+        <p class="about-callout hand">“HIYAAA JOSH!”</p>
+
+        <p>Every visit started with laughter, hugs, and the feeling that you were
+        exactly where you belonged.</p>
+
+        <p>Pop passed away while I was in college, and I still think about him
+        often. Even reading his famous greeting fills my ears with his voice and my
+        heart with warmth.</p>
+
+        <p>After Pop passed, Gram showed all of us what resilience looks like. She
+        had been married at just 17 years old and suddenly had to learn how to live
+        life on her own. Instead of slowing down, she embraced it. She got a tattoo,
+        made new memories, and reminded all of us that life is precious and far too
+        short not to enjoy it.</p>
+
+        <p>Today, she’s still the incredible storyteller she’s always been. Watching
+        our boys cook with their great-grandma right before she plays pie in the
+        face is something I will never forget.</p>
+
+        <p>My wife’s grandparents have all passed away, which makes every moment we
+        have with Gram even more meaningful. Watching our children learn or at least
+        enjoy her recipes, hear her stories, and laugh with her reminds us just how
+        important these connections are.</p>
+
+        <p class="about-why">That’s why I built GramAndPops.com.</p>
+
+        <p>Every recipe card holds more than ingredients, it holds a memory. A
+        handwritten note. A family tradition. A story worth passing down. I wanted
+        to create a place where families could preserve those recipes the same way
+        so many of us grew up: tucked inside a recipe box, shared with the people we
+        love most.</p>
+
+        <p>This website is my way of honoring Gram and Pop, preserving their legacy,
+        and celebrating every family whose love has been shared through food.</p>
+
+        <p>I hope GramAndPops.com helps keep those recipes alive, sparks
+        conversations across generations, and preserves the stories that make every
+        family unique.</p>
+
+        <div class="about-toast">
+          <p class="hand">Here’s to all the Grams and Pops who filled our homes with
+          incredible food, unforgettable memories, and unconditional love.</p>
+        </div>
+
+        <div class="about-actions">
+          ${state.user
+            ? `<a class="btn btn-primary" href="#/box">Back to my box</a>`
+            : `<button id="about-signin" class="btn btn-primary btn-big">Open your box</button>`}
+        </div>
+      </article>
+    </section>`;
+  $('#about-signin')?.addEventListener('click', () => openModal('auth-modal'));
 }
 
 // ── My Box ─────────────────────────────────────────────────────────────────

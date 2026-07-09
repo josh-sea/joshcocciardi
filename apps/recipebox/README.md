@@ -24,7 +24,9 @@ no build step, Firebase SDK from the CDN.
 - `index.html` — shell, modals, `StoreReady` bootstrap
 - `js/store.js` — Firebase auth (Google + email), Firestore, Storage
 - `js/app.js` — hash-routed UI (`#/box`, `#/shared`, `#/groups`, `#/group/:id`,
-  `#/people`, `#/u/:username`, `#/recipe/:id`, `#/new`, `#/edit/:id`, `#/import`)
+  `#/people`, `#/u/:username`, `#/recipe/:id`, `#/new`, `#/edit/:id`, `#/import`,
+  and `#/about` — the ode to Gram and Pop the site is named for, readable
+  without signing in; linked from the landing card and the site footer)
 - `js/ai.js` — AI import (lazily loaded; see below)
 - `css/styles.css` — index-card aesthetic
 
