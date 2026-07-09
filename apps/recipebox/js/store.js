@@ -15,7 +15,7 @@ import {
   arrayUnion, arrayRemove, deleteField,
 } from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js';
 import {
-  getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject,
+  getStorage, ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject,
 } from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-storage.js';
 
 const firebaseConfig = {
@@ -54,7 +54,7 @@ const MAX_GROUPS_PER_RECIPE = 4;
 
 // Mirrors the limits enforced by storage.rules.
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-const VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+const VIDEO_MAX_BYTES = 200 * 1024 * 1024;
 const AUDIO_MAX_BYTES = 25 * 1024 * 1024;
 
 // Profile cache so every save doesn't re-fetch it.
@@ -555,7 +555,9 @@ const Store = {
   // Docs store tokenized download URLs, so people a card is shared with can
   // see its photos and videos without extra storage rules.
 
-  async uploadMedia(recipeId, file) {
+  // onProgress (optional) gets a 0–1 fraction as bytes go up — videos can be
+  // a couple hundred MB, and a silent spinner reads as a hang.
+  async uploadMedia(recipeId, file, onProgress) {
     const uid = _uid();
     const kind = file.type.startsWith('video/') ? 'video'
       : file.type.startsWith('audio/') ? 'audio'
@@ -564,14 +566,19 @@ const Store = {
     const caps = {
       image: [IMAGE_MAX_BYTES, 'Photos are capped at 5 MB'],
       audio: [AUDIO_MAX_BYTES, 'Audio is capped at 25 MB'],
-      video: [VIDEO_MAX_BYTES, 'Videos are capped at 50 MB'],
+      video: [VIDEO_MAX_BYTES, 'Videos are capped at 200 MB'],
     };
     if (file.size > caps[kind][0]) throw new Error(`${caps[kind][1]} — “${file.name}” is too big.`);
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-60);
     const path = `users/${uid}/recipebox/${recipeId}/${Date.now()}-${safeName}`;
     const ref = storageRef(storage, path);
-    await uploadBytes(ref, file, { contentType: file.type });
+    const task = uploadBytesResumable(ref, file, { contentType: file.type });
+    await new Promise((resolve, reject) => {
+      task.on('state_changed',
+        snap => onProgress?.(snap.bytesTransferred / (snap.totalBytes || 1)),
+        reject, resolve);
+    });
     const url = await getDownloadURL(ref);
     return { url, path, type: kind };
   },
