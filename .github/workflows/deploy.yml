@@ -9,10 +9,15 @@
 #      value: the entire contents of that JSON file
 #
 # What it deploys (mirrors ./deploy.sh):
-#   - copies the static apps (playball, canitwo) into portfolio/public
+#   - copies the static apps (playball, canitwo, recipebox) into portfolio/public
 #   - builds the portfolio (built copies of email/moments are already
 #     committed under apps/portfolio/public/projects/)
-#   - firebase deploy --only hosting,firestore:rules,functions:rules
+#   - firebase deploy --only hosting,firestore:rules,storage,functions
+#
+# Hosting is multi-site (targets in firebase.json / .firebaserc):
+#   - portfolio   → joshcocciardi.com (apps/portfolio/build, includes
+#                   the /projects/* mirrors of the static apps)
+#   - gramandpops → gramandpops.com (apps/recipebox served at the root)
 #
 # Indexes are deliberately NOT deployed from CI: the project has indexes
 # that aren't captured in firestore.indexes.json, and a non-interactive

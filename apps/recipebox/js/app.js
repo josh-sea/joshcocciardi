@@ -384,7 +384,7 @@ async function renderPeople(view) {
           </span>
         </div>`).join('')
       : `<p class="muted">No connections yet. Send a request above, or tell your family to make a box at
-         <b>joshcocciardi.com/projects/recipebox</b> and ask for your username.</p>`}
+         <b>gramandpops.com</b> and ask for your username.</p>`}
 
       ${outgoing.length ? `<h2 class="section-head">Waiting on them</h2>` +
         outgoing.map(c => `

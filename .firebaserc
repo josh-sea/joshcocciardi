@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "josh-cocciardi"
+  },
+  "targets": {
+    "josh-cocciardi": {
+      "hosting": {
+        "portfolio": [
+          "josh-cocciardi"
+        ],
+        "gramandpops": [
+          "gramandpops"
+        ]
+      }
+    }
   }
 }

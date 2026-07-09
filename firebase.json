@@ -1,71 +1,101 @@
 {
-  "hosting": {
-    "public": "apps/portfolio/build",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/projects/moments/**",
-        "destination": "/projects/moments/index.html"
-      },
-      {
-        "source": "/projects/electronic-mail/**",
-        "destination": "/projects/electronic-mail/index.html"
-      },
-      {
-        "source": "/projects/playball/**",
-        "destination": "/projects/playball/index.html"
-      },
-      {
-        "source": "/projects/canitwo/**",
-        "destination": "/projects/canitwo/index.html"
-      },
-      {
-        "source": "/projects/recipebox/**",
-        "destination": "/projects/recipebox/index.html"
-      },
-      {
-        "source": "!/projects/**",
-        "destination": "/index.html"
-      }
-    ],
-    "headers": [
-      {
-        "source": "/projects/moments/**",
-        "headers": [
-          {
-            "key": "Cross-Origin-Opener-Policy",
-            "value": "same-origin"
-          },
-          {
-            "key": "Cross-Origin-Embedder-Policy",
-            "value": "require-corp"
-          }
-        ]
-      },
-      {
-        "source": "/projects/canitwo/**/*.@(js|css)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache"
-          }
-        ]
-      },
-      {
-        "source": "/projects/recipebox/**/*.@(js|css)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "no-cache"
-          }
-        ]
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "portfolio",
+      "public": "apps/portfolio/build",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "/projects/moments/**",
+          "destination": "/projects/moments/index.html"
+        },
+        {
+          "source": "/projects/electronic-mail/**",
+          "destination": "/projects/electronic-mail/index.html"
+        },
+        {
+          "source": "/projects/playball/**",
+          "destination": "/projects/playball/index.html"
+        },
+        {
+          "source": "/projects/canitwo/**",
+          "destination": "/projects/canitwo/index.html"
+        },
+        {
+          "source": "/projects/recipebox/**",
+          "destination": "/projects/recipebox/index.html"
+        },
+        {
+          "source": "!/projects/**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "/projects/moments/**",
+          "headers": [
+            {
+              "key": "Cross-Origin-Opener-Policy",
+              "value": "same-origin"
+            },
+            {
+              "key": "Cross-Origin-Embedder-Policy",
+              "value": "require-corp"
+            }
+          ]
+        },
+        {
+          "source": "/projects/canitwo/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/projects/recipebox/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "gramandpops",
+      "public": "apps/recipebox",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "README.md"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

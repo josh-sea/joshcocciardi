@@ -18,10 +18,13 @@
 #   apps/moment-capture/ - Moment capture app (Vite) → served at /projects/moments
 #   apps/playball/    - Playball walk-up music app (static) → served at /projects/playball
 #   apps/canitwo/     - CanITwo bathroom finder (static) → served at /projects/canitwo
-#   apps/recipebox/   - Recipe Box family recipe cards (static) → served at /projects/recipebox
+#   apps/recipebox/   - Gram & Pop's Recipe Box (static) → gramandpops.com,
+#                       mirrored at /projects/recipebox
 #
-# Firebase deploys from: apps/portfolio/build/
-# All sub-apps are built into apps/portfolio/public/ before portfolio builds.
+# Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
+# (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
+# and the "gramandpops" target deploys apps/recipebox/ directly at the root
+# of gramandpops.com. `firebase deploy --only hosting` pushes both.
 
 set -e
 
@@ -106,6 +109,7 @@ deploy_hosting() {
     echo ""
     echo "Live URLs:"
     echo "  Portfolio:      https://www.joshcocciardi.com"
+    echo "  Gram & Pop's:   https://gramandpops.com  (Recipe Box at the root)"
     echo "  Email:          https://www.joshcocciardi.com/projects/electronic-mail"
     echo "  Moments:        https://www.joshcocciardi.com/projects/moments"
     echo "  Playball:       https://www.joshcocciardi.com/projects/playball"
