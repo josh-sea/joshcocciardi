@@ -290,6 +290,36 @@ a { color: var(--red-deep); }
 }
 .pending-file button { border: none; background: none; cursor: pointer; color: var(--ink-soft); font-size: .8rem; }
 
+/* ── About: an ode to Gram & Pop ─────────────────────────────────────────── */
+
+.about-page { padding: 0 clamp(1.2rem, 5vw, 2.6rem) 2rem; }
+.about-page .card-topline { margin: 0 clamp(-2.6rem, -5vw, -1.2rem); }
+.about-page h1 { font-size: clamp(2.4rem, 7vw, 3.2rem); margin: 1.1rem 0 .9rem; }
+.about-page p { font-size: .97rem; line-height: 1.65; margin-bottom: 1rem; }
+.about-lead { font-size: 1.12rem !important; font-weight: 700; color: var(--red-deep); }
+.about-callout {
+  font-size: clamp(2rem, 8vw, 2.8rem); line-height: 1.15; text-align: center;
+  color: var(--red-deep); margin: 1.4rem 0 !important;
+}
+.about-why { font-weight: 800; font-size: 1.05rem !important; }
+.about-toast {
+  margin: 1.6rem 0 0; padding: 1rem 1.3rem; text-align: center;
+  background: #fdf6e3; border: 1px dashed #e3d3a9; border-radius: 8px;
+}
+.about-toast p { font-size: clamp(1.3rem, 4.5vw, 1.6rem); line-height: 1.35; color: #6b5d3f; margin: 0; }
+.about-actions { display: flex; justify-content: center; margin-top: 1.6rem; }
+
+.landing-about { margin-top: 1.1rem; font-size: .88rem; }
+.landing-about a { color: var(--ink-soft); text-decoration: underline; text-underline-offset: 3px; }
+.landing-about a:hover { color: var(--red-deep); }
+
+#site-foot { text-align: center; padding: 2rem 1rem 2.4rem; }
+#site-foot a {
+  font-size: .82rem; color: var(--ink-soft); text-decoration: none;
+  border-bottom: 1px dashed var(--paper-edge); padding-bottom: 2px;
+}
+#site-foot a:hover { color: var(--red-deep); border-bottom-color: var(--red-deep); }
+
 /* ── People ──────────────────────────────────────────────────────────────── */
 
 .connect-form { display: flex; gap: .6rem; margin-bottom: .6rem; }
