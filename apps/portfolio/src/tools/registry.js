@@ -18,6 +18,14 @@ const tools = [
     added: "2026-07-09",
     component: lazy(() => import("./income-inequality")),
   },
+  {
+    slug: "analyzer",
+    title: "The Hit Field",
+    description:
+      "Little League batted-ball physics: hit probability heat map, field simulator, and player luck report from an in-browser logistic regression.",
+    added: "2026-07-11",
+    component: lazy(() => import("./analyzer")),
+  },
 ];
 
 export default tools;

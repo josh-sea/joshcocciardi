@@ -1,6 +1,6 @@
 import React from "react";
 import { Menu, Container, Segment } from "semantic-ui-react";
-import { BrowserRouter as Router, Route, Routes, Link, Outlet } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes, Link, Outlet, Navigate } from "react-router-dom";
 import About from "./components/about";
 import Projects from "./components/projects";
 import Contact from "./components/contact";
@@ -45,6 +45,8 @@ const App = () => {
           <Route path="/tools" element={<ToolsIndex />} />
         </Route>
         <Route path="/tools/:slug" element={<ToolPage />} />
+        {/* short vanity path for the Hit Field analyzer */}
+        <Route path="/analyzer" element={<Navigate to="/tools/analyzer" replace />} />
       </Routes>
     </Router>
   );
