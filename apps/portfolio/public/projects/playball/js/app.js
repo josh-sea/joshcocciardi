@@ -698,9 +698,58 @@ function addTrack(track) {
 
 // ── Spotify playlist import ────────────────────────────────────────────────
 
-function _isScopeErr(e) {
+// Classify a failed Spotify call:
+//   'reauth'  — a fresh login can actually fix it (expired/revoked token,
+//               or the token is missing the scopes we need)
+//   'blocked' — Spotify is refusing this account (e.g. the app is in
+//               Development Mode and the account isn't on its user list);
+//               reconnecting will never fix it, so don't loop on it
+//   null      — something else (network, bad data…)
+function _authErrKind(e) {
   const m = (e.message || '').toLowerCase();
-  return m.includes('forbidden') || m.includes('403') || m.includes('scope') || m.includes('denied');
+  if (e.status === 401) return 'reauth';
+  if (e.status === 403 || m.includes('forbidden') || m.includes('403')) {
+    if (m.includes('scope') ||
+        SpotifyAuth.missingScopes(['playlist-read-private', 'playlist-read-collaborative']).length)
+      return 'reauth';
+    return 'blocked';
+  }
+  if (m.includes('scope') || m.includes('denied')) return 'reauth';
+  return null;
+}
+
+function _blockedHtml(e, pad) {
+  const who = S.user?.email || S.user?.id || 'the Spotify account you\'re logged in with';
+  return `<div style="padding:${pad};text-align:left">
+    <p style="color:var(--muted);margin-bottom:10px;line-height:1.6">
+      Spotify refused this request — <strong>reconnecting won't fix it</strong>, so no
+      point asking you to log in again.
+    </p>
+    <p style="font-size:12px;margin-bottom:12px;line-height:1.5">
+      Error: <code style="word-break:break-word">${esc(e.message)}</code>
+    </p>
+    <p style="color:var(--muted);font-size:12px;line-height:1.7;margin-bottom:14px">
+      A 403 like this usually means the Spotify app is in <strong>Development Mode</strong>
+      and <strong>${esc(who)}</strong> isn't on its allowed-user list. To fix:<br>
+      1. Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">developer.spotify.com/dashboard</a> (as the app's owner)<br>
+      2. Open the app → <strong>User Management</strong><br>
+      3. Add the name + email of <strong>${esc(who)}</strong><br>
+      Then just retry the import — no reconnect needed.
+    </p>
+    <div style="text-align:center">
+      <button class="reauth-trigger btn btn-secondary btn-sm">Reconnect anyway</button>
+    </div>
+  </div>`;
+}
+
+// Renders the right recovery UI for an auth-ish error. Returns false when the
+// error isn't auth-related so the caller can show its own message.
+function _renderAuthError(container, e, pad) {
+  const kind = _authErrKind(e);
+  if (!kind) return false;
+  container.innerHTML = kind === 'reauth' ? _reauthHtml(pad) : _blockedHtml(e, pad);
+  _bindReauth(container);
+  return true;
 }
 
 function _reauthHtml(pad) {
@@ -732,8 +781,9 @@ async function openImportModal() {
     renderImportList(playlists);
   } catch (e) {
     const el = $('import-list');
-    if (_isScopeErr(e)) { el.innerHTML = _reauthHtml('24px'); _bindReauth(el); }
-    else el.innerHTML = `<p class="hint" style="padding:20px;color:var(--danger)">Error: ${esc(e.message)}</p>`;
+    console.error('openImportModal failed:', e.status, e.message, '\nStored scopes:', localStorage.getItem('sp_scopes'));
+    if (!_renderAuthError(el, e, '24px'))
+      el.innerHTML = `<p class="hint" style="padding:20px;color:var(--danger)">Error: ${esc(e.message)}</p>`;
   }
 }
 
@@ -793,14 +843,14 @@ async function importPlaylist(spotifyId, name) {
   } catch (e) {
     const el = $('import-list');
     const storedScopes = localStorage.getItem('sp_scopes') || '(none stored)';
-    console.error('importPlaylist failed:', e.message, '\nStored scopes:', storedScopes);
-    if (_isScopeErr(e)) {
-      el.innerHTML = _reauthHtml('24px') +
+    console.error('importPlaylist failed:', e.status, e.message, '\nStored scopes:', storedScopes);
+    if (_renderAuthError(el, e, '24px')) {
+      el.innerHTML +=
         `<p style="font-size:11px;color:var(--muted);text-align:center;padding:4px 16px 12px;line-height:1.5">
           Error: <code>${esc(e.message)}</code><br>
           Scopes: <code style="word-break:break-all">${esc(storedScopes)}</code>
         </p>`;
-      _bindReauth(el);
+      _bindReauth(el); // innerHTML += re-created the nodes; rebind the button
     } else {
       el.innerHTML = `<p class="hint" style="padding:20px;color:var(--danger)">Error: ${esc(e.message)}</p>`;
     }
@@ -867,9 +917,12 @@ async function syncPlaylistToSpotify() {
     if (S.fbUser) await savePlaylist(true); // persist the spotifyId link
     renderSidebar(); renderEditor();
   } catch (e) {
-    if (_isScopeErr(e)) {
+    const kind = _authErrKind(e);
+    if (kind === 'reauth') {
       toast('Needs playlist permissions — re-authorizing…', '');
       setTimeout(() => { SpotifyAuth.logout(); SpotifyAuth.login(true); }, 1500);
+    } else if (kind === 'blocked') {
+      toast('Spotify refused access — add this account under User Management in the Spotify dev dashboard. (' + e.message + ')', 'error');
     } else {
       toast('Sync failed: ' + e.message, 'error');
     }
@@ -975,8 +1028,8 @@ async function toggleLineupPicker() {
       el.addEventListener('click', () => loadLineupPlaylist(el.dataset.id, el.dataset.name))
     );
   } catch (e) {
-    if (_isScopeErr(e)) { picker.innerHTML = _reauthHtml('14px'); _bindReauth(picker); }
-    else picker.innerHTML = `<p class="hint" style="padding:14px;color:var(--danger)">Error: ${esc(e.message)}</p>`;
+    if (!_renderAuthError(picker, e, '14px'))
+      picker.innerHTML = `<p class="hint" style="padding:14px;color:var(--danger)">Error: ${esc(e.message)}</p>`;
   }
 }
 
@@ -1104,9 +1157,12 @@ async function syncLineupToSpotify(auto = false) {
     lineupStatus('✓ Order synced to Spotify', 'ok');
     if (!auto) toast('Playlist order synced to Spotify!', 'success');
   } catch (e) {
-    if (_isScopeErr(e)) {
+    const kind = _authErrKind(e);
+    if (kind === 'reauth') {
       toast('Needs playlist permissions — re-authorizing…', '');
       setTimeout(() => { SpotifyAuth.logout(); SpotifyAuth.login(true); }, 1500);
+    } else if (kind === 'blocked') {
+      lineupStatus('Spotify refused access — see the dev dashboard\'s User Management. (' + e.message + ')', 'err');
     } else {
       lineupStatus('Sync failed: ' + e.message, 'err');
       if (!auto) toast('Sync failed: ' + e.message, 'error');
@@ -1268,13 +1324,19 @@ window.addEventListener('beforeinstallprompt', e => {
 
   initStore(); // fire-and-forget; auth state callback wires up the rest
 
-  const params = new URLSearchParams(window.location.search);
-  const code   = params.get('code');
-  if (code) {
+  const params  = new URLSearchParams(window.location.search);
+  const code    = params.get('code');
+  const authErr = params.get('error');
+  if (code || authErr) {
     history.replaceState({}, '', window.location.pathname);
-    try { await SpotifyAuth.handleCallback(code); await launchApp(); }
-    catch (e) { toast('Login failed: ' + e.message, 'error'); console.error(e); }
-    return;
+    if (code) {
+      // On failure fall through to the login screen (with a working button)
+      // instead of leaving the user on a dead page.
+      try { await SpotifyAuth.handleCallback(code); await launchApp(); return; }
+      catch (e) { toast('Spotify login failed: ' + e.message, 'error'); console.error(e); }
+    } else {
+      toast('Spotify login was cancelled or denied.', 'error');
+    }
   }
 
   if (SpotifyAuth.isLoggedIn()) { await launchApp(); return; }
