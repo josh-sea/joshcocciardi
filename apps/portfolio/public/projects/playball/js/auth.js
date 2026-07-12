@@ -203,22 +203,32 @@ const SpotifyAuth = (() => {
     return items;
   }
 
-  // All track objects for a playlist (paginated, filters out local/unavailable files)
+  // All track objects for a playlist (paginated, filters out local/unavailable
+  // files). Spotify's Feb/March 2026 API migration renamed
+  // /playlists/{id}/tracks → /playlists/{id}/items (entries expose `item`
+  // instead of `track`); the old path now returns a bare 403 for dev-mode
+  // apps. Falls back to the old path only on 404 (endpoint unknown).
   async function getPlaylistTracks(playlistId) {
     const items = [];
-    let url = `/playlists/${encodeURIComponent(playlistId)}/tracks?limit=100`;
+    let url = `/playlists/${encodeURIComponent(playlistId)}/items?limit=100`;
     while (url && items.length < 1000) {
-      const data = await apiCall(url);
+      let data;
+      try {
+        data = await apiCall(url);
+      } catch (e) {
+        if (e.status === 404 && url.includes('/items?')) { url = url.replace('/items?', '/tracks?'); continue; }
+        throw e;
+      }
       items.push(...(data.items || []));
       url = data.next ? data.next.replace('https://api.spotify.com/v1', '') : null;
     }
-    return items.map(i => i.track).filter(t => t?.id);
+    return items.map(i => i.item || i.track).filter(t => t?.id);
   }
 
   // Replace a Spotify playlist's contents with the given track URIs (in order).
   // PUT replaces with the first 100; any remainder is appended in chunks of 100.
   async function replacePlaylistTracks(playlistId, trackUris) {
-    const base = `/playlists/${encodeURIComponent(playlistId)}/tracks`;
+    const base = `/playlists/${encodeURIComponent(playlistId)}/items`;
     await apiCall(base, { method: 'PUT', body: JSON.stringify({ uris: trackUris.slice(0, 100) }) });
     for (let i = 100; i < trackUris.length; i += 100) {
       await apiCall(base, { method: 'POST', body: JSON.stringify({ uris: trackUris.slice(i, i + 100) }) });
@@ -226,13 +236,19 @@ const SpotifyAuth = (() => {
   }
 
   // Create a new (private) playlist on the user's account. Returns its id.
+  // POST /me/playlists per the 2026 migration; falls back to the legacy
+  // /users/{id}/playlists path if the new one isn't recognized.
   async function createPlaylist(name, description = '') {
-    const me = await getUser();
-    const d  = await apiCall(`/users/${encodeURIComponent(me.id)}/playlists`, {
-      method: 'POST',
-      body: JSON.stringify({ name, description, public: false }),
-    });
-    return d.id;
+    const body = JSON.stringify({ name, description, public: false });
+    try {
+      const d = await apiCall('/me/playlists', { method: 'POST', body });
+      return d.id;
+    } catch (e) {
+      if (e.status !== 404 && e.status !== 403) throw e;
+      const me = await getUser();
+      const d  = await apiCall(`/users/${encodeURIComponent(me.id)}/playlists`, { method: 'POST', body });
+      return d.id;
+    }
   }
 
   return { login, handleCallback, getToken, isLoggedIn, logout, getUser,

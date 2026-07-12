@@ -1,4 +1,4 @@
-const CACHE = 'playball-v3';
+const CACHE = 'playball-v4';
 const SHELL = [
   './',
   './index.html',
