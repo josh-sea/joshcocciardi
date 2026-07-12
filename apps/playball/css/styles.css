@@ -431,8 +431,12 @@ code { background: #111; border-radius: 4px; padding: 1px 5px; font-size: 12px; 
   .t-rm-btn   { width: 28px; height: 28px; font-size: 20px; }
   .lineup { display: none; width: 100%; border-left: none; }
   .lineup.mob-active { display: flex; flex: 1; }
-  #app.show-lineup .editor { display: flex; }   /* reset desktop rule */
-  #app.show-lineup .lineup { display: none; }   /* mobile uses mob-active instead */
+  /* On mobile each tab is its own full-height view: only mob-active decides
+     visibility, so show-lineup must never resurrect the editor (was causing
+     an editor/lineup split screen on the Lineup tab). */
+  #app.show-lineup .editor { display: none; }
+  #app.show-lineup .editor.mob-active { display: flex; flex: 1; }
+  #app.show-lineup .lineup { display: none; }
   #app.show-lineup .lineup.mob-active { display: flex; flex: 1; }
   .lu-name { width: 130px; }
 }
