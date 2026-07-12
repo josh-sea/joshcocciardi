@@ -729,12 +729,15 @@ function _blockedHtml(e, pad) {
       Error: <code style="word-break:break-word">${esc(e.message)}</code>
     </p>
     <p style="color:var(--muted);font-size:12px;line-height:1.7;margin-bottom:14px">
-      A 403 like this usually means the Spotify app is in <strong>Development Mode</strong>
-      and <strong>${esc(who)}</strong> isn't on its allowed-user list. To fix:<br>
-      1. Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">developer.spotify.com/dashboard</a> (as the app's owner)<br>
-      2. Open the app → <strong>User Management</strong><br>
-      3. Add the name + email of <strong>${esc(who)}</strong><br>
-      Then just retry the import — no reconnect needed.
+      Since Spotify's 2026 API change, an app can only read playlists
+      <strong>you created or collaborate on</strong> (as <strong>${esc(who)}</strong>).
+      Spotify-made playlists (Discover Weekly, Daily Mix…) and playlists you merely
+      follow can't be imported at all. Workaround: in the Spotify app, open the
+      playlist → <strong>⋯ → Add to other playlist → New playlist</strong>, then
+      import your copy here.<br><br>
+      If this is a playlist you own, check instead that <strong>${esc(who)}</strong>
+      is listed under <strong>User Management</strong> for this app at
+      <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">developer.spotify.com/dashboard</a>.
     </p>
     <div style="text-align:center">
       <button class="reauth-trigger btn btn-secondary btn-sm">Reconnect anyway</button>
@@ -794,17 +797,23 @@ function renderImportList(playlists) {
   }
   $('import-list').innerHTML = playlists.map(pl => {
     const img   = pl.images?.[0]?.url || '';
-    const count = pl.tracks?.total;
+    const count = pl.tracks?.total ?? pl.items?.total;
     const countStr = count != null ? `${count} track${count !== 1 ? 's' : ''}` : '';
+    // Spotify's 2026 policy: an app can only read the contents of playlists
+    // the user created or collaborates on. Flag the rest so a failed tap
+    // isn't a surprise (still tappable — collaborator detection is fuzzy).
+    const readable = !S.user || pl.owner?.id === S.user.id || pl.collaborative;
+    const metaStr  = readable ? countStr
+      : `not importable — ${pl.owner?.id === 'spotify' ? 'made by Spotify' : 'not your playlist'}`;
     return `
-      <div class="import-pl-item" data-id="${pl.id}" data-name="${esc(pl.name)}">
+      <div class="import-pl-item" data-id="${pl.id}" data-name="${esc(pl.name)}"${readable ? '' : ' style="opacity:.45"'}>
         ${img
           ? `<img class="import-pl-img" src="${img}" alt="" loading="lazy" />`
           : `<div class="import-pl-img import-pl-img--empty"></div>`
         }
         <div class="import-pl-info">
           <div class="import-pl-name">${esc(pl.name)}</div>
-          ${countStr ? `<div class="import-pl-meta">${countStr}</div>` : ''}
+          ${metaStr ? `<div class="import-pl-meta">${esc(metaStr)}</div>` : ''}
         </div>
         <span class="import-pl-arrow">›</span>
       </div>`;
