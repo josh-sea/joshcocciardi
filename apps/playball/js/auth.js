@@ -49,7 +49,10 @@ const SpotifyAuth = (() => {
   async function login(forceDialog = false) {
     const verifier  = rand(64);
     const challenge = b64url(await sha256(verifier));
+    // Both storages: sessionStorage can be lost when the OAuth round trip
+    // lands in a different browsing context (installed PWA ↔ in-app browser).
     sessionStorage.setItem(KEYS.verifier, verifier);
+    try { localStorage.setItem(KEYS.verifier, verifier); } catch (_) {}
     const params = {
       client_id: clientId(), response_type: 'code',
       redirect_uri: redirectUri(), scope: SCOPES,
@@ -60,7 +63,7 @@ const SpotifyAuth = (() => {
   }
 
   async function handleCallback(code) {
-    const verifier = sessionStorage.getItem(KEYS.verifier);
+    const verifier = sessionStorage.getItem(KEYS.verifier) || localStorage.getItem(KEYS.verifier);
     if (!verifier) throw new Error('No PKCE verifier — try logging in again.');
     const res = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
@@ -77,17 +80,26 @@ const SpotifyAuth = (() => {
     const data = await res.json();
     _storeTokens(data);
     sessionStorage.removeItem(KEYS.verifier);
+    localStorage.removeItem(KEYS.verifier);
+  }
+
+  // Error with the HTTP status attached, so callers can tell "needs a fresh
+  // login" (401 / missing scope) apart from "Spotify refuses this account".
+  function _apiErr(message, status) {
+    const e = new Error(message);
+    e.status = status;
+    return e;
   }
 
   async function _refresh() {
     const rt = localStorage.getItem(KEYS.refresh);
-    if (!rt) throw new Error('No refresh token');
+    if (!rt) throw _apiErr('Not connected to Spotify — please log in.', 401);
     const res = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: clientId(), grant_type: 'refresh_token', refresh_token: rt }),
     });
-    if (!res.ok) throw new Error('Token refresh failed — please log in again.');
+    if (!res.ok) throw _apiErr('Spotify session expired — please reconnect.', 401);
     const data = await res.json();
     _storeTokens(data);
     return data.access_token;
@@ -102,6 +114,15 @@ const SpotifyAuth = (() => {
 
   function hasScope(scope) {
     return (localStorage.getItem(KEYS.scopes) || '').split(' ').includes(scope);
+  }
+
+  // Which of `required` were NOT granted on the current token. Returns []
+  // when nothing is known to be missing (including when Spotify never told
+  // us the granted scopes — don't guess "missing" and trigger a reauth loop).
+  function missingScopes(required) {
+    const granted = (localStorage.getItem(KEYS.scopes) || '').split(' ').filter(Boolean);
+    if (!granted.length) return [];
+    return required.filter(s => !granted.includes(s));
   }
 
   async function getToken() {
@@ -124,16 +145,30 @@ const SpotifyAuth = (() => {
     return u;
   }
 
-  async function apiCall(path, opts = {}) {
-    const token = await getToken();
-    const res = await fetch('https://api.spotify.com/v1' + path, {
+  function _fetchApi(path, opts, token) {
+    return fetch('https://api.spotify.com/v1' + path, {
       ...opts,
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts.headers || {}) },
     });
+  }
+
+  async function apiCall(path, opts = {}) {
+    let res = await _fetchApi(path, opts, await getToken());
+    if (res.status === 401) {
+      // Token rejected even though it looked fresh (revoked, clock skew…):
+      // force one refresh and retry before giving up.
+      const token = await _refresh();
+      res = await _fetchApi(path, opts, token);
+    }
     if (res.status === 204) return null;
     if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      throw new Error(e.error?.message || 'Spotify API ' + res.status);
+      let msg = '';
+      try {
+        const text = await res.text();
+        try { msg = JSON.parse(text).error?.message || ''; } catch (_) { msg = text; }
+      } catch (_) {}
+      msg = (msg || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+      throw _apiErr((msg || 'Spotify API error') + ' (HTTP ' + res.status + ')', res.status);
     }
     return res.json();
   }
@@ -202,5 +237,5 @@ const SpotifyAuth = (() => {
 
   return { login, handleCallback, getToken, isLoggedIn, logout, getUser,
            search, startPlayback, getUserPlaylists, getPlaylistTracks, apiCall, hasScope,
-           replacePlaylistTracks, createPlaylist };
+           missingScopes, replacePlaylistTracks, createPlaylist };
 })();
