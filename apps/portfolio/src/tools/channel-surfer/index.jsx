@@ -23,11 +23,34 @@ import React, {
 const API = "https://iptv-org.github.io/api";
 const PAGE_SIZE = 50;
 
-const isMobile = () =>
-  /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "");
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+const isAndroid = () => /Android/i.test(navigator.userAgent || "");
 
 function vlcDeepLink(url) {
+  if (isAndroid()) {
+    // VLC for Android doesn't reliably handle vlc-x-callback; an explicit
+    // intent targeting the VLC package carries the stream URL correctly.
+    const scheme = url.split(":", 1)[0];
+    return `intent://${url.replace(/^[a-z]+:\/\//i, "")}#Intent;action=android.intent.action.VIEW;scheme=${scheme};package=org.videolan.vlc;type=video/*;end`;
+  }
   return `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(url)}`;
+}
+
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => copyTextFallback(text));
+  }
+  copyTextFallback(text);
+  return Promise.resolve();
+}
+
+function copyTextFallback(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  ta.remove();
 }
 
 function downloadM3U(filename, lines) {
@@ -205,21 +228,10 @@ function loadGuides() {
 function CopyButton({ text, label = "Copy link" }) {
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => {
-    const done = () => {
+    copyText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, done);
-    } else {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-      done();
-    }
+    });
   }, [text]);
   return (
     <button className="cs-btn" onClick={copy}>
@@ -229,8 +241,14 @@ function CopyButton({ text, label = "Copy link" }) {
 }
 
 function StreamRow({ entry, stream, index }) {
+  const [launched, setLaunched] = useState(false);
   const openInVlc = () => {
-    if (isMobile()) {
+    // Always put the stream URL on the clipboard first: if the VLC handoff
+    // drops the URL (flaky on some platforms), paste always works.
+    copyText(stream.url);
+    setLaunched(true);
+    setTimeout(() => setLaunched(false), 2500);
+    if (isIOS() || isAndroid()) {
       window.location.href = vlcDeepLink(stream.url);
     } else {
       downloadM3U(`${safeFilename(entry.name)}.m3u`, ["#EXTM3U", ...m3uEntry(entry, stream)]);
@@ -247,7 +265,7 @@ function StreamRow({ entry, stream, index }) {
       </div>
       <div className="cs-stream-actions">
         <button className="cs-btn cs-btn-primary" onClick={openInVlc}>
-          ▶ Open in VLC
+          {launched ? "✓ Link copied too" : "▶ Open in VLC"}
         </button>
         <CopyButton text={stream.url} />
       </div>
@@ -527,12 +545,13 @@ export default function ChannelSurfer() {
           )}
 
           <footer className="cs-foot">
-            <strong>Opening streams in VLC:</strong> on desktop, “Open in VLC”
-            downloads a tiny <code>.m3u</code> file — open it and VLC plays the
-            stream (or just copy the link and use Media → Open Network Stream).
-            On iOS/Android with the VLC app installed, it launches VLC
-            directly. Streams are community-maintained by iptv-org and some go
-            offline — if one fails, try another quality or channel.
+            <strong>Opening streams in VLC:</strong> “Open in VLC” always
+            copies the stream link to your clipboard, then on desktop downloads
+            a tiny <code>.m3u</code> file (open it and VLC plays the stream)
+            and on iOS/Android launches the VLC app. If VLC opens without the
+            stream, just paste — the link is already copied (Media → Open
+            Network Stream). Streams are community-maintained by iptv-org and
+            some go offline — if one fails, try another quality or channel.
           </footer>
         </>
       )}
