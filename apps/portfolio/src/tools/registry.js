@@ -26,6 +26,14 @@ const tools = [
     added: "2026-07-11",
     component: lazy(() => import("./analyzer")),
   },
+  {
+    slug: "channel-surfer",
+    title: "Channel Surfer",
+    description:
+      "Search the iptv-org channel guide (~40k channels, ~17k live streams) by name, country, or category, then open any stream in VLC or copy its link.",
+    added: "2026-07-20",
+    component: lazy(() => import("./channel-surfer")),
+  },
 ];
 
 export default tools;
