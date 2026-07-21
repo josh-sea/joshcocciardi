@@ -4,6 +4,7 @@ import React, {
   useMemo,
   useDeferredValue,
   useCallback,
+  useRef,
 } from "react";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,101 @@ import React, {
 
 const API = "https://iptv-org.github.io/api";
 const PAGE_SIZE = 50;
+
+// iptv-org categories are flat (no subcategories), but channel names are
+// descriptive ("Pluto TV Comedy Movies", "Cine Western"), so sub-genre chips
+// are keyword matches against the searchable haystack. Keyed by category id.
+const SUBGENRES = {
+  movies: [
+    ["Action", ["action"]],
+    ["Comedy", ["comedy", "comedia"]],
+    ["Horror", ["horror", "terror", "fear"]],
+    ["Thriller", ["thriller"]],
+    ["Drama", ["drama"]],
+    ["Classic", ["classic", "retro"]],
+    ["Western", ["western"]],
+    ["Sci-Fi & Fantasy", ["sci-fi", "scifi", "sci fi", "fantasy"]],
+    ["Romance", ["romance", "romantic"]],
+    ["Crime", ["crime", "crimen"]],
+    ["Family", ["family"]],
+    ["Bollywood", ["bollywood", "hindi"]],
+  ],
+  series: [
+    ["Comedy", ["comedy", "sitcom"]],
+    ["Drama", ["drama"]],
+    ["Crime", ["crime", "investigat"]],
+    ["Classic", ["classic", "retro"]],
+    ["Telenovelas", ["novela"]],
+    ["Anime", ["anime"]],
+  ],
+  music: [
+    ["Rock", ["rock"]],
+    ["Pop & Hits", ["pop", "hits", "top "]],
+    ["Hip-Hop", ["hip hop", "hip-hop", "rap"]],
+    ["Dance", ["dance", "club", "edm"]],
+    ["Country", ["country"]],
+    ["Jazz", ["jazz"]],
+    ["Classical", ["classical", "symphony"]],
+    ["Latin", ["latin", "latino"]],
+  ],
+  sports: [
+    ["Soccer", ["soccer", "futbol", "fútbol", "fc "]],
+    ["Football", ["nfl", "football"]],
+    ["Basketball", ["nba", "basketball"]],
+    ["Baseball", ["mlb", "baseball"]],
+    ["Fight", ["fight", "boxing", "mma", "wrestl", "combat"]],
+    ["Racing", ["racing", "motor", "speed"]],
+    ["Golf", ["golf"]],
+    ["Tennis", ["tennis"]],
+    ["Cricket", ["cricket"]],
+    ["Outdoors", ["hunt", "fish", "outdoor"]],
+  ],
+  kids: [
+    ["Cartoons", ["cartoon", "toon"]],
+    ["Preschool", ["junior", "baby", "jr"]],
+    ["Anime", ["anime"]],
+  ],
+  news: [
+    ["Business", ["business", "bloomberg", "cnbc", "econom"]],
+    ["Weather", ["weather"]],
+  ],
+  documentary: [
+    ["Nature", ["nature", "wild", "animal"]],
+    ["History", ["history", "war"]],
+    ["Science & Space", ["science", "space"]],
+    ["True Crime", ["crime", "investigat", "forensic"]],
+  ],
+  religious: [
+    ["Christian", ["christ", "catholic", "gospel", "church", "faith"]],
+    ["Islamic", ["islam", "quran", "koran"]],
+    ["Jewish", ["jewish", "torah"]],
+  ],
+};
+
+// Curated "what you'd get from a US basic-cable package" preset: anchored
+// name patterns, restricted to country US. The catalog only carries what
+// iptv-org has a public stream for, so the lineup shows the available subset.
+const PRESETS = [
+  {
+    id: "basic-cable-us",
+    label: "🇺🇸 Basic cable",
+    country: "US",
+    patterns: [
+      /^ABC$/i, /^CBS( News 24\/7)?$/i, /^NBC( News Now)?$/i, /^Fox( News Channel| Sports)?$/i,
+      /^The CW$/i, /^PBS( Kids)?/i, /^ESPN/i, /^CNN$/i, /^MSNBC$/i, /^HLN$/i,
+      /^C-SPAN/i, /^AMC$/i, /^A&E$/i, /^TNT$/i, /^TBS$/i, /^USA Network$/i,
+      /^FX$/i, /^SYFY$/i, /^Bravo$/i, /^E!/i, /^Comedy Central$/i,
+      /^Cartoon Network/i, /^Nickelodeon$/i, /^Nick Jr/i, /^Disney Channel$/i,
+      /^Freeform$/i, /^MTV\d?$/i, /^VH1$/i, /^BET$/i, /^CMT$/i,
+      /^Discovery( Channel)?$/i, /^Animal Planet$/i, /^TLC$/i, /^HGTV$/i,
+      /^Food Network$/i, /^Travel Channel$/i, /^History$/i, /^National Geographic$/i,
+      /^Lifetime$/i, /^Hallmark/i, /^Paramount Network$/i, /^TV Land$/i,
+      /^ION TV$/i, /^The Weather Channel$/i, /^WeatherNation$/i, /^TCM$/i,
+      /^Court TV$/i, /^GSN$/i, /^truTV$/i, /^Oxygen$/i, /^We TV$/i, /^Galavision$/i,
+      /^Telemundo$/i, /^Univision$/i,
+    ],
+  },
+];
 
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
 const isAndroid = () => /Android/i.test(navigator.userAgent || "");
@@ -225,6 +321,109 @@ function loadGuides() {
 // Components
 // ---------------------------------------------------------------------------
 
+// In-browser preview. Best effort: HLS (.m3u8) plays via native support
+// (Safari) or hls.js (everyone else, lazy-loaded chunk). Plenty of IPTV
+// streams still won't play in a browser — plain-http URLs are mixed content
+// on an https page, DASH isn't wired up, and many servers don't send CORS
+// headers (hls.js needs them; VLC doesn't care) — so every failure path
+// lands on a "use VLC" message rather than a spinner.
+function Player({ entry, stream, onClose }) {
+  const [error, setError] = useState(null);
+  const hlsRef = useRef(null);
+  const videoRef = useCallback(
+    (video) => {
+      if (!video) {
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
+        return;
+      }
+      const url = stream.url;
+      if (window.location.protocol === "https:" && url.startsWith("http:")) {
+        setError(
+          "This stream is served over plain http, which browsers block on an https page (mixed content). Use VLC for this one."
+        );
+        return;
+      }
+      if (/\.mpd(\?|$)/.test(url)) {
+        setError("This is a DASH (.mpd) stream — browser preview only supports HLS. Use VLC for this one.");
+        return;
+      }
+      const tryPlay = () =>
+        video.play().catch(() => {
+          video.muted = true;
+          video.play().catch(() => {});
+        });
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = url;
+        video.addEventListener("loadedmetadata", tryPlay, { once: true });
+        video.addEventListener(
+          "error",
+          () => setError("The browser couldn't play this stream. Use VLC for this one."),
+          { once: true }
+        );
+        return;
+      }
+      import("hls.js")
+        .then(({ default: Hls }) => {
+          if (!Hls.isSupported()) {
+            setError("This browser can't play HLS streams. Use VLC instead.");
+            return;
+          }
+          const hls = new Hls({ enableWorker: true });
+          hlsRef.current = hls;
+          hls.on(Hls.Events.ERROR, (_e, data) => {
+            if (data.fatal) {
+              hls.destroy();
+              hlsRef.current = null;
+              setError(
+                data.type === "mediaError"
+                  ? "This browser can't decode the stream's format. Use VLC — it plays everything."
+                  : "The stream refused browser playback (often a CORS or geo restriction — VLC isn't subject to either). Copy the link or use Open in VLC."
+              );
+            }
+          });
+          hls.loadSource(url);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+        })
+        .catch(() => setError("Couldn't load the browser player. Use VLC instead."));
+    },
+    [stream.url]
+  );
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="cs-player-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="cs-player">
+        <div className="cs-player-bar">
+          <span className="cs-player-title">
+            {entry.name}
+            {stream.quality ? ` · ${stream.quality}` : ""}
+          </span>
+          <button className="cs-btn" onClick={onClose}>
+            ✕ Close
+          </button>
+        </div>
+        {error ? (
+          <div className="cs-player-error">
+            <p>{error}</p>
+            <CopyButton text={stream.url} />
+          </div>
+        ) : (
+          <video ref={videoRef} controls playsInline className="cs-video" />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CopyButton({ text, label = "Copy link" }) {
   const [copied, setCopied] = useState(false);
   const copy = useCallback(() => {
@@ -242,6 +441,7 @@ function CopyButton({ text, label = "Copy link" }) {
 
 function StreamRow({ entry, stream, index }) {
   const [launched, setLaunched] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const openInVlc = () => {
     // Always put the stream URL on the clipboard first: if the VLC handoff
     // drops the URL (flaky on some platforms), paste always works.
@@ -264,11 +464,15 @@ function StreamRow({ entry, stream, index }) {
         </span>
       </div>
       <div className="cs-stream-actions">
+        <button className="cs-btn" onClick={() => setPreviewing(true)}>
+          ▶ Preview
+        </button>
         <button className="cs-btn cs-btn-primary" onClick={openInVlc}>
           {launched ? "✓ Link copied too" : "▶ Open in VLC"}
         </button>
         <CopyButton text={stream.url} />
       </div>
+      {previewing && <Player entry={entry} stream={stream} onClose={() => setPreviewing(false)} />}
     </div>
   );
 }
@@ -401,28 +605,43 @@ export default function ChannelSurfer() {
   const deferredQuery = useDeferredValue(query);
   const [country, setCountry] = useState("");
   const [category, setCategory] = useState("");
+  const [subgenre, setSubgenre] = useState(null); // [label, keywords] from SUBGENRES
+  const [preset, setPreset] = useState(null); // id from PRESETS
   const [onlyStreams, setOnlyStreams] = useState(true);
   const [showNsfw, setShowNsfw] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [expandedKey, setExpandedKey] = useState(null);
 
+  const activePreset = preset ? PRESETS.find((p) => p.id === preset) : null;
+
   const results = useMemo(() => {
     if (!data) return [];
     const q = deferredQuery.trim().toLowerCase();
     const terms = q ? q.split(/\s+/) : [];
+    const keywords = subgenre ? subgenre[1] : null;
     return data.entries.filter((e) => {
       if (onlyStreams && e.streams.length === 0) return false;
       if (!showNsfw && e.isNsfw) return false;
+      if (activePreset) {
+        if (activePreset.country && e.country !== activePreset.country) return false;
+        if (!activePreset.patterns.some((p) => p.test(e.name))) return false;
+      }
       if (country && e.country !== country) return false;
       if (category && !e.categories.includes(category)) return false;
+      if (keywords && !keywords.some((k) => e.haystack.includes(k))) return false;
       for (const t of terms) if (!e.haystack.includes(t)) return false;
       return true;
     });
-  }, [data, deferredQuery, country, category, onlyStreams, showNsfw]);
+  }, [data, deferredQuery, country, category, subgenre, activePreset, onlyStreams, showNsfw]);
 
   useEffect(() => {
     setLimit(PAGE_SIZE);
-  }, [deferredQuery, country, category, onlyStreams, showNsfw]);
+  }, [deferredQuery, country, category, subgenre, preset, onlyStreams, showNsfw]);
+
+  // Sub-genre chips belong to one category; leaving it clears the selection.
+  useEffect(() => {
+    setSubgenre(null);
+  }, [category]);
 
   const exportPlaylist = () => {
     const lines = ["#EXTM3U"];
@@ -513,6 +732,33 @@ export default function ChannelSurfer() {
             </label>
           </div>
 
+          <div className="cs-chiprow">
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                className={`cs-chip${preset === p.id ? " cs-chip-on" : ""}`}
+                onClick={() => setPreset(preset === p.id ? null : p.id)}
+                title="Curated lineup of the classic US cable channels (only ones with a public stream appear)"
+              >
+                {p.label}
+              </button>
+            ))}
+            {(SUBGENRES[category] || []).map(([label, keywords]) => (
+              <button
+                key={label}
+                className={`cs-chip${subgenre && subgenre[0] === label ? " cs-chip-on" : ""}`}
+                onClick={() =>
+                  setSubgenre(subgenre && subgenre[0] === label ? null : [label, keywords])
+                }
+              >
+                {label}
+              </button>
+            ))}
+            {!category && (
+              <span className="cs-dim">Pick a category (movies, sports, music…) for sub-genre filters</span>
+            )}
+          </div>
+
           <div className="cs-resultbar">
             <span>
               {results.length.toLocaleString()} channels · {totalStreams.toLocaleString()} streams
@@ -545,7 +791,10 @@ export default function ChannelSurfer() {
           )}
 
           <footer className="cs-foot">
-            <strong>Opening streams in VLC:</strong> “Open in VLC” always
+            <strong>Preview vs. VLC:</strong> “Preview” plays HLS streams right
+            in the browser when the stream allows it — but many IPTV servers
+            block browser playback (no CORS headers, plain-http URLs, DASH), so
+            VLC remains the sure thing. “Open in VLC” always
             copies the stream link to your clipboard, then on desktop downloads
             a tiny <code>.m3u</code> file (open it and VLC plays the stream)
             and on iOS/Android launches the VLC app. If VLC opens without the
@@ -594,6 +843,32 @@ const styles = `
   display: inline-flex; align-items: center; gap: 6px;
   color: #8b949e; font-size: 0.85rem; white-space: nowrap; cursor: pointer;
 }
+.cs-chiprow {
+  max-width: 860px; margin: 0 auto 12px;
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.cs-chip {
+  padding: 5px 12px; font-size: 0.8rem; border-radius: 999px; cursor: pointer;
+  background: #161b22; color: #8b949e; border: 1px solid #30363d;
+}
+.cs-chip:hover { border-color: #58a6ff; color: #e6edf3; }
+.cs-chip-on { background: #0d419d; border-color: #1f6feb; color: #fff; }
+.cs-player-backdrop {
+  position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.75);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.cs-player {
+  width: min(920px, 100%); background: #161b22;
+  border: 1px solid #30363d; border-radius: 12px; overflow: hidden;
+}
+.cs-player-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; padding: 10px 14px;
+}
+.cs-player-title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+.cs-player-error { padding: 28px 20px 24px; text-align: center; color: #8b949e; }
+.cs-player-error p { margin: 0 0 14px; }
 .cs-resultbar {
   max-width: 860px; margin: 0 auto 12px;
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
