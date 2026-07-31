@@ -154,8 +154,16 @@ export default function App() {
           return;
         }
 
-        // An expired token still means consent was granted before, so a
-        // silent refresh usually succeeds and spares the user a prompt.
+        // Only try a silent refresh when a stored token proves consent was
+        // granted before. Without a prior grant GIS falls back to opening a
+        // popup, and this runs on page load rather than from a click — so
+        // the browser blocks it and reports a popup failure.
+        if (!stored) {
+          setToken(null);
+          setView(VIEW.GMAIL_AUTH);
+          return;
+        }
+
         try {
           const fresh = await refreshAccessToken();
           if (cancelled) return;
