@@ -1,22 +1,38 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  getDocs, 
-  query, 
-  where, 
-  orderBy, 
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
   limit,
   writeBatch,
-  Timestamp 
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { listThreads, getThread, formatThread } from './gmail';
+import {
+  listThreads,
+  getThread,
+  formatThread,
+  categoryFromLabels,
+  utf8ByteLength,
+} from './gmail';
+
+/** Firestore caps documents at 1 MiB; leave room for the other fields. */
+const MAX_BODY_BYTES = 500 * 1024;
+
+/** Firestore caps a write batch at 500 operations. */
+const MAX_BATCH_OPS = 450;
 
 /**
- * Get the user's email cache collection reference
+ * How many threads to pull from Firestore for a listing. Category and search
+ * filtering happen client-side over this window, which keeps the cache free
+ * of composite-index requirements — see FIRESTORE_CACHE_GUIDE.md.
  */
+const CACHE_PAGE_SIZE = 300;
+
 function getUserThreadsRef(userId) {
   return collection(db, 'users', userId, 'threads');
 }
@@ -30,181 +46,202 @@ function getUserMetaRef(userId) {
 }
 
 /**
- * Get the last sync timestamp for a user
+ * Sync state is tracked per listing (one per category), so paging through
+ * Promotions doesn't convince the app that Primary is up to date.
  */
-export async function getLastSyncTime(userId) {
+export async function getLastSyncTime(userId, syncKey = 'default') {
   try {
     const metaDoc = await getDoc(getUserMetaRef(userId));
-    if (metaDoc.exists()) {
-      const data = metaDoc.data();
-      return data.lastSyncTime?.toDate() || null;
-    }
-    return null;
+    if (!metaDoc.exists()) return null;
+    const millis = metaDoc.data()?.lastSyncByKey?.[syncKey];
+    return typeof millis === 'number' ? millis : null;
   } catch (err) {
     console.error('Error getting last sync time:', err);
     return null;
   }
 }
 
-/**
- * Update the last sync timestamp
- */
-async function updateLastSyncTime(userId) {
+async function updateLastSyncTime(userId, syncKey, millis) {
   try {
-    await setDoc(getUserMetaRef(userId), {
-      lastSyncTime: Timestamp.now(),
-      lastSyncDate: new Date().toISOString()
-    }, { merge: true });
+    await setDoc(
+      getUserMetaRef(userId),
+      {
+        lastSyncByKey: { [syncKey]: millis },
+        lastSyncDate: new Date(millis).toISOString(),
+      },
+      { merge: true }
+    );
   } catch (err) {
     console.error('Error updating last sync time:', err);
   }
 }
 
 /**
- * Save a thread to Firestore
+ * Trim an oversized body so the message document still fits in Firestore.
+ * Returns the stored body plus whether it was cut short.
+ */
+export function capBodyForStorage(body) {
+  const text = body || '';
+  if (utf8ByteLength(text) <= MAX_BODY_BYTES) return { body: text, truncated: false };
+
+  // The budget is in bytes and characters can be multi-byte, so trim down
+  // until it genuinely fits rather than assuming one char is one byte.
+  let cut = text.slice(0, MAX_BODY_BYTES);
+  while (cut.length > 0 && utf8ByteLength(cut) > MAX_BODY_BYTES) {
+    cut = cut.slice(0, Math.floor(cut.length * 0.9));
+  }
+  return { body: cut, truncated: true };
+}
+
+function threadDocData(thread) {
+  return {
+    id: thread.id,
+    subject: thread.subject || '(no subject)',
+    snippet: thread.snippet || '',
+    participants: thread.participants || [],
+    participantEmails: thread.participantEmails || [],
+    participantCount: thread.participantCount || 0,
+    lastSenderName: thread.lastSenderName || '',
+    lastSenderEmail: thread.lastSenderEmail || '',
+    hasUnread: thread.hasUnread || false,
+    isStarred: thread.isStarred || false,
+    labelIds: thread.labelIds || [],
+    category: thread.category || categoryFromLabels(thread.labelIds || []),
+    date: Timestamp.fromDate(
+      thread.date instanceof Date && !isNaN(thread.date) ? thread.date : new Date()
+    ),
+    messageCount: thread.messages?.length || 0,
+    lastUpdated: Timestamp.now(),
+  };
+}
+
+function messageDocData(message, threadId) {
+  const { body, truncated } = capBodyForStorage(message.body);
+  return {
+    id: message.id,
+    threadId,
+    messageId: message.messageId || '',
+    references: message.references || '',
+    from: message.from || '',
+    to: message.to || '',
+    cc: message.cc || '',
+    replyTo: message.replyTo || '',
+    subject: message.subject || '',
+    senderName: message.senderName || '',
+    senderEmail: message.senderEmail || '',
+    body,
+    bodyTruncated: truncated,
+    isHtmlBody: message.isHtmlBody || false,
+    snippet: message.snippet || '',
+    date: message.internalDate
+      ? Timestamp.fromMillis(parseInt(message.internalDate, 10))
+      : Timestamp.now(),
+    isUnread: message.isUnread || false,
+    labelIds: message.labelIds || [],
+    attachments: message.attachments || [],
+    lastUpdated: Timestamp.now(),
+  };
+}
+
+/**
+ * Save a thread and its messages to Firestore.
  */
 export async function saveThreadToCache(userId, thread) {
-  try {
-    const threadRef = doc(getUserThreadsRef(userId), thread.id);
-    
-    // Store thread metadata
-    const threadData = {
-      id: thread.id,
-      subject: thread.subject || '(no subject)',
-      snippet: thread.snippet || '',
-      participants: thread.participants || [],
-      participantCount: thread.participantCount || 0,
-      hasUnread: thread.hasUnread || false,
-      date: Timestamp.fromDate(thread.date),
-      messageCount: thread.messages?.length || 0,
-      lastUpdated: Timestamp.now()
-    };
-    
-    await setDoc(threadRef, threadData, { merge: true });
-    
-    // Store individual messages
-    if (thread.messages && thread.messages.length > 0) {
-      const batch = writeBatch(db);
-      const messagesRef = getUserMessagesRef(userId);
-      
-      thread.messages.forEach((message) => {
-        const msgRef = doc(messagesRef, message.id);
-        const messageData = {
-          id: message.id,
-          threadId: thread.id,
-          messageId: message.messageId || '',
-          from: message.from || '',
-          to: message.to || '',
-          subject: message.subject || '',
-          senderName: message.senderName || '',
-          senderEmail: message.senderEmail || '',
-          body: message.body || '',
-          snippet: message.snippet || '',
-          date: message.internalDate ? Timestamp.fromMillis(parseInt(message.internalDate, 10)) : Timestamp.now(),
-          isUnread: message.isUnread || false,
-          labelIds: message.labelIds || [],
-          attachments: message.attachments || [],
-          lastUpdated: Timestamp.now()
-        };
-        batch.set(msgRef, messageData, { merge: true });
-      });
-      
-      await batch.commit();
-    }
-  } catch (err) {
-    console.error('Error saving thread to cache:', err);
-    throw err;
-  }
+  return saveThreadsToCache(userId, [thread]);
 }
 
 /**
- * Save multiple threads to Firestore in batches
- * Process sequentially to avoid overwhelming Firestore write stream
+ * Save several threads, chunked to stay inside Firestore's batch limit.
  */
 export async function saveThreadsToCache(userId, threads) {
-  const batchSize = 5; // Smaller batch size to avoid write stream limits
-  const delayBetweenBatches = 500; // 500ms delay between batches
-  
-  for (let i = 0; i < threads.length; i += batchSize) {
-    const batch = threads.slice(i, i + batchSize);
-    
-    // Process each thread in the batch sequentially (not concurrently)
-    for (const thread of batch) {
-      try {
-        await saveThreadToCache(userId, thread);
-      } catch (err) {
-        console.error(`Error saving thread ${thread.id}:`, err);
-        // Continue with next thread even if one fails
-      }
+  const threadsRef = getUserThreadsRef(userId);
+  const messagesRef = getUserMessagesRef(userId);
+
+  let batch = writeBatch(db);
+  let ops = 0;
+  const commits = [];
+
+  const flush = () => {
+    if (ops === 0) return;
+    commits.push(batch.commit());
+    batch = writeBatch(db);
+    ops = 0;
+  };
+
+  for (const thread of threads) {
+    batch.set(doc(threadsRef, thread.id), threadDocData(thread), { merge: true });
+    ops++;
+
+    for (const message of thread.messages || []) {
+      batch.set(doc(messagesRef, message.id), messageDocData(message, thread.id), {
+        merge: true,
+      });
+      ops++;
+      if (ops >= MAX_BATCH_OPS) flush();
     }
-    
-    // Add delay between batches to prevent overwhelming Firestore
-    if (i + batchSize < threads.length) {
-      await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
-    }
+
+    if (ops >= MAX_BATCH_OPS) flush();
+  }
+
+  flush();
+
+  const results = await Promise.allSettled(commits);
+  const failed = results.filter((r) => r.status === 'rejected');
+  if (failed.length) {
+    // Surfaced rather than swallowed: a failed write means threads silently
+    // missing from the list, which used to look like "the app lost my mail".
+    console.error('Some cache writes failed:', failed.map((f) => f.reason));
+    throw new Error(`Failed to cache ${failed.length} of ${commits.length} batches`);
   }
 }
 
+/** Does a cached thread match the active search text? */
+function matchesSearch(thread, searchQuery) {
+  if (!searchQuery) return true;
+
+  // Gmail operators (from:, subject:, has:) are answered by the server sync,
+  // not by this local filter — passing them through as literal text would
+  // match nothing at all.
+  if (/\w+:/.test(searchQuery)) return true;
+
+  const needle = searchQuery.toLowerCase();
+  return [
+    thread.subject,
+    thread.snippet,
+    thread.lastSenderName,
+    thread.lastSenderEmail,
+    ...(thread.participants || []),
+    ...(thread.participantEmails || []),
+  ].some((field) => String(field || '').toLowerCase().includes(needle));
+}
+
+/** Does a cached thread belong in the selected category tab? */
+export function matchesCategory(thread, categoryFilter) {
+  if (!categoryFilter || categoryFilter === 'all') return true;
+  if (categoryFilter === 'starred') return Boolean(thread.isStarred);
+  return (thread.category || 'primary') === categoryFilter;
+}
+
 /**
- * Load threads from Firestore cache
+ * Load threads from the Firestore cache, filtered to the active tab/search.
  */
 export async function loadThreadsFromCache(userId, options = {}) {
+  const { limitCount = CACHE_PAGE_SIZE, categoryFilter, searchQuery } = options;
+
   try {
-    const {
-      limitCount = 50,
-      categoryFilter,
-      searchQuery,
-      dateFilter // 'today', 'week', 'month'
-    } = options;
-    
-    let q = query(
-      getUserThreadsRef(userId),
-      orderBy('date', 'desc'),
-      limit(limitCount)
+    const snapshot = await getDocs(
+      query(getUserThreadsRef(userId), orderBy('date', 'desc'), limit(limitCount))
     );
-    
-    // Add date filter if specified
-    if (dateFilter === 'today') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      q = query(
-        getUserThreadsRef(userId),
-        where('date', '>=', Timestamp.fromDate(today)),
-        orderBy('date', 'desc'),
-        limit(limitCount)
-      );
-    } else if (dateFilter === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      q = query(
-        getUserThreadsRef(userId),
-        where('date', '>=', Timestamp.fromDate(weekAgo)),
-        orderBy('date', 'desc'),
-        limit(limitCount)
-      );
-    } else if (dateFilter === 'month') {
-      const monthAgo = new Date();
-      monthAgo.setMonth(monthAgo.getMonth() - 1);
-      q = query(
-        getUserThreadsRef(userId),
-        where('date', '>=', Timestamp.fromDate(monthAgo)),
-        orderBy('date', 'desc'),
-        limit(limitCount)
-      );
-    }
-    
-    const snapshot = await getDocs(q);
+
     const threads = [];
-    
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      threads.push({
-        ...data,
-        date: data.date?.toDate() || new Date()
-      });
+    snapshot.forEach((snap) => {
+      const data = snap.data();
+      threads.push({ ...data, date: data.date?.toDate() || new Date() });
     });
-    
-    return threads;
+
+    return threads
+      .filter((thread) => matchesCategory(thread, categoryFilter))
+      .filter((thread) => matchesSearch(thread, searchQuery));
   } catch (err) {
     console.error('Error loading threads from cache:', err);
     return [];
@@ -212,53 +249,41 @@ export async function loadThreadsFromCache(userId, options = {}) {
 }
 
 /**
- * Load a specific thread with all its messages from cache
+ * Load a specific thread with all its messages from cache.
  */
 export async function loadThreadFromCache(userId, threadId) {
   try {
-    // Get thread metadata
     const threadDoc = await getDoc(doc(getUserThreadsRef(userId), threadId));
-    
-    if (!threadDoc.exists()) {
-      return null;
-    }
-    
+    if (!threadDoc.exists()) return null;
+
     const threadData = threadDoc.data();
-    
-    // Get all messages for this thread
-    const messagesQuery = query(
-      getUserMessagesRef(userId),
-      where('threadId', '==', threadId),
-      orderBy('date', 'asc')
+
+    const messagesSnapshot = await getDocs(
+      query(
+        getUserMessagesRef(userId),
+        where('threadId', '==', threadId),
+        orderBy('date', 'asc')
+      )
     );
-    
-    const messagesSnapshot = await getDocs(messagesQuery);
+
     const messages = [];
-    
-    messagesSnapshot.forEach((doc) => {
-      const msgData = doc.data();
+    messagesSnapshot.forEach((snap) => {
+      const msgData = snap.data();
       messages.push({
         ...msgData,
         date: msgData.date?.toDate() || new Date(),
-        internalDate: msgData.date?.toMillis().toString() || Date.now().toString()
+        internalDate: msgData.date?.toMillis().toString() || Date.now().toString(),
       });
     });
-    
-    // Construct full thread object
-    const lastMessage = messages[messages.length - 1];
-    const firstMessage = messages[0];
-    
+
+    if (!messages.length) return null;
+
     return {
-      id: threadData.id,
-      subject: threadData.subject,
-      snippet: threadData.snippet,
-      participants: threadData.participants,
-      participantCount: threadData.participantCount,
-      hasUnread: threadData.hasUnread,
+      ...threadData,
       date: threadData.date?.toDate() || new Date(),
       messages,
-      lastMessage,
-      firstMessage
+      lastMessage: messages[messages.length - 1],
+      firstMessage: messages[0],
     };
   } catch (err) {
     console.error('Error loading thread from cache:', err);
@@ -267,213 +292,112 @@ export async function loadThreadFromCache(userId, threadId) {
 }
 
 /**
- * Sync new emails from Gmail API to Firestore cache
- * This implements incremental sync - only fetches emails modified since last sync
+ * Reflect a "mark as read" in the cache so unread badges don't come back on
+ * the next load.
+ */
+export async function markThreadReadInCache(userId, threadId, messageIds = []) {
+  try {
+    const batch = writeBatch(db);
+    batch.set(
+      doc(getUserThreadsRef(userId), threadId),
+      { hasUnread: false, lastUpdated: Timestamp.now() },
+      { merge: true }
+    );
+    messageIds.forEach((id) => {
+      batch.set(
+        doc(getUserMessagesRef(userId), id),
+        { isUnread: false, lastUpdated: Timestamp.now() },
+        { merge: true }
+      );
+    });
+    await batch.commit();
+  } catch (err) {
+    console.error('Error updating read state in cache:', err);
+  }
+}
+
+/**
+ * Fetch a page of threads from Gmail and write them to the cache.
+ *
+ * Incremental syncs use `after:<epoch seconds>` rather than a `YYYY/MM/DD`
+ * date: day granularity meant re-fetching the same day forever and never
+ * backfilling anything older.
  */
 export async function syncEmailsToCache(userId, accessToken, options = {}) {
-  try {
-    const { maxResults = 20, forceFullSync = false } = options;
-    
-    // Get last sync time
-    const lastSync = forceFullSync ? null : await getLastSyncTime(userId);
-    
-    // Build Gmail query for incremental sync
-    let gmailQuery = '';
-    if (lastSync) {
-      // Format date for Gmail query (YYYY/MM/DD)
-      const syncDate = new Date(lastSync);
-      const year = syncDate.getFullYear();
-      const month = String(syncDate.getMonth() + 1).padStart(2, '0');
-      const day = String(syncDate.getDate()).padStart(2, '0');
-      gmailQuery = `after:${year}/${month}/${day}`;
-    }
-    
-    console.log('Syncing emails...', gmailQuery ? `Query: ${gmailQuery}` : 'Full sync');
-    
-    // Fetch threads from Gmail API
-    const response = await listThreads(accessToken, {
-      maxResults,
-      q: gmailQuery || undefined
-    });
-    
-    if (!response.threads || response.threads.length === 0) {
-      console.log('No new emails to sync');
-      await updateLastSyncTime(userId);
-      return { synced: 0, total: 0 };
-    }
-    
-    // Fetch full thread details
-    const threadIds = response.threads.map((t) => t.id);
-    const batchSize = 10;
-    const allThreads = [];
-    
-    for (let i = 0; i < threadIds.length; i += batchSize) {
-      const batch = threadIds.slice(i, i + batchSize);
-      const details = await Promise.all(
-        batch.map((id) => getThread(accessToken, id).catch(() => null))
-      );
-      details.filter(Boolean).forEach((t) => allThreads.push(formatThread(t)));
-    }
-    
-    // Save to Firestore cache
-    await saveThreadsToCache(userId, allThreads);
-    
-    // Update last sync time
-    await updateLastSyncTime(userId);
-    
-    console.log(`Synced ${allThreads.length} threads to cache`);
-    
-    return { synced: allThreads.length, total: response.resultSizeEstimate || allThreads.length };
-  } catch (err) {
-    console.error('Error syncing emails to cache:', err);
-    throw err;
-  }
-}
-
-/**
- * Load threads with cache-first strategy
- * 1. Load from cache immediately
- * 2. Sync new emails in background
- * 3. Return cached data while sync happens
- */
-export async function loadThreadsCacheFirst(userId, accessToken, options = {}) {
   const {
-    categoryFilter,
-    searchQuery,
-    dateFilter,
-    syncInBackground = true
+    maxResults = 25,
+    query: gmailQuery = '',
+    pageToken = null,
+    incremental = false,
+    syncKey = 'default',
   } = options;
-  
-  // 1. Load from cache first (fast!)
-  const cachedThreads = await loadThreadsFromCache(userId, {
-    limitCount: 100,
-    categoryFilter,
-    searchQuery,
-    dateFilter
-  });
-  
-  console.log(`Loaded ${cachedThreads.length} threads from cache`);
-  
-  // 2. Optionally sync in background
-  if (syncInBackground && accessToken) {
-    // Don't await - let this happen in background
-    // Use smaller batch size to avoid overwhelming Firestore
-    syncEmailsToCache(userId, accessToken, { maxResults: 20 })
-      .then((result) => {
-        console.log(`Background sync complete: ${result.synced} new emails`);
-      })
-      .catch((err) => {
-        console.error('Background sync failed:', err);
-      });
+
+  const startedAt = Date.now();
+  let q = gmailQuery;
+
+  if (incremental && !pageToken) {
+    const lastSync = await getLastSyncTime(userId, syncKey);
+    if (lastSync) {
+      // One minute of overlap absorbs clock skew between us and Gmail.
+      const after = Math.floor((lastSync - 60 * 1000) / 1000);
+      q = q ? `${q} after:${after}` : `after:${after}`;
+    }
   }
-  
-  return cachedThreads;
-}
 
-/**
- * Get today's emails from cache (super fast query!)
- */
-export async function getTodaysEmails(userId) {
-  return loadThreadsFromCache(userId, { 
-    dateFilter: 'today',
-    limitCount: 100 
+  const response = await listThreads(accessToken, {
+    maxResults,
+    pageToken: pageToken || undefined,
+    q: q || undefined,
   });
-}
 
-/**
- * Get this week's emails from cache
- */
-export async function getWeeksEmails(userId) {
-  return loadThreadsFromCache(userId, { 
-    dateFilter: 'week',
-    limitCount: 200 
-  });
-}
-
-/**
- * Search messages in cache
- */
-export async function searchCachedMessages(userId, searchTerm) {
-  try {
-    // Get all messages (we'll filter client-side for now)
-    // In production, you might want to use Algolia or similar for full-text search
-    const messagesRef = getUserMessagesRef(userId);
-    const q = query(messagesRef, orderBy('date', 'desc'), limit(200));
-    const snapshot = await getDocs(q);
-    
-    const messages = [];
-    snapshot.forEach((doc) => {
-      const data = doc.data();
-      messages.push({
-        ...data,
-        date: data.date?.toDate() || new Date()
-      });
-    });
-    
-    // Client-side filtering
-    const searchLower = searchTerm.toLowerCase();
-    const filtered = messages.filter((msg) => {
-      return (
-        msg.subject?.toLowerCase().includes(searchLower) ||
-        msg.body?.toLowerCase().includes(searchLower) ||
-        msg.from?.toLowerCase().includes(searchLower) ||
-        msg.senderName?.toLowerCase().includes(searchLower)
-      );
-    });
-    
-    // Group by thread
-    const threadMap = new Map();
-    filtered.forEach((msg) => {
-      if (!threadMap.has(msg.threadId)) {
-        threadMap.set(msg.threadId, {
-          id: msg.threadId,
-          subject: msg.subject,
-          snippet: msg.snippet,
-          messages: [],
-          date: msg.date
-        });
-      }
-      threadMap.get(msg.threadId).messages.push(msg);
-    });
-    
-    return Array.from(threadMap.values());
-  } catch (err) {
-    console.error('Error searching cached messages:', err);
-    return [];
+  const threadIds = (response.threads || []).map((t) => t.id);
+  if (!threadIds.length) {
+    if (!pageToken) await updateLastSyncTime(userId, syncKey, startedAt);
+    return { threads: [], synced: 0, nextPageToken: response.nextPageToken || null };
   }
+
+  const batchSize = 10;
+  const allThreads = [];
+  for (let i = 0; i < threadIds.length; i += batchSize) {
+    const chunk = threadIds.slice(i, i + batchSize);
+    const details = await Promise.all(
+      chunk.map((id) => getThread(accessToken, id).catch(() => null))
+    );
+    details.filter(Boolean).forEach((t) => allThreads.push(formatThread(t)));
+  }
+
+  await saveThreadsToCache(userId, allThreads);
+
+  // Only a first page advances the watermark — a deep backfill page says
+  // nothing about whether new mail has arrived since.
+  if (!pageToken) await updateLastSyncTime(userId, syncKey, startedAt);
+
+  return {
+    threads: allThreads,
+    synced: allThreads.length,
+    nextPageToken: response.nextPageToken || null,
+  };
 }
 
 /**
- * Clear all cached emails for a user (useful for debugging or sign out)
+ * Clear all cached mail for a user.
  */
 export async function clearEmailCache(userId) {
-  try {
-    // Note: In production, you might want to use Cloud Functions for bulk deletes
-    // This is a simple client-side implementation
-    const threadsSnapshot = await getDocs(getUserThreadsRef(userId));
-    const messagesSnapshot = await getDocs(getUserMessagesRef(userId));
-    
+  const [threadsSnapshot, messagesSnapshot] = await Promise.all([
+    getDocs(getUserThreadsRef(userId)),
+    getDocs(getUserMessagesRef(userId)),
+  ]);
+
+  const refs = [
+    ...threadsSnapshot.docs.map((d) => d.ref),
+    ...messagesSnapshot.docs.map((d) => d.ref),
+  ];
+
+  for (let i = 0; i < refs.length; i += MAX_BATCH_OPS) {
     const batch = writeBatch(db);
-    
-    threadsSnapshot.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
-    
-    messagesSnapshot.forEach((doc) => {
-      batch.delete(doc.ref);
-    });
-    
+    refs.slice(i, i + MAX_BATCH_OPS).forEach((ref) => batch.delete(ref));
     await batch.commit();
-    
-    // Clear sync metadata
-    await setDoc(getUserMetaRef(userId), {
-      lastSyncTime: null,
-      lastSyncDate: null
-    });
-    
-    console.log('Email cache cleared');
-  } catch (err) {
-    console.error('Error clearing email cache:', err);
-    throw err;
   }
+
+  await setDoc(getUserMetaRef(userId), { lastSyncByKey: {} }, { merge: true });
 }

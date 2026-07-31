@@ -1,153 +1,146 @@
-# Gmail Messages App
+# Electronic Mail
 
-A React application that integrates with Gmail API to view and manage email messages. Uses Firebase Firestore for token storage and Google Identity Services for OAuth 2.0 authentication.
+An iMessage-styled Gmail client. React (CRA) + Firebase Auth + Firestore,
+talking to the Gmail REST API from the browser.
 
-## Features
+Live at <https://www.joshcocciardi.com/projects/electronic-mail>.
 
-- Gmail OAuth 2.0 authentication
-- View email threads and messages
-- Send replies
-- Mark messages as read
-- Secure token storage in Firebase Firestore
+## How it fits together
 
-## Prerequisites
+Two identities are in play, and they are not the same thing:
 
-1. **Firebase Project**
-   - Create a project at [Firebase Console](https://console.firebase.google.com/)
-   - Enable Firestore Database
-   - Get your Firebase configuration
+| | What it is | Used for |
+|---|---|---|
+| **Firebase Auth** | Your account on this app (email/password or Google) | Owning the cache and the stored token |
+| **Gmail OAuth** | Authorization to read/send from a mailbox | Every Gmail API call |
 
-2. **Google Cloud Project with Gmail API**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select existing one
-   - Enable Gmail API
-   - Create OAuth 2.0 Client ID (Web application type)
-   - Add authorized JavaScript origins: `http://localhost:3000`
-   - Add authorized redirect URIs: `http://localhost:3000`
+You can sign in to Firebase with one address and authorize a completely
+different mailbox — so everything is keyed on the **Firebase uid**, never on
+an email address.
 
-## Environment Variables
+```
+users/{uid}/private/gmail     ← Gmail OAuth token (owner-only)
+users/{uid}/threads/{id}      ← cached thread metadata
+users/{uid}/messages/{id}     ← cached message bodies
+users/{uid}/meta/sync         ← per-category sync watermarks
+```
 
-Copy the provided `.env` file and update the following variables:
+### Loading a mailbox
 
-### Firebase Configuration
-Already configured based on your Firebase project:
-- `REACT_APP_FIREBASE_API_KEY` ✓
-- `REACT_APP_FIREBASE_AUTH_DOMAIN` ✓
-- `REACT_APP_FIREBASE_PROJECT_ID` ✓
-- `REACT_APP_FIREBASE_STORAGE_BUCKET` ✓
-- `REACT_APP_FIREBASE_MESSAGING_SENDER_ID` ✓
-- `REACT_APP_FIREBASE_APP_ID` ✓
+1. Read cached threads from Firestore and render them immediately.
+2. Sync with Gmail, **await it**, write results to the cache, re-render.
+3. Scrolling to the bottom backfills older mail by page token.
 
-### Google Gmail API - **ACTION REQUIRED**
-You need to add your Google OAuth 2.0 Client ID:
-- `REACT_APP_GOOGLE_CLIENT_ID` - Get this from [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials)
+Step 2 is awaited on purpose. Firing the sync and not waiting is what made a
+first load look like an empty mailbox.
 
-**How to get your Google Client ID:**
-1. Go to Google Cloud Console → APIs & Services → Credentials
-2. Click "Create Credentials" → "OAuth 2.0 Client ID"
-3. Select "Web application"
-4. Add `http://localhost:3000` to "Authorized JavaScript origins"
-5. Add `http://localhost:3000` to "Authorized redirect URIs"
-6. Copy the Client ID (ends with `.apps.googleusercontent.com`)
-7. Replace `YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com` in `.env` with your actual Client ID
+Category tabs and search are applied in both places: the Gmail query (`q=`)
+narrows the sync, and the cached list is filtered to match. Searches
+containing Gmail operators (`from:`, `has:attachment`) are answered by the
+server only, since they can't be evaluated against local fields.
 
-### Optional
-- `PORT` - Server port (defaults to 3000)
+### Rendering message bodies
 
-## Installation
+Email HTML is attacker-controlled — anyone who can email you decides what
+lands in it. It is rendered in an iframe that is sandboxed **without**
+`allow-same-origin`, so its document has an opaque origin with no access to
+this app's DOM, storage or Firebase session. A CSP inside that document
+blocks every script except the nonce-tagged height reporter, and blocks
+images (`img-src 'none'`) until you ask for them — which covers `<img>`,
+`srcset` and CSS background images alike.
 
-Dependencies have been installed. If you need to reinstall:
+There is no HTML sanitizer, by design. See `src/components/MessageBody.js`.
+
+## Setup
+
+### Prerequisites
+
+- A Firebase project with **Firestore** and **Authentication** enabled
+  (Email/Password and Google providers).
+- A Google Cloud OAuth 2.0 Client ID (Web application) with the Gmail API
+  enabled. Authorized JavaScript origins must list every origin you serve
+  from — `http://localhost:3000` for development, plus the production host.
+
+### Configuration
 
 ```bash
+cp .env.example .env    # then fill it in
 npm install
 ```
 
-## Running the App
+`.env.production` is committed and holds the production values. Nothing in
+either file is a secret: `REACT_APP_*` variables are compiled into the
+JavaScript bundle and served publicly. Access control lives in
+`firestore.rules` and in the OAuth client's authorized origins.
 
-### Development Mode
+### Running
+
 ```bash
-npm run dev
+npm run dev     # development server on :3000
+npm test        # unit tests
+npm run build   # production build
 ```
-Opens the app at [http://localhost:3000](http://localhost:3000) with hot-reload.
 
-### Production Mode
+## Deploying
+
+CI does it: merging to `master` runs `.github/workflows/deploy.yml`, which
+tests and builds this app, copies the output into
+`apps/portfolio/public/projects/electronic-mail`, builds the portfolio, and
+deploys.
+
+For a manual build:
+
 ```bash
-npm run build
-npm start
-```
-Builds the app and serves it with Express server.
-
-## Project Structure
-
-```
-├── public/              # Static files
-├── src/
-│   ├── components/      # React components
-│   │   ├── AuthScreen.js    # OAuth login screen
-│   │   ├── ChatView.js      # Email thread view
-│   │   └── ThreadList.js    # List of email threads
-│   ├── config/
-│   │   └── firebase.js      # Firebase configuration
-│   ├── services/
-│   │   ├── auth.js          # Google OAuth authentication
-│   │   └── gmail.js         # Gmail API integration
-│   ├── App.js           # Main app component
-│   └── index.js         # App entry point
-├── server.js            # Production Express server
-└── .env                 # Environment variables
+./deploy-to-portfolio.sh            # build + stage into the portfolio
+./deploy-to-portfolio.sh --deploy   # ...and push to Firebase
 ```
 
-## Required Gmail API Scopes
+Firestore rules live at the **repository root** (`firestore.rules`) and cover
+every app on the project. `apps/email/firestore.rules` is a readable copy of
+this app's slice and is not deployed — change both.
 
-The app requests the following Gmail API permissions:
-- `gmail.readonly` - Read email messages
-- `gmail.send` - Send email messages
-- `gmail.modify` - Modify messages (mark as read)
-- `userinfo.email` - Get user email address
-- `userinfo.profile` - Get user profile info
+## Gmail scopes
 
-## Security Notes
+- `gmail.readonly` — read messages
+- `gmail.send` — send replies and new messages
+- `gmail.modify` — mark messages read
+- `userinfo.email`, `userinfo.profile` — identify the authorized mailbox
 
-- Never commit your `.env` file (already added to `.gitignore`)
-- Store tokens securely in Firebase Firestore
-- Tokens are automatically refreshed when expired
-- Users can revoke access at any time
+## Security notes
 
-## Cleanup Summary
-
-✓ Updated `.env` with proper `REACT_APP_` prefixes (required by React)
-✓ Added comprehensive environment variable documentation
-✓ Added missing `express` dependency for production server
-✓ Moved testing libraries to `devDependencies`
-✓ Installed all dependencies
-✓ Created detailed setup instructions
-
-## Next Steps
-
-1. **Update your `.env` file** with your Google OAuth 2.0 Client ID
-2. Run `npm run dev` to start the development server
-3. Authorize the app with your Gmail account
-4. Start managing your emails!
+- OAuth tokens live at `users/{uid}/private/gmail`, readable only by that
+  uid. They were previously stored in a world-readable `gmail_tokens`
+  collection keyed by email address; that collection is now denied outright
+  and any leftover documents should be deleted from the Firebase console.
+- The root ruleset's authenticated catch-all explicitly excludes `users`.
+  Without that exclusion any signed-in account — and anyone can create one —
+  could read every other user's cached mail.
+- Access tokens are short-lived (~1 hour) and refreshed silently through
+  Google Identity Services. Consent is only requested when a silent refresh
+  fails.
 
 ## Troubleshooting
 
-### "Google Identity Services not loaded"
-- Make sure the Google Identity Services script is loaded in `public/index.html`
-- Check browser console for script loading errors
+**"REACT_APP_GOOGLE_CLIENT_ID is not set"** — copy `.env.example` to `.env`
+and fill in the client ID, then restart the dev server. CRA only reads env
+files at startup.
 
-### "Invalid OAuth client"
-- Verify your `REACT_APP_GOOGLE_CLIENT_ID` is correct
-- Ensure authorized origins and redirect URIs are configured in Google Cloud Console
-- Make sure you're accessing the app from `http://localhost:3000`
+**"Failed to load Google Identity Services"** — the GIS script in
+`public/index.html` didn't load. Check the network tab and any blockers.
 
-### Firebase errors
-- Verify all Firebase environment variables are correct
-- Check that Firestore is enabled in your Firebase project
-- Ensure Firebase project has proper permissions
+**Authorization popup closes and nothing happens** — the origin you're
+browsing from isn't in the OAuth client's authorized JavaScript origins.
 
-## Support
+**Firestore permission-denied** — the deployed rules are the ones at the
+repository root. Confirm they include the `users/{uid}/private` match and the
+`users` exclusion in the catch-all.
 
-For issues related to:
-- Firebase: [Firebase Documentation](https://firebase.google.com/docs)
-- Gmail API: [Gmail API Documentation](https://developers.google.com/gmail/api)
-- Google OAuth: [Google Identity Services](https://developers.google.com/identity/gsi/web)
+**Empty inbox after authorizing** — the first sync pulls 25 threads for the
+selected tab; scroll to backfill. If it stays empty, check the console for
+Gmail API errors.
+
+## Other docs
+
+`FIRESTORE_CACHE_GUIDE.md` covers the cache design. The remaining `*.md`
+files are historical setup notes from earlier iterations and may describe
+paths and URLs that have since changed — this README is authoritative.

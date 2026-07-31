@@ -1,31 +1,45 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { 
-  initGIS, 
-  requestAuth, 
-  refreshAccessToken, 
+import {
+  initGIS,
+  isGISReady,
+  setTokenOwner,
+  requestAuth,
+  refreshAccessToken,
   revokeToken,
   loadStoredToken,
+  deleteStoredToken,
   isTokenValid,
   signInWithEmail,
   signUpWithEmail,
   signInWithGoogle,
   signOut as firebaseSignOut,
-  onAuthStateChange
+  onAuthStateChange,
 } from './services/auth';
-import { listThreads, getThread, sendMessage, markAsRead, formatThread } from './services/gmail';
-import { 
-  loadThreadsCacheFirst, 
-  loadThreadFromCache, 
-  syncEmailsToCache,
+import {
+  getThread,
+  sendMessage,
+  markAsRead,
+  formatThread,
+  escapeHtml,
+  buildGmailQuery,
+  buildReplyRecipients,
+  buildReplySubject,
+  buildReferences,
+} from './services/gmail';
+import {
+  loadThreadsFromCache,
+  loadThreadFromCache,
   saveThreadToCache,
-  getTodaysEmails,
-  getWeeksEmails
+  syncEmailsToCache,
+  markThreadReadInCache,
+  matchesCategory,
 } from './services/emailCache';
 import AuthScreen from './components/AuthScreen';
 import GmailAuthScreen from './components/GmailAuthScreen';
 import ThreadList from './components/ThreadList';
 import ChatView from './components/ChatView';
+import ComposeModal from './components/ComposeModal';
 
 const VIEW = {
   AUTH: 'auth',
@@ -34,6 +48,9 @@ const VIEW = {
   CHAT: 'chat',
 };
 
+/** Raised when we need the user to re-authorize Gmail. */
+const NEEDS_AUTH = 'NEEDS_GMAIL_AUTH';
+
 export default function App() {
   const [view, setView] = useState(VIEW.AUTH);
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -41,49 +58,71 @@ export default function App() {
   const [threads, setThreads] = useState([]);
   const [currentThread, setCurrentThread] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [gisReady, setGisReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('primary');
-  const [nextPageToken, setNextPageToken] = useState(null);
   const [hasMore, setHasMore] = useState(true);
-  const [groupBy, setGroupBy] = useState('thread'); // 'thread' or 'sender'
+  const [groupBy, setGroupBy] = useState('thread');
+  const [composeOpen, setComposeOpen] = useState(false);
 
+  const tokenRef = useRef(null);
   const refreshTimerRef = useRef(null);
-  const lastFetchTimeRef = useRef(0);
-  const fetchInProgressRef = useRef(false);
-  const FETCH_COOLDOWN = 2000; // 2 seconds minimum between fetches
+  const backfillTokenRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const bootstrappedUidRef = useRef(null);
 
-  // Listen for Firebase auth state changes
+  const userId = firebaseUser?.uid || null;
+  const mailboxEmail = token?.email || '';
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChange(async (user) => {
-      setFirebaseUser(user);
-      
-      if (user) {
-        // User is signed into Firebase, load their Gmail token
-        setLoading(true);
+    tokenRef.current = token;
+  }, [token]);
+
+  // --- Google Identity Services -------------------------------------------
+
+  useEffect(() => {
+    let cancelled = false;
+    let attempts = 0;
+
+    const timer = setInterval(() => {
+      attempts++;
+      if (window.google?.accounts?.oauth2) {
+        clearInterval(timer);
+        if (cancelled) return;
         try {
-          const storedToken = await loadStoredToken(user.email);
-          
-          if (storedToken && isTokenValid(storedToken)) {
-            // Valid token found
-            setToken(storedToken);
-            setView(VIEW.THREADS);
-            setError(null);
-          } else {
-            // No token or expired token - show Gmail auth screen
-            setView(VIEW.GMAIL_AUTH);
-            setError(null);
-          }
+          initGIS();
+          setGisReady(true);
         } catch (err) {
-          console.error('Error loading Gmail token:', err);
-          setError('Failed to load Gmail access. Please authorize.');
-        } finally {
-          setLoading(false);
+          setError(err.message);
         }
-      } else {
-        // User signed out
+      } else if (attempts >= 50) {
+        clearInterval(timer);
+        if (!cancelled) {
+          setError('Failed to load Google Identity Services. Check your network.');
+        }
+      }
+    }, 100);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  // --- Firebase session ----------------------------------------------------
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((user) => {
+      setFirebaseUser(user);
+      setTokenOwner(user?.uid || null);
+
+      if (!user) {
+        bootstrappedUidRef.current = null;
         setToken(null);
+        setThreads([]);
+        setCurrentThread(null);
         setView(VIEW.AUTH);
       }
     });
@@ -91,265 +130,310 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Wait for the GIS script to load, then initialize
+  /**
+   * Once we have both a Firebase user and a ready GIS client, find a usable
+   * Gmail token: the stored one if it's still good, otherwise a silent
+   * refresh, and only then fall back to asking for consent.
+   */
   useEffect(() => {
-    let attempts = 0;
-    const maxAttempts = 50; // 5 seconds
+    if (!userId || !gisReady) return;
+    if (bootstrappedUidRef.current === userId) return;
+    bootstrappedUidRef.current = userId;
 
-    const checkGIS = setInterval(() => {
-      attempts++;
-      if (window.google?.accounts?.oauth2) {
-        clearInterval(checkGIS);
-        initGIS(
-          (tokenData) => {
-            setToken(tokenData);
-            setView(VIEW.THREADS);
-            setError(null);
-          },
-          (err) => {
-            console.error('Auth error:', err);
-            setError('Authentication failed. Please try again.');
-            setLoading(false);
-          }
-        );
-        setGisReady(true);
-      } else if (attempts >= maxAttempts) {
-        clearInterval(checkGIS);
-        setError('Failed to load Google Identity Services. Check your network.');
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const stored = await loadStoredToken(userId);
+        if (cancelled) return;
+
+        if (stored && isTokenValid(stored)) {
+          setToken(stored);
+          setView(VIEW.THREADS);
+          return;
+        }
+
+        // An expired token still means consent was granted before, so a
+        // silent refresh usually succeeds and spares the user a prompt.
+        try {
+          const fresh = await refreshAccessToken();
+          if (cancelled) return;
+          setToken(fresh);
+          setView(VIEW.THREADS);
+        } catch {
+          if (cancelled) return;
+          setToken(null);
+          setView(VIEW.GMAIL_AUTH);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Error loading Gmail token:', err);
+          setError('Failed to load Gmail access. Please authorize.');
+          setView(VIEW.GMAIL_AUTH);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    }, 100);
+    })();
 
-    return () => clearInterval(checkGIS);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, gisReady]);
+
+  // --- Token lifecycle -----------------------------------------------------
+
+  const refreshTokenNow = useCallback(async () => {
+    try {
+      const fresh = await refreshAccessToken();
+      tokenRef.current = fresh;
+      setToken(fresh);
+      return fresh;
+    } catch (err) {
+      console.error('Silent token refresh failed:', err);
+      setView(VIEW.GMAIL_AUTH);
+      setError('Your Gmail session expired. Please authorize again.');
+      const authError = new Error(NEEDS_AUTH);
+      authError.code = NEEDS_AUTH;
+      throw authError;
+    }
   }, []);
 
-  // Schedule silent token refresh before expiry
+  /**
+   * Run a Gmail call with a valid access token, refreshing once if the token
+   * turns out to be expired mid-flight.
+   */
+  const withGmail = useCallback(
+    async (fn) => {
+      let current = tokenRef.current;
+      if (!current?.access_token) {
+        const authError = new Error(NEEDS_AUTH);
+        authError.code = NEEDS_AUTH;
+        throw authError;
+      }
+
+      if (!isTokenValid(current)) {
+        current = await refreshTokenNow();
+      }
+
+      try {
+        return await fn(current.access_token);
+      } catch (err) {
+        if (err.message !== 'TOKEN_EXPIRED') throw err;
+        const refreshed = await refreshTokenNow();
+        return fn(refreshed.access_token);
+      }
+    },
+    [refreshTokenNow]
+  );
+
+  // Refresh quietly five minutes before expiry. Unlike the old flow this no
+  // longer changes the view, so a refresh can't yank you out of a thread.
   useEffect(() => {
-    if (!token?.expires_at) return;
+    if (!token?.expires_at) return undefined;
 
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
 
-    // Refresh 5 minutes before expiry
     const msUntilRefresh = token.expires_at - Date.now() - 5 * 60 * 1000;
-
     if (msUntilRefresh > 0) {
       refreshTimerRef.current = setTimeout(() => {
-        refreshAccessToken();
+        refreshTokenNow().catch(() => {});
       }, msUntilRefresh);
     }
 
     return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
-  }, [token?.expires_at]);
+  }, [token?.expires_at, refreshTokenNow]);
 
-  const handleTokenExpired = useCallback(() => {
-    setError('Session expired. Refreshing...');
-    try {
-      refreshAccessToken();
-    } catch {
-      setView(VIEW.AUTH);
-      setToken(null);
-      setError('Session expired. Please sign in again.');
+  // --- Loading threads -----------------------------------------------------
+
+  const reportError = useCallback((err, fallback) => {
+    if (err?.code === NEEDS_AUTH || err?.message === NEEDS_AUTH) return;
+    if (err?.message === 'RATE_LIMITED') {
+      setError('Gmail is rate limiting us. Give it a moment, then refresh.');
+      return;
     }
+    setError(`${fallback}: ${err?.message || 'unknown error'}`);
   }, []);
 
-  // Fetch threads with cache-first strategy
-  const fetchThreads = useCallback(async (append = false, forceSync = false) => {
-    if (!token?.access_token || !firebaseUser?.uid) return;
+  const loadThreads = useCallback(async () => {
+    if (!userId || !tokenRef.current?.access_token) return;
 
-    // Prevent overlapping fetches
-    if (fetchInProgressRef.current) {
-      console.log('Fetch already in progress, skipping');
-      return;
-    }
+    const requestId = ++requestIdRef.current;
+    const isStale = () => requestId !== requestIdRef.current;
 
-    // Prevent rapid successive fetches (rate limiting)
-    const now = Date.now();
-    if (!append && !forceSync && now - lastFetchTimeRef.current < FETCH_COOLDOWN) {
-      console.log('Fetch cooldown active, skipping fetch');
-      return;
-    }
-    lastFetchTimeRef.current = now;
-    fetchInProgressRef.current = true;
-
+    backfillTokenRef.current = null;
+    setHasMore(true);
     setLoading(true);
+
+    // 1. Show whatever the cache already has, immediately.
+    const cached = await loadThreadsFromCache(userId, { categoryFilter, searchQuery });
+    if (isStale()) return;
+    if (searchQuery) {
+      // A search is only meaningful once Gmail has answered it.
+      setThreads([]);
+    } else {
+      setThreads(cached);
+      setLoading(false);
+    }
+
+    // 2. Then sync with Gmail and show the result — the step the old flow
+    //    kicked off and never waited for, which is why a first load looked
+    //    like an empty mailbox.
+    setSyncing(true);
     try {
-      if (!append) {
-        // CACHE-FIRST STRATEGY: Load from cache immediately
-        console.log('Loading threads from cache...');
-        const cachedThreads = await loadThreadsCacheFirst(
-          firebaseUser.uid,
-          token.access_token,
-          {
-            categoryFilter,
-            searchQuery,
-            syncInBackground: !forceSync // Only sync in background if not forcing a full sync
-          }
-        );
+      const incremental = cached.length > 0 && !searchQuery;
+      const result = await withGmail((accessToken) =>
+        syncEmailsToCache(userId, accessToken, {
+          query: buildGmailQuery(searchQuery, categoryFilter),
+          incremental,
+          syncKey: `${categoryFilter || 'all'}`,
+          maxResults: 25,
+        })
+      );
+      if (isStale()) return;
 
-        // Display cached threads immediately
-        setThreads(cachedThreads);
-        setHasMore(cachedThreads.length >= 50); // Assume more if we got many results
-        
+      if (!incremental) {
+        backfillTokenRef.current = result.nextPageToken;
+        setHasMore(Boolean(result.nextPageToken));
+      }
+
+      if (searchQuery) {
+        // Search is answered by Gmail, not by a local scan — operators like
+        // `from:` or `has:attachment` can only be evaluated server-side.
+        setThreads(result.threads.filter((t) => matchesCategory(t, categoryFilter)));
       } else {
-        // For pagination, still use Gmail API directly
-        // (In future, could implement pagination in cache)
-        const query = buildGmailQuery(searchQuery, categoryFilter);
-        
-        const res = await listThreads(token.access_token, { 
-          maxResults: 50,
-          pageToken: nextPageToken,
-          q: query || undefined
+        const refreshed = await loadThreadsFromCache(userId, {
+          categoryFilter,
+          searchQuery,
         });
-
-        if (!res.threads?.length) {
-          setHasMore(false);
-          setLoading(false);
-          return;
-        }
-
-        setNextPageToken(res.nextPageToken || null);
-        setHasMore(!!res.nextPageToken);
-
-        // Fetch and cache thread details
-        const threadIds = res.threads.map((t) => t.id);
-        const batchSize = 10;
-        const allFormatted = [];
-
-        for (let i = 0; i < threadIds.length; i += batchSize) {
-          const batch = threadIds.slice(i, i + batchSize);
-          const details = await Promise.all(
-            batch.map((id) => getThread(token.access_token, id).catch(() => null))
-          );
-          const formatted = details.filter(Boolean).map((t) => formatThread(t));
-          
-          // Save to cache
-          for (const thread of formatted) {
-            await saveThreadToCache(firebaseUser.uid, thread).catch(console.error);
-          }
-          
-          allFormatted.push(...formatted);
-        }
-
-        allFormatted.sort((a, b) => b.date - a.date);
-        setThreads((prev) => [...prev, ...allFormatted]);
+        if (isStale()) return;
+        setThreads(refreshed);
       }
     } catch (err) {
-      if (err.message === 'TOKEN_EXPIRED') {
-        handleTokenExpired();
-      } else if (err.message.includes('rateLimitExceeded') || err.message.includes('Quota exceeded')) {
-        setError('Rate limit exceeded. Please wait a moment before refreshing.');
-        lastFetchTimeRef.current = Date.now() + 30000; // 30 second cooldown
-      } else {
-        setError('Failed to load threads: ' + err.message);
-      }
+      if (!isStale()) reportError(err, 'Failed to load threads');
     } finally {
-      setLoading(false);
-      fetchInProgressRef.current = false;
+      if (!isStale()) {
+        setSyncing(false);
+        setLoading(false);
+      }
     }
-  }, [token?.access_token, firebaseUser?.uid, handleTokenExpired, searchQuery, categoryFilter, nextPageToken]);
+  }, [userId, categoryFilter, searchQuery, withGmail, reportError]);
 
-  // Helper function to build Gmail query
-  function buildGmailQuery(search, category) {
-    let query = search;
-    
-    if (category === 'starred') {
-      query = query ? `${query} is:starred` : 'is:starred';
-    } else if (category === 'primary') {
-      query = query ? `${query} category:primary` : 'category:primary';
-    } else if (category === 'promotions') {
-      query = query ? `${query} category:promotions` : 'category:promotions';
-    } else if (category === 'social') {
-      query = query ? `${query} category:social` : 'category:social';
-    } else if (category === 'updates') {
-      query = query ? `${query} category:updates` : 'category:updates';
+  const loadMoreThreads = useCallback(async () => {
+    if (!userId || syncing || !hasMore) return;
+
+    const requestId = requestIdRef.current;
+    const isStale = () => requestId !== requestIdRef.current;
+
+    setSyncing(true);
+    try {
+      const result = await withGmail((accessToken) =>
+        syncEmailsToCache(userId, accessToken, {
+          query: buildGmailQuery(searchQuery, categoryFilter),
+          pageToken: backfillTokenRef.current,
+          incremental: false,
+          syncKey: `${categoryFilter || 'all'}`,
+          maxResults: 25,
+        })
+      );
+      if (isStale()) return;
+
+      backfillTokenRef.current = result.nextPageToken;
+      setHasMore(Boolean(result.nextPageToken));
+
+      if (searchQuery) {
+        const additions = result.threads.filter((t) => matchesCategory(t, categoryFilter));
+        setThreads((prev) => {
+          const seen = new Set(prev.map((t) => t.id));
+          return [...prev, ...additions.filter((t) => !seen.has(t.id))];
+        });
+      } else {
+        const refreshed = await loadThreadsFromCache(userId, {
+          categoryFilter,
+          searchQuery,
+          limitCount: 300,
+        });
+        if (isStale()) return;
+        setThreads(refreshed);
+      }
+    } catch (err) {
+      if (!isStale()) reportError(err, 'Failed to load more');
+    } finally {
+      if (!isStale()) setSyncing(false);
     }
-    
-    return query;
-  }
+  }, [userId, syncing, hasMore, searchQuery, categoryFilter, withGmail, reportError]);
 
-  // Load more threads
-  const loadMoreThreads = useCallback(() => {
-    if (!loading && hasMore && nextPageToken) {
-      fetchThreads(true);
-    }
-  }, [loading, hasMore, nextPageToken, fetchThreads]);
-
+  // `loadThreads` changes identity when the user, tab or search changes,
+  // which is exactly when the list should be rebuilt.
+  const threadsViewActive = view === VIEW.THREADS;
   useEffect(() => {
-    if (view === VIEW.THREADS && token?.access_token) {
-      // Reset pagination when search or category changes
-      setNextPageToken(null);
-      setHasMore(true);
-      fetchThreads(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, token?.access_token, searchQuery, categoryFilter]);
+    if (!threadsViewActive) return;
+    loadThreads();
+  }, [threadsViewActive, loadThreads]);
 
-  // Handle email/password sign in
+  // --- Auth actions --------------------------------------------------------
+
   const handleEmailSignIn = async (email, password) => {
     setLoading(true);
     setError(null);
     try {
       await signInWithEmail(email, password);
-      // onAuthStateChange will handle loading the Gmail token
     } catch (err) {
-      setError(err.message || 'Sign in failed');
       setLoading(false);
       throw err;
     }
   };
 
-  // Handle email/password sign up
   const handleEmailSignUp = async (email, password) => {
     setLoading(true);
     setError(null);
     try {
       await signUpWithEmail(email, password);
-      // After sign up, they'll need to authorize Gmail
-      setError('Account created! Now please authorize Gmail access.');
     } catch (err) {
-      setError(err.message || 'Sign up failed');
       setLoading(false);
       throw err;
     }
   };
 
-  // Handle Google sign in (Firebase, not Gmail OAuth)
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
     try {
       await signInWithGoogle();
-      // onAuthStateChange will handle loading the Gmail token
     } catch (err) {
       setError(err.message || 'Google sign in failed');
+    } finally {
       setLoading(false);
     }
   };
 
-  // Handle Gmail OAuth (only when needed)
-  const handleAuthorizeGmail = () => {
-    if (!gisReady) {
+  const handleAuthorizeGmail = async () => {
+    if (!isGISReady()) {
       setError('Google Identity Services not ready yet.');
-      return;
-    }
-    if (!firebaseUser) {
-      setError('Please sign in first.');
       return;
     }
     setLoading(true);
     setError(null);
-    requestAuth();
+    try {
+      const fresh = await requestAuth();
+      setToken(fresh);
+      setView(VIEW.THREADS);
+    } catch (err) {
+      setError(err.message || 'Authorization failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignOut = async () => {
-    if (token?.access_token) {
-      revokeToken(token.access_token);
-    }
+    const current = tokenRef.current;
+    if (current?.access_token) revokeToken(current.access_token);
+    if (userId) await deleteStoredToken(userId);
+
+    bootstrappedUidRef.current = null;
     setToken(null);
     setThreads([]);
     setCurrentThread(null);
@@ -357,152 +441,124 @@ export default function App() {
     await firebaseSignOut();
   };
 
-  const handleOpenThread = async (thread) => {
-    // Try to load from cache first for instant display
-    if (firebaseUser?.uid && thread.id) {
-      const cachedThread = await loadThreadFromCache(firebaseUser.uid, thread.id);
-      if (cachedThread && cachedThread.messages?.length > 0) {
-        setCurrentThread(cachedThread);
-        setView(VIEW.CHAT);
-        
-        // Mark unread messages as read
-        if (token?.access_token) {
-          const unreadMessages = cachedThread.messages.filter((m) => m.isUnread);
-          for (const msg of unreadMessages) {
-            try {
-              await markAsRead(token.access_token, msg.id);
-            } catch {
-              // Silently fail for read receipts
-            }
-          }
-        }
-        return;
-      }
-    }
-    
-    // Fallback: use the thread data we already have
-    setCurrentThread(thread);
-    setView(VIEW.CHAT);
+  // --- Threads -------------------------------------------------------------
 
-    // Mark unread messages as read
-    if (token?.access_token && thread.messages) {
-      const unreadMessages = thread.messages.filter((m) => m.isUnread);
-      for (const msg of unreadMessages) {
+  const markThreadRead = useCallback(
+    async (thread) => {
+      const unreadIds = (thread.messages || []).filter((m) => m.isUnread).map((m) => m.id);
+      if (!unreadIds.length || !userId) return;
+
+      for (const id of unreadIds) {
         try {
-          await markAsRead(token.access_token, msg.id);
+          await withGmail((accessToken) => markAsRead(accessToken, id));
         } catch {
-          // Silently fail for read receipts
+          // Read receipts are best-effort.
         }
       }
-    }
-  };
+
+      await markThreadReadInCache(userId, thread.id, unreadIds);
+      setThreads((prev) =>
+        prev.map((t) => (t.id === thread.id ? { ...t, hasUnread: false } : t))
+      );
+      setCurrentThread((prev) =>
+        prev && prev.id === thread.id
+          ? { ...prev, hasUnread: false, messages: prev.messages.map((m) => ({ ...m, isUnread: false })) }
+          : prev
+      );
+    },
+    [userId, withGmail]
+  );
+
+  const handleOpenThread = useCallback(
+    async (thread) => {
+      setView(VIEW.CHAT);
+      setCurrentThread({ ...thread, messages: thread.messages || [] });
+
+      try {
+        let full = userId ? await loadThreadFromCache(userId, thread.id) : null;
+
+        // List rows carry no message bodies, so anything not already cached
+        // in full has to come from Gmail before it can be displayed.
+        if (!full?.messages?.length) {
+          const fetched = await withGmail((accessToken) => getThread(accessToken, thread.id));
+          full = formatThread(fetched);
+          if (userId) await saveThreadToCache(userId, full).catch(console.error);
+        }
+
+        setCurrentThread(full);
+        markThreadRead(full);
+      } catch (err) {
+        reportError(err, 'Failed to open conversation');
+      }
+    },
+    [userId, withGmail, markThreadRead, reportError]
+  );
 
   const handleBack = () => {
     setCurrentThread(null);
     setView(VIEW.THREADS);
   };
 
-  const handleSendReply = async (text) => {
-    if (!currentThread || !token?.access_token) return;
+  const refreshThreadAfterSend = useCallback(
+    async (threadId) => {
+      try {
+        const updated = await withGmail((accessToken) => getThread(accessToken, threadId));
+        const formatted = formatThread(updated);
+        setCurrentThread(formatted);
+        if (userId) await saveThreadToCache(userId, formatted).catch(console.error);
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === formatted.id
+              ? { ...t, snippet: formatted.snippet, date: formatted.date, hasUnread: false }
+              : t
+          )
+        );
+      } catch {
+        // The message went out; refreshing the view is a nicety.
+      }
+    },
+    [userId, withGmail]
+  );
 
-    const lastMsg = currentThread.messages[currentThread.messages.length - 1];
-    const replyTo = lastMsg?.senderEmail || lastMsg?.from;
-    const subject = currentThread.subject?.startsWith('Re:')
-      ? currentThread.subject
-      : `Re: ${currentThread.subject}`;
-
-    await sendMessage(token.access_token, {
-      to: replyTo,
-      subject,
-      body: text.replace(/\n/g, '<br>'),
-      threadId: currentThread.id,
-      inReplyTo: lastMsg?.messageId,
-      references: lastMsg?.messageId,
-    });
-
-    // Refresh the thread to show the sent message
-    try {
-      const updated = await getThread(token.access_token, currentThread.id);
-      const formatted = formatThread(updated);
-      setCurrentThread(formatted);
-
-      // Save updated thread to cache
-      if (firebaseUser?.uid) {
-        await saveThreadToCache(firebaseUser.uid, formatted).catch(console.error);
+  const handleSendReply = useCallback(
+    async (text, { replyAll = false } = {}) => {
+      if (!currentThread?.messages?.length) {
+        throw new Error('This conversation has no message to reply to yet.');
       }
 
-      // Update in the threads list too
-      setThreads((prev) =>
-        prev.map((t) => (t.id === formatted.id ? formatted : t))
+      const last = currentThread.messages[currentThread.messages.length - 1];
+      const { to, cc } = buildReplyRecipients(currentThread, mailboxEmail, { replyAll });
+
+      await withGmail((accessToken) =>
+        sendMessage(accessToken, {
+          to,
+          cc,
+          subject: buildReplySubject(currentThread),
+          body: escapeHtml(text).replace(/\r?\n/g, '<br>'),
+          threadId: currentThread.id,
+          inReplyTo: last?.messageId,
+          references: buildReferences(last),
+        })
       );
-    } catch {
-      // At minimum the message was sent
-    }
-  };
 
-  const handleCompose = () => {
-    // TODO: Implement compose new email flow
-    alert('Compose feature coming soon');
-  };
+      await refreshThreadAfterSend(currentThread.id);
+    },
+    [currentThread, mailboxEmail, withGmail, refreshThreadAfterSend]
+  );
 
-  // Group threads by sender
-  const groupThreadsBySender = useCallback((threadList) => {
-    const senderMap = new Map();
-    
-    threadList.forEach((thread) => {
-      // Get the sender email from the first message (usually the one who started the thread)
-      const senderEmail = thread.participants?.[0] || thread.senderEmail || 'unknown';
-      
-      if (!senderMap.has(senderEmail)) {
-        senderMap.set(senderEmail, {
-          id: `sender-${senderEmail}`,
-          senderEmail: senderEmail,
-          subject: thread.participants?.[0] || senderEmail,
-          participants: [senderEmail],
-          messages: [],
-          snippet: '',
-          date: thread.date,
-          hasUnread: false,
-          isSenderGroup: true, // Flag to identify sender-grouped threads
-          originalThreadIds: []
-        });
-      }
-      
-      const senderGroup = senderMap.get(senderEmail);
-      
-      // Add all messages from this thread to the sender group
-      if (thread.messages) {
-        senderGroup.messages.push(...thread.messages);
-      }
-      
-      // Track original thread IDs
-      senderGroup.originalThreadIds.push(thread.id);
-      
-      // Update snippet to most recent message
-      if (thread.date > senderGroup.date) {
-        senderGroup.date = thread.date;
-        senderGroup.snippet = thread.snippet;
-      }
-      
-      // Update unread status
-      if (thread.hasUnread) {
-        senderGroup.hasUnread = true;
-      }
-    });
-    
-    // Convert map to array and sort by date
-    const grouped = Array.from(senderMap.values());
-    grouped.forEach(group => {
-      // Sort messages within each group by date
-      group.messages.sort((a, b) => (a.date || 0) - (b.date || 0));
-    });
-    grouped.sort((a, b) => b.date - a.date);
-    
-    return grouped;
-  }, []);
-
-  // Get display threads based on groupBy mode
-  const displayThreads = groupBy === 'sender' ? groupThreadsBySender(threads) : threads;
+  const handleComposeSend = useCallback(
+    async ({ to, cc, subject, body }) => {
+      await withGmail((accessToken) =>
+        sendMessage(accessToken, {
+          to,
+          cc,
+          subject,
+          body: escapeHtml(body).replace(/\r?\n/g, '<br>'),
+        })
+      );
+    },
+    [withGmail]
+  );
 
   return (
     <>
@@ -513,11 +569,11 @@ export default function App() {
       )}
 
       {view === VIEW.AUTH && (
-        <AuthScreen 
+        <AuthScreen
           onEmailSignIn={handleEmailSignIn}
           onEmailSignUp={handleEmailSignUp}
           onGoogleSignIn={handleGoogleSignIn}
-          loading={loading} 
+          loading={loading}
         />
       )}
 
@@ -532,14 +588,15 @@ export default function App() {
 
       {view === VIEW.THREADS && (
         <ThreadList
-          threads={displayThreads}
+          threads={threads}
           onOpenThread={handleOpenThread}
-          onCompose={handleCompose}
+          onCompose={() => setComposeOpen(true)}
           onSignOut={handleSignOut}
-          onRefresh={() => fetchThreads(false)}
+          onRefresh={loadThreads}
           onLoadMore={loadMoreThreads}
-          userEmail={token?.email}
+          userEmail={mailboxEmail}
           loading={loading}
+          syncing={syncing}
           hasMore={hasMore}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -553,11 +610,16 @@ export default function App() {
       {view === VIEW.CHAT && (
         <ChatView
           thread={currentThread}
-          userEmail={token?.email}
+          userEmail={mailboxEmail}
           accessToken={token?.access_token}
           onBack={handleBack}
           onSend={handleSendReply}
+          onOpenCompose={() => setComposeOpen(true)}
         />
+      )}
+
+      {composeOpen && (
+        <ComposeModal onClose={() => setComposeOpen(false)} onSend={handleComposeSend} />
       )}
     </>
   );

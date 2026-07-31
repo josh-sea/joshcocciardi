@@ -23,10 +23,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "deploy": "./deploy-to-portfolio.sh",
-    "deploy:portfolio": "./deploy-to-portfolio.sh",
-    "deploy:firestore": "cd ../joshcocciardi && firebase deploy --only firestore:rules,firestore:indexes",
-    "deploy:hosting": "cd ../joshcocciardi && firebase deploy --only hosting",
-    "firestore:copy": "cp firestore.rules firestore.indexes.json ../joshcocciardi/"
+    "deploy:portfolio": "./deploy-to-portfolio.sh --deploy"
   },
   "eslintConfig": {
     "extends": [

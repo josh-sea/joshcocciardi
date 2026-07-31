@@ -1,95 +1,47 @@
 #!/bin/bash
+#
+# Builds the mail app and drops the output where the portfolio serves it,
+# at /projects/electronic-mail.
+#
+# Paths are derived from this script's location, so it works from any clone
+# (the previous version hardcoded one machine's ~/Downloads).
+#
+# CI runs the same build on merge to master — see .github/workflows/deploy.yml.
+# Use this script for a local build or a manual deploy.
 
-# Email App Deployment Script
-# This script builds the email app and deploys it to the portfolio at /electronic-mail
+set -euo pipefail
 
-set -e  # Exit on any error
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$APP_DIR/../.." && pwd)"
+TARGET="$REPO_ROOT/apps/portfolio/public/projects/electronic-mail"
 
-echo "========================================="
-echo "Email App Deployment to Portfolio"
-echo "========================================="
-echo ""
+DEPLOY=0
+if [[ "${1:-}" == "--deploy" ]]; then
+  DEPLOY=1
+fi
 
-# Define paths
-EMAIL_APP_DIR="/Users/joshcocciardi/Downloads/Develop/countdown"
-PORTFOLIO_DIR="/Users/joshcocciardi/Downloads/Develop/joshcocciardi"
-
-# Step 1: Build the email app
-echo "Step 1: Building email app..."
-cd "$EMAIL_APP_DIR"
+echo "Building mail app…"
+cd "$APP_DIR"
 npm run build
 
-if [ $? -ne 0 ]; then
-    echo "❌ Email app build failed!"
-    exit 1
-fi
-echo "✅ Email app built successfully"
-echo ""
+echo "Copying build → $TARGET"
+rm -rf "$TARGET"
+mkdir -p "$TARGET"
+cp -r "$APP_DIR/build/." "$TARGET/"
 
-# Step 2: Copy email app and Firestore config to portfolio
-echo "Step 2: Copying email app to portfolio..."
-mkdir -p "$PORTFOLIO_DIR/public/electronic-mail"
-rm -rf "$PORTFOLIO_DIR/public/electronic-mail"/*
-cp -r "$EMAIL_APP_DIR/build"/* "$PORTFOLIO_DIR/public/electronic-mail/"
+echo "Syncing Firestore indexes to the repo root…"
+cp "$APP_DIR/firestore.indexes.json" "$REPO_ROOT/firestore.indexes.json"
+echo "  note: firestore.rules at the repo root covers every app on the"
+echo "  project and is deliberately NOT overwritten from here — copying the"
+echo "  mail-app slice over it would delete every other app's rules."
 
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to copy email app to portfolio!"
-    exit 1
-fi
-echo "✅ Email app copied to portfolio/public/electronic-mail"
-echo ""
-
-# Copy Firestore rules and indexes
-echo "Step 2b: Copying Firestore configuration..."
-cp "$EMAIL_APP_DIR/firestore.rules" "$PORTFOLIO_DIR/firestore.rules"
-cp "$EMAIL_APP_DIR/firestore.indexes.json" "$PORTFOLIO_DIR/firestore.indexes.json"
-
-if [ $? -ne 0 ]; then
-    echo "⚠️  Warning: Could not copy Firestore configuration"
-fi
-echo "✅ Firestore configuration copied"
-echo ""
-
-# Step 3: Build portfolio (includes email app)
-echo "Step 3: Building portfolio..."
-cd "$PORTFOLIO_DIR"
-npm run build
-
-if [ $? -ne 0 ]; then
-    echo "❌ Portfolio build failed!"
-    exit 1
-fi
-echo "✅ Portfolio built successfully"
-echo ""
-
-# Step 4: Deploy Firestore rules and indexes
-echo "Step 4: Deploying Firestore configuration..."
-cd "$PORTFOLIO_DIR"
-firebase deploy --only firestore:rules,firestore:indexes
-
-if [ $? -ne 0 ]; then
-    echo "⚠️  Warning: Firestore deployment failed (continuing anyway...)"
+if [[ "$DEPLOY" -eq 1 ]]; then
+  echo "Deploying hosting + Firestore rules…"
+  cd "$REPO_ROOT"
+  npx firebase-tools@13 deploy --only hosting,firestore:rules
+  echo "Live at https://www.joshcocciardi.com/projects/electronic-mail"
 else
-    echo "✅ Firestore rules and indexes deployed"
+  echo
+  echo "Build staged in the portfolio. Commit it, or re-run with --deploy to"
+  echo "push straight to Firebase."
 fi
-echo ""
-
-# Step 5: Deploy to Firebase (hosting + any remaining config)
-echo "Step 5: Deploying to Firebase hosting..."
-firebase deploy --only hosting
-
-if [ $? -ne 0 ]; then
-    echo "❌ Firebase deployment failed!"
-    exit 1
-fi
-
-echo ""
-echo "========================================="
-echo "✅ Deployment Complete!"
-echo "========================================="
-echo ""
-echo "Your apps are now live at:"
-echo "  Portfolio:  https://www.joshcocciardi.com"
-echo "  Email App:  https://www.joshcocciardi.com/electronic-mail"
-echo ""
-echo "Remember to hard refresh (Cmd+Shift+R) to see changes!"

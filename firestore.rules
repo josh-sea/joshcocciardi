@@ -1,28 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Gmail tokens collection - allow access for OAuth flow
-    // Since the app uses Google Identity Services (not Firebase Auth),
-    // we need to allow access without Firebase authentication
+    // Legacy Gmail token store, keyed by email address and readable by
+    // anyone. Tokens now live in /users/{uid}/private/gmail. Locked down
+    // here so the old documents can't be read while they're being deleted.
     match /gmail_tokens/{email} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
-    
+
     // Email Cache - Users can only access their own cached emails
     match /users/{userId} {
       // Users can only access their own data
       allow read, write: if request.auth != null && request.auth.uid == userId;
-      
+
+      // Gmail OAuth tokens. Same owner-only rule as everything else under
+      // /users, but kept in its own subcollection so it is never caught by
+      // a broader match on the user document.
+      match /private/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
       // Email threads subcollection
       match /threads/{threadId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
-      
+
       // Email messages subcollection
       match /messages/{messageId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
-      
+
       // Sync metadata
       match /meta/{docId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
@@ -298,12 +305,18 @@ service cloud.firestore {
     }
     
     // Default authenticated access for other collections.
-    // CanITwo, Recipe Box and Mise collections are excluded — without this
-    // carve-out, the catch-all would override their stricter rules above
-    // (in Firestore, any matching `allow` wins), and every signed-in user
-    // could read and write everyone else's documents.
+    // CanITwo, Recipe Box, Mise and the per-user `users` tree are excluded —
+    // without this carve-out, the catch-all would override their stricter
+    // rules above (in Firestore, any matching `allow` wins), and every
+    // signed-in user could read and write everyone else's documents.
+    //
+    // `users` matters most: anyone can create an account, so without the
+    // exclusion below every signed-in user could read every other user's
+    // cached mail and OAuth tokens.
     match /{collection}/{document=**} {
       allow read, write: if request.auth != null
+        && collection != 'users'
+        && collection != 'gmail_tokens'
         && !collection.matches('canitwo_.*')
         && !collection.matches('recipebox_.*')
         && !collection.matches('mise_.*');

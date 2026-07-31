@@ -1064,3 +1064,217 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ============================================================
+   Sandboxed message rendering
+   ============================================================ */
+
+/* The bubble no longer clips its content — the body is an iframe that
+   reports its own height, and there's an explicit button to open the
+   full message. */
+.message-bubble {
+  max-height: none;
+  overflow: visible;
+  cursor: default;
+}
+
+.message-bubble::after {
+  content: none;
+}
+
+.message-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.quote-toggle,
+.expand-message-btn {
+  display: inline-block;
+  margin-top: 8px;
+  margin-right: 8px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.message.sent .quote-toggle,
+.message.sent .expand-message-btn {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.quote-toggle:hover,
+.expand-message-btn:hover {
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.body-truncated-note {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* ============================================================
+   Thread list
+   ============================================================ */
+
+.thread-subject {
+  font-size: 14px;
+  color: #3a3a3c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-subject.unread,
+.thread-name.unread {
+  color: #000;
+  font-weight: 600;
+}
+
+.unread-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #007aff;
+  vertical-align: middle;
+}
+
+.sender-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 16px;
+  background: #f2f2f7;
+  border-bottom: 1px solid #e0e0e5;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b6b70;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sync-indicator {
+  padding: 6px 16px;
+  background: #f2f2f7;
+  border-bottom: 1px solid #e0e0e5;
+  font-size: 13px;
+  color: #8e8e93;
+  text-align: center;
+}
+
+/* ============================================================
+   Reply bar + errors
+   ============================================================ */
+
+.reply-all-toggle {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  margin-right: 8px;
+  border: 1px solid #d0d0d5;
+  border-radius: 14px;
+  background: #fff;
+  color: #8e8e93;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.reply-all-toggle.active {
+  background: #007aff;
+  border-color: #007aff;
+  color: #fff;
+}
+
+.send-error {
+  padding: 8px 16px;
+  background: #ffe5e5;
+  color: #c0392b;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ============================================================
+   Compose
+   ============================================================ */
+
+.compose-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.compose-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.compose-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.compose-input {
+  padding: 10px 12px;
+  border: 1px solid #d0d0d5;
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.compose-body {
+  padding: 12px;
+  border: 1px solid #d0d0d5;
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.compose-input:focus,
+.compose-body:focus {
+  outline: none;
+  border-color: #007aff;
+}
+
+.compose-add-cc {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #007aff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.compose-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.compose-actions .auth-button {
+  width: auto;
+  padding: 10px 24px;
+}
