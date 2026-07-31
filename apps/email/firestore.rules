@@ -1,53 +1,40 @@
 rules_version = '2';
+
+// Rules for the mail app's own collections.
+//
+// The deployed ruleset is the one at the repository root — it covers every
+// app on the project, and this file is not deployed on its own. This is the
+// mail-app slice of it, kept here so the app's storage model is readable in
+// one place; keep the two in step.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Gmail tokens collection - allow access for OAuth flow
-    // Since the app uses Google Identity Services (not Firebase Auth),
-    // we need to allow access without Firebase authentication
+    // Legacy token store, keyed by email address and world-readable.
+    // Superseded by /users/{uid}/private/gmail. Denied outright so the old
+    // documents can't be read while they're being cleaned up.
     match /gmail_tokens/{email} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
-    
-    // Email Cache - Users can only access their own cached emails
+
     match /users/{userId} {
-      // Users can only access their own data
       allow read, write: if request.auth != null && request.auth.uid == userId;
-      
-      // Email threads subcollection
+
+      // Gmail OAuth access tokens — owner only.
+      match /private/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Cached threads, messages and sync state — owner only.
       match /threads/{threadId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
-      
-      // Email messages subcollection
+
       match /messages/{messageId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
-      
-      // Sync metadata
+
       match /meta/{docId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
-    }
-    
-    // Radar metadata - read access for clients
-    match /radar_sites/{siteId} {
-      allow read: if true;
-      allow write: if false;
-    }
-    
-    match /radar_scans/{scanId} {
-      allow read: if true;
-      allow write: if false;
-    }
-    
-    // Client usage tracking (optional)
-    match /client_usage/{clientId} {
-      allow read, write: if true;
-    }
-    
-    // Default authenticated access for other collections
-    match /{document=**} {
-      allow read, write: if request.auth != null;
     }
   }
 }

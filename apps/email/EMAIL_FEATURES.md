@@ -1,139 +1,87 @@
-# Email Features Documentation
+# Features
 
-## Implemented Features
+What the app actually does today. See `README.md` for setup and
+architecture.
 
-### 1. Search Functionality
-- **Search bar** with debounced input (500ms delay)
-- Supports Gmail search syntax:
-  - `from:john` - Search by sender
-  - `subject:meeting` - Search by subject
-  - `has:attachment` - Emails with attachments
-  - `after:2024/01/01` - Emails after a date
-  - `is:unread` - Unread emails only
-- Clear button (✕) to quickly reset search
+## Reading
 
-### 2. Category Filtering
-Four category filters available:
-- **All** - All emails in inbox
-- **Primary** - Personal emails (Gmail's primary category)
-- **Starred** - Starred/favorited emails
-- **Important** - Gmail's important emails
+**Category tabs** — Primary, Promotions, Social, Updates, Starred. The tab
+drives both the Gmail query (`category:promotions`, `is:starred`) and the
+filter applied to the cached list, so switching tabs changes what you see.
+Threads carry a `category` derived from their Gmail labels; anything without
+a category label is treated as Primary, matching Gmail's own behavior.
 
-Categories can be combined with search queries.
+**Search** — debounced 500 ms, passed to Gmail as a query, so the full
+operator syntax works:
 
-### 3. Infinite Scroll Pagination
-- Automatically loads 30 more emails when scrolling to 80% of the list
-- Shows "Loading more..." indicator while fetching
-- Shows "No more emails" when all emails have been loaded
-- No manual "Load More" button needed
+| Query | Finds |
+|---|---|
+| `from:ada` | mail from Ada |
+| `subject:lunch` | subject matches |
+| `has:attachment` | messages with attachments |
+| `after:2026/01/01` | mail after a date |
+| `is:unread` | unread only |
 
-### 4. How Email Fetching Works
+Plain text searches also filter the local cache immediately, so results
+appear before Gmail answers. Operator searches wait for the server, since
+they can't be evaluated against cached fields.
 
-**Current Implementation:**
-- Fetches 30 threads per page using Gmail API
-- Processes threads in batches of 10 for optimal performance
-- Uses Gmail API's `pageToken` for pagination
-- Queries are built by combining search terms and category filters
+**Grouping** — "By Thread" is a flat list. "By Sender" groups the list into
+sections under each sender's name. Rows stay real threads in both modes, so
+opening one always opens a conversation Gmail knows about.
 
-**Limits:**
-- 30 threads per request (configurable in `App.js`)
-- No hard limit on total emails - keeps loading until no more available
-- Respects Gmail API rate limits
+**Pagination** — scrolling within 400 px of the bottom backfills the next
+page of older mail using Gmail's page token, writing each page into the
+cache. "No more emails" appears when Gmail stops returning a page token.
 
-**API Query Examples:**
-```javascript
-// All starred emails
-'is:starred'
+**Message bodies** — rendered in a sandboxed iframe (see README). Quoted
+history is detected and collapsed behind a "Show quoted text" button; the
+split is conservative and never discards content, so a newsletter that merely
+contains the words "on … wrote:" keeps its body.
 
-// Primary category with search
-'category:primary subject:meeting'
+**Images** — blocked by CSP until you choose "Display images" (this message)
+or "Always display" (this session). Blocking covers `<img>`, `srcset` and CSS
+background images.
 
-// Important emails from specific sender
-'is:important from:john@example.com'
-```
+**Attachments** — listed per message with size, downloaded on demand through
+the Gmail attachments endpoint.
 
-## Future Enhancement: Frequent Contacts
+## Writing
 
-### Concept
-Similar to iMessage's pinned contacts, show most frequently interacted contacts/threads at the top of the inbox.
+**Replies** — sent to the last message's `Reply-To`, falling back to `From`.
+If you sent the last message, the reply goes to *its* recipients rather than
+back to yourself. "Reply all" adds the remaining To and Cc recipients, minus
+your own address.
 
-### Implementation Plan
+Threading headers are set properly: `In-Reply-To` is the last message's
+Message-ID and `References` accumulates the existing chain rather than
+replacing it, so other clients thread the conversation correctly.
 
-1. **Interaction Tracking**
-   - Track when user opens a thread
-   - Track when user sends a reply
-   - Track read receipts (already marking as read)
-   - Store interaction data in Firebase Firestore
+Subjects come from the message being replied to, prefixed `Re:` only when it
+isn't already. Non-ASCII subjects are RFC 2047 encoded. Typed text is HTML
+escaped, so a message containing `<` or `&` sends as written.
 
-2. **Scoring Algorithm**
-   ```javascript
-   score = (opens × 1) + (replies × 3) + (recent_interaction_bonus)
-   ```
-   - Opening a thread: +1 point
-   - Sending a reply: +3 points
-   - Recent interactions (last 7 days): +2 point multiplier
-   - Decay older interactions over time
+**Compose** — To / Cc / Subject / body, with comma or semicolon separated
+recipients.
 
-3. **UI Changes**
-   - Add "Frequent" section at top of thread list
-   - Show top 5-10 frequent contacts with special styling
-   - Add pin/unpin functionality for manual control
+**Read state** — opening a thread marks its unread messages read in Gmail
+*and* in the cache, so the unread dot doesn't come back on reload.
 
-4. **Data Structure (Firestore)**
-   ```javascript
-   users/{userId}/interactions/{threadId} {
-     threadId: string,
-     opens: number,
-     replies: number,
-     lastInteraction: timestamp,
-     isPinned: boolean,
-     participants: array of emails
-   }
-   ```
+## Sync behavior
 
-### How to Implement
+- First load of a tab: 25 threads, written to the cache.
+- Later loads: incremental, using `after:<epoch seconds>` from that tab's own
+  watermark with a minute of overlap for clock skew.
+- Backfill pages advance the page token but not the watermark — a deep page
+  says nothing about whether new mail has arrived.
+- Message bodies over 500 KB are trimmed before storage (Firestore caps
+  documents at 1 MiB) and flagged in the UI.
+- Failed cache writes surface as an error instead of being swallowed.
 
-To add the frequent contacts feature:
+## Not built yet
 
-1. **Update Firebase Rules** (`firestore.rules`):
-   ```
-   match /users/{userId}/interactions/{threadId} {
-     allow read, write: if request.auth.uid == userId;
-   }
-   ```
-
-2. **Create Interaction Tracking Service** (`src/services/interactions.js`):
-   - `trackThreadOpen(userId, threadId, participants)`
-   - `trackThreadReply(userId, threadId, participants)`
-   - `getFrequentThreads(userId, limit)`
-   - `pinThread(userId, threadId)`
-
-3. **Update App.js**:
-   - Load frequent threads on mount
-   - Track interactions in `handleOpenThread` and `handleSendReply`
-
-4. **Update ThreadList.js**:
-   - Add "Frequent" section above regular threads
-   - Add pin/unpin button to thread items
-
-5. **Add Styling**:
-   - Style for frequent section header
-   - Pin icon styling
-   - Separate frequent threads visually
-
-## Usage Tips
-
-- **Search Examples:**
-  - Find all emails from a specific domain: `from:@company.com`
-  - Find unread important emails: `is:unread is:important`
-  - Find emails with PDFs: `filename:pdf`
-  
-- **Category Best Practices:**
-  - Use "Primary" for personal conversations
-  - Use "Starred" for emails you've marked as important
-  - Combine filters: Search in Starred category for quick access
-
-- **Performance:**
-  - Search is debounced by 500ms - wait for typing to finish
-  - Infinite scroll loads automatically - just keep scrolling
-  - First load fetches 30 threads - subsequent loads add 30 more
+- Drafts, forwarding, and rich-text composing
+- Labels, archiving, delete, star toggling
+- Attachments on outgoing mail
+- Push notifications for new mail
+- Frequent contacts pinned to the top of the inbox, iMessage style

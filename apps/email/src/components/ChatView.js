@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { downloadAttachment } from '../services/gmail';
+import { downloadAttachment, splitQuotedText } from '../services/gmail';
+import MessageBody from './MessageBody';
 
 function formatTime(dateStr) {
   if (!dateStr) return '';
@@ -30,36 +31,25 @@ function formatDateDivider(dateStr) {
   });
 }
 
-function sanitizeHtml(html) {
-  // Strip script tags and event handlers for safety
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/\son\w+="[^"]*"/gi, '')
-    .replace(/\son\w+='[^']*'/gi, '');
-}
-
+/**
+ * Heuristic used only to decide whether to offer the "display images" banner.
+ * Blocking itself is enforced by the renderer's CSP, so a miss here costs a
+ * banner, never a leaked tracking pixel.
+ */
 function hasImages(html) {
-  // Check if HTML contains image tags
-  return /<img\s+[^>]*src=/i.test(html);
-}
-
-function blockImages(html) {
-  // Replace image src with a placeholder to prevent auto-loading
-  return html.replace(
-    /<img\s+([^>]*)src=["']([^"']*)["']([^>]*)>/gi,
-    '<img $1src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100\' height=\'100\'%3E%3Crect fill=\'%23e5e5ea\' width=\'100\' height=\'100\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' dy=\'.3em\' fill=\'%238e8e93\' font-size=\'14\' font-family=\'sans-serif\'%3EImage%3C/text%3E%3C/svg%3E" data-original-src="$2" $3>'
-  );
+  return /<img[\s>]|srcset=|background-image\s*:/i.test(html || '');
 }
 
 function AttachmentList({ attachments, messageId, onDownload }) {
   if (!attachments || attachments.length === 0) return null;
-  
+
   const formatSize = (bytes) => {
+    if (!bytes && bytes !== 0) return '';
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
-  
+
   return (
     <div className="attachments-container">
       {attachments.map((att, idx) => (
@@ -69,10 +59,7 @@ function AttachmentList({ attachments, messageId, onDownload }) {
             <div className="attachment-name">{att.filename}</div>
             <div className="attachment-size">{formatSize(att.size)}</div>
           </div>
-          <button
-            className="attachment-download"
-            onClick={() => onDownload(messageId, att)}
-          >
+          <button className="attachment-download" onClick={() => onDownload(messageId, att)}>
             Download
           </button>
         </div>
@@ -81,22 +68,48 @@ function AttachmentList({ attachments, messageId, onDownload }) {
   );
 }
 
-export default function ChatView({ thread, userEmail, accessToken, onBack, onSend }) {
+function ImageBanner({ className, onShow, onAlwaysShow }) {
+  return (
+    <div className={className}>
+      <span>Images are hidden for your privacy</span>
+      <div className="image-banner-actions">
+        <button className="load-images-btn" onClick={onShow}>
+          Display images
+        </button>
+        <button className="always-load-btn" onClick={onAlwaysShow}>
+          Always display
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function ChatView({
+  thread,
+  userEmail,
+  accessToken,
+  onBack,
+  onSend,
+  onOpenCompose,
+}) {
   const [replyText, setReplyText] = useState('');
+  const [replyAll, setReplyAll] = useState(false);
   const [sending, setSending] = useState(false);
-  const [expandedMessage, setExpandedMessage] = useState(null);
-  const [loadedImages, setLoadedImages] = useState(new Set());
+  const [sendError, setSendError] = useState(null);
+  const [expandedMessageId, setExpandedMessageId] = useState(null);
+  const [loadedImages, setLoadedImages] = useState(() => new Set());
   const [alwaysLoadImages, setAlwaysLoadImages] = useState(false);
+  const [expandedQuotes, setExpandedQuotes] = useState(() => new Set());
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Sort messages chronologically (oldest first, newest at bottom)
-  const messages = useMemo(() => 
-    [...(thread?.messages || [])].sort((a, b) => {
-      const aDate = parseInt(a.internalDate || 0, 10);
-      const bDate = parseInt(b.internalDate || 0, 10);
-      return aDate - bDate;
-    }),
+  const messages = useMemo(
+    () =>
+      [...(thread?.messages || [])].sort((a, b) => {
+        const aDate = parseInt(a.internalDate || 0, 10);
+        const bDate = parseInt(b.internalDate || 0, 10);
+        return aDate - bDate;
+      }),
     [thread?.messages]
   );
 
@@ -106,59 +119,67 @@ export default function ChatView({ thread, userEmail, accessToken, onBack, onSen
 
   useEffect(() => {
     scrollToBottom();
-  }, [thread?.messages, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
   useEffect(() => {
-    // Reset loaded images when thread changes
     setLoadedImages(new Set());
+    setExpandedQuotes(new Set());
+    setExpandedMessageId(null);
+    setSendError(null);
   }, [thread?.id]);
 
   const handleLoadImages = useCallback((messageId) => {
-    setLoadedImages(prev => new Set([...prev, messageId]));
+    setLoadedImages((prev) => new Set([...prev, messageId]));
   }, []);
 
   const handleAlwaysLoadImages = useCallback(() => {
     setAlwaysLoadImages(true);
-    // Load all images in current thread
-    const allMessageIds = messages.map(m => m.id);
-    setLoadedImages(new Set(allMessageIds));
-  }, [messages]);
+  }, []);
 
-  const handleDownloadAttachment = useCallback(async (messageId, attachment) => {
-    try {
-      const bytes = await downloadAttachment(accessToken, messageId, attachment.attachmentId);
-      const blob = new Blob([bytes], { type: attachment.mimeType });
-      const url = URL.createObjectURL(blob);
-      
-      // Trigger download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = attachment.filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Failed to download attachment:', err);
-      alert('Failed to download attachment. Please try again.');
-    }
-  }, [accessToken]);
+  const toggleQuote = useCallback((messageId) => {
+    setExpandedQuotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  }, []);
 
-  if (!thread) return null;
-  
-  const subject = thread.subject || '(no subject)';
-  const participantCount = thread.participantCount || 1;
+  const handleDownloadAttachment = useCallback(
+    async (messageId, attachment) => {
+      try {
+        const bytes = await downloadAttachment(accessToken, messageId, attachment.attachmentId);
+        const blob = new Blob([bytes], { type: attachment.mimeType });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = attachment.filename;
+        a.click();
+        // Revoked on the next tick so the click has a chance to start.
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (err) {
+        console.error('Failed to download attachment:', err);
+        setSendError('Could not download that attachment. Please try again.');
+      }
+    },
+    [accessToken]
+  );
 
   const handleSend = async () => {
     if (!replyText.trim() || sending) return;
 
     setSending(true);
+    setSendError(null);
     try {
-      await onSend(replyText.trim());
+      await onSend(replyText.trim(), { replyAll });
       setReplyText('');
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
     } catch (err) {
       console.error('Failed to send:', err);
+      setSendError(err.message || 'Could not send your reply.');
     } finally {
       setSending(false);
     }
@@ -177,6 +198,17 @@ export default function ChatView({ thread, userEmail, accessToken, onBack, onSen
     e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
   };
 
+  const expandedMessage = useMemo(
+    () => messages.find((m) => m.id === expandedMessageId) || null,
+    [messages, expandedMessageId]
+  );
+
+  if (!thread) return null;
+
+  const subject = thread.subject || '(no subject)';
+  const participantCount = thread.participantCount || 1;
+  const mine = (userEmail || '').toLowerCase();
+
   let lastDate = '';
 
   return (
@@ -191,14 +223,14 @@ export default function ChatView({ thread, userEmail, accessToken, onBack, onSen
             <div className="chat-subtitle">{participantCount} participants</div>
           )}
         </div>
-        <div style={{ width: 80 }} />
+        <button className="compose-button" onClick={onOpenCompose} title="New message">
+          &#9998;
+        </button>
       </div>
 
       <div className="messages-container">
         {messages.map((msg) => {
-          const isSent = msg.senderEmail === userEmail ||
-            msg.senderEmail?.includes(userEmail);
-          const messageClass = isSent ? 'sent' : 'received';
+          const isSent = Boolean(mine) && (msg.senderEmail || '').toLowerCase() === mine;
           const messageDate = formatDateDivider(msg.internalDate);
           let dateDivider = null;
 
@@ -211,47 +243,50 @@ export default function ChatView({ thread, userEmail, accessToken, onBack, onSen
             );
           }
 
-          const messageHtml = msg.body || msg.snippet || '';
-          const hasImgs = hasImages(messageHtml);
+          const fullHtml = msg.body || msg.snippet || '';
+          const { visible, quoted } = splitQuotedText(fullHtml);
+          const quoteShown = expandedQuotes.has(msg.id);
+          const shownHtml = quoteShown ? fullHtml : visible;
+
           const imagesLoaded = alwaysLoadImages || loadedImages.has(msg.id);
-          const processedHtml = sanitizeHtml(
-            hasImgs && !imagesLoaded ? blockImages(messageHtml) : messageHtml
-          );
+          const showBanner = hasImages(shownHtml) && !imagesLoaded;
 
           return (
             <React.Fragment key={msg.id}>
               {dateDivider}
-              {hasImgs && !imagesLoaded && (
-                <div className="image-banner">
-                  <span>Images are hidden for your privacy</span>
-                  <div className="image-banner-actions">
-                    <button 
-                      className="load-images-btn"
-                      onClick={() => handleLoadImages(msg.id)}
-                    >
-                      Display images
-                    </button>
-                    <button 
-                      className="always-load-btn"
-                      onClick={handleAlwaysLoadImages}
-                    >
-                      Always display
-                    </button>
-                  </div>
-                </div>
-              )}
-              <div className={`message ${messageClass}`}>
-                {!isSent && (
-                  <div className="sender-name">{msg.senderName}</div>
+              <div className={`message ${isSent ? 'sent' : 'received'}`}>
+                {!isSent && <div className="sender-name">{msg.senderName}</div>}
+                {showBanner && (
+                  <ImageBanner
+                    className="image-banner"
+                    onShow={() => handleLoadImages(msg.id)}
+                    onAlwaysShow={handleAlwaysLoadImages}
+                  />
                 )}
-                <div
-                  className="message-bubble"
-                  onClick={() => setExpandedMessage(msg)}
-                  dangerouslySetInnerHTML={{
-                    __html: processedHtml,
-                  }}
-                />
-                <AttachmentList 
+                <div className="message-bubble">
+                  <MessageBody
+                    html={shownHtml}
+                    showImages={imagesLoaded}
+                    variant={isSent ? 'sent' : 'received'}
+                  />
+                  {quoted && (
+                    <button className="quote-toggle" onClick={() => toggleQuote(msg.id)}>
+                      {quoteShown ? 'Hide quoted text' : 'Show quoted text'}
+                    </button>
+                  )}
+                  {msg.bodyTruncated && (
+                    <div className="body-truncated-note">
+                      This message was too large to cache in full.
+                    </div>
+                  )}
+                  <button
+                    className="expand-message-btn"
+                    onClick={() => setExpandedMessageId(msg.id)}
+                  >
+                    Open full message
+                  </button>
+                </div>
+                <AttachmentList
                   attachments={msg.attachments}
                   messageId={msg.id}
                   onDownload={handleDownloadAttachment}
@@ -264,56 +299,43 @@ export default function ChatView({ thread, userEmail, accessToken, onBack, onSen
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Modal for expanded message */}
       {expandedMessage && (
-        <div className="message-modal" onClick={() => setExpandedMessage(null)}>
+        <div className="message-modal" onClick={() => setExpandedMessageId(null)}>
           <div className="message-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="message-modal-header">
               <div>
-                <div className="message-modal-subject">{subject}</div>
-                <div className="message-modal-from">From: {expandedMessage.senderName}</div>
+                <div className="message-modal-subject">
+                  {expandedMessage.subject || subject}
+                </div>
+                <div className="message-modal-from">From: {expandedMessage.from}</div>
                 <div className="message-modal-date">
                   {new Date(parseInt(expandedMessage.internalDate, 10)).toLocaleString()}
                 </div>
               </div>
-              <button className="message-modal-close" onClick={() => setExpandedMessage(null)}>
+              <button
+                className="message-modal-close"
+                onClick={() => setExpandedMessageId(null)}
+              >
                 ✕
               </button>
             </div>
-            {hasImages(expandedMessage.body || expandedMessage.snippet || '') && 
-             !alwaysLoadImages && 
-             !loadedImages.has(expandedMessage.id) && (
-              <div className="modal-image-banner">
-                <span>Images are hidden for your privacy</span>
-                <div className="image-banner-actions">
-                  <button 
-                    className="load-images-btn"
-                    onClick={() => handleLoadImages(expandedMessage.id)}
-                  >
-                    Display images
-                  </button>
-                  <button 
-                    className="always-load-btn"
-                    onClick={handleAlwaysLoadImages}
-                  >
-                    Always display
-                  </button>
-                </div>
-              </div>
-            )}
-            <div
-              className="message-modal-body"
-              dangerouslySetInnerHTML={{
-                __html: sanitizeHtml(
-                  hasImages(expandedMessage.body || expandedMessage.snippet || '') && 
-                  !alwaysLoadImages && 
-                  !loadedImages.has(expandedMessage.id)
-                    ? blockImages(expandedMessage.body || expandedMessage.snippet || '')
-                    : expandedMessage.body || expandedMessage.snippet || ''
-                ),
-              }}
-            />
-            <AttachmentList 
+            {hasImages(expandedMessage.body) &&
+              !alwaysLoadImages &&
+              !loadedImages.has(expandedMessage.id) && (
+                <ImageBanner
+                  className="modal-image-banner"
+                  onShow={() => handleLoadImages(expandedMessage.id)}
+                  onAlwaysShow={handleAlwaysLoadImages}
+                />
+              )}
+            <div className="message-modal-body">
+              <MessageBody
+                html={expandedMessage.body || expandedMessage.snippet || ''}
+                showImages={alwaysLoadImages || loadedImages.has(expandedMessage.id)}
+                variant="plain"
+              />
+            </div>
+            <AttachmentList
               attachments={expandedMessage.attachments}
               messageId={expandedMessage.id}
               onDownload={handleDownloadAttachment}
@@ -322,7 +344,16 @@ export default function ChatView({ thread, userEmail, accessToken, onBack, onSen
         </div>
       )}
 
+      {sendError && <div className="send-error">{sendError}</div>}
+
       <div className="input-container">
+        <button
+          className={`reply-all-toggle ${replyAll ? 'active' : ''}`}
+          onClick={() => setReplyAll((v) => !v)}
+          title={replyAll ? 'Replying to everyone' : 'Replying to sender only'}
+        >
+          {replyAll ? 'Reply all' : 'Reply'}
+        </button>
         <textarea
           ref={textareaRef}
           className="message-input"
@@ -337,7 +368,7 @@ export default function ChatView({ thread, userEmail, accessToken, onBack, onSen
           disabled={!replyText.trim() || sending}
           onClick={handleSend}
         >
-          {sending ? '...' : '\u2191'}
+          {sending ? '...' : '↑'}
         </button>
       </div>
     </div>

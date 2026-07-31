@@ -1,3 +1,7 @@
+> **Historical note.** These are setup notes from an earlier iteration.
+> Paths, URLs and the token storage model have since changed — `README.md`
+> is authoritative.
+
 # Email App Deployment Guide
 
 ## Architecture Decision: Separate Projects vs Monorepo

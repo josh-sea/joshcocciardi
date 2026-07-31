@@ -10,8 +10,9 @@
 #
 # What it deploys (mirrors ./deploy.sh):
 #   - copies the static apps (playball, canitwo, recipebox) into portfolio/public
-#   - builds the portfolio (built copies of email/moments are already
-#     committed under apps/portfolio/public/projects/)
+#   - builds the mail app and copies it to portfolio/public/projects/electronic-mail
+#   - builds the portfolio (the built copy of moments is committed under
+#     apps/portfolio/public/projects/)
 #   - firebase deploy --only hosting,firestore:rules,storage,functions
 #
 # Hosting is multi-site (targets in firebase.json / .firebaserc):
@@ -56,6 +57,22 @@ jobs:
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
             rm -f "apps/portfolio/public/projects/$app/README.md"
           done
+
+      # The mail app is a CRA build, not a static copy. Its config comes from
+      # apps/email/.env.production (public client identifiers only).
+      - name: Test and build mail app
+        working-directory: apps/email
+        run: |
+          npm ci
+          CI=true npm test -- --watchAll=false
+          npm run build
+
+      - name: Copy mail app into portfolio
+        run: |
+          target="apps/portfolio/public/projects/electronic-mail"
+          rm -rf "$target"
+          mkdir -p "$target"
+          cp -r apps/email/build/. "$target/"
 
       - name: Build portfolio
         working-directory: apps/portfolio

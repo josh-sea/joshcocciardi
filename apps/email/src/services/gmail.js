@@ -1,5 +1,14 @@
 const GMAIL_API = 'https://www.googleapis.com/gmail/v1/users/me';
 
+/** Gmail category labels, in the order we check them. */
+const CATEGORY_LABELS = {
+  CATEGORY_PROMOTIONS: 'promotions',
+  CATEGORY_SOCIAL: 'social',
+  CATEGORY_UPDATES: 'updates',
+  CATEGORY_FORUMS: 'forums',
+  CATEGORY_PERSONAL: 'primary',
+};
+
 /**
  * Make an authenticated request to the Gmail API.
  */
@@ -19,6 +28,10 @@ async function gmailFetch(path, accessToken, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    const reason = err.error?.errors?.[0]?.reason || '';
+    if (res.status === 429 || reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded') {
+      throw new Error('RATE_LIMITED');
+    }
     throw new Error(err.error?.message || `Gmail API error: ${res.status}`);
   }
 
@@ -51,21 +64,133 @@ export async function getProfile(accessToken) {
 }
 
 /**
- * Send an email. Expects raw RFC 2822 formatted email as base64url string.
+ * Turn search text and the selected category tab into a Gmail query.
  */
-export async function sendMessage(accessToken, { to, subject, body, threadId, inReplyTo, references }) {
+export function buildGmailQuery(search, category) {
+  const parts = [];
+  if (search) parts.push(search.trim());
+
+  if (category === 'starred') parts.push('is:starred');
+  else if (category && category !== 'all') parts.push(`category:${category}`);
+
+  return parts.filter(Boolean).join(' ');
+}
+
+/**
+ * Escape a string for safe inclusion in HTML.
+ */
+export function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Convert a string to a binary string of its UTF-8 bytes — the form btoa
+ * expects. Avoids TextEncoder, which jsdom (and so the test run) lacks.
+ */
+function utf8ToBinary(str) {
+  return encodeURIComponent(String(str ?? '')).replace(/%([0-9A-F]{2})/gi, (_, hex) =>
+    String.fromCharCode(parseInt(hex, 16))
+  );
+}
+
+/**
+ * Length of a string in UTF-8 bytes.
+ */
+export function utf8ByteLength(str) {
+  return utf8ToBinary(str).length;
+}
+
+/**
+ * Encode a header value as an RFC 2047 encoded-word when it contains
+ * non-ASCII characters. Plain ASCII passes through untouched.
+ */
+export function encodeHeaderValue(value) {
+  const str = String(value ?? '');
+  // eslint-disable-next-line no-control-regex
+  if (!/[^\x00-\x7F]/.test(str)) return str;
+  return `=?UTF-8?B?${btoa(utf8ToBinary(str))}?=`;
+}
+
+/**
+ * Parse an address list header ("A <a@x.com>, b@y.com") into
+ * { name, email } entries.
+ */
+export function parseAddressList(headerValue) {
+  if (!headerValue) return [];
+
+  const parts = [];
+  let current = '';
+  let inQuotes = false;
+  let inAngle = false;
+
+  for (const char of headerValue) {
+    if (char === '"') inQuotes = !inQuotes;
+    if (char === '<') inAngle = true;
+    if (char === '>') inAngle = false;
+    if (char === ',' && !inQuotes && !inAngle) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+
+  return parts
+    .map((part) => parseAddress(part))
+    .filter((addr) => addr.email);
+}
+
+/**
+ * Parse a single address ("Ada Lovelace <ada@x.com>") into { name, email }.
+ */
+export function parseAddress(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return { name: '', email: '' };
+
+  const angle = raw.match(/^(.*?)<([^>]+)>\s*$/);
+  if (angle) {
+    return {
+      name: angle[1].trim().replace(/^"(.*)"$/, '$1').trim(),
+      email: angle[2].trim(),
+    };
+  }
+
+  return { name: '', email: raw.replace(/^"(.*)"$/, '$1').trim() };
+}
+
+/**
+ * Send an email. Builds an RFC 2822 message and base64url-encodes it.
+ */
+export async function sendMessage(
+  accessToken,
+  { to, cc, subject, body, threadId, inReplyTo, references }
+) {
+  const toList = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
+  const ccList = Array.isArray(cc) ? cc.filter(Boolean) : [cc].filter(Boolean);
+
+  if (!toList.length) {
+    throw new Error('No recipient for this message');
+  }
+
   const headers = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `To: ${toList.join(', ')}`,
+    `Subject: ${encodeHeaderValue(subject)}`,
     'Content-Type: text/html; charset=utf-8',
     'MIME-Version: 1.0',
   ];
 
+  if (ccList.length) headers.splice(1, 0, `Cc: ${ccList.join(', ')}`);
   if (inReplyTo) headers.push(`In-Reply-To: ${inReplyTo}`);
   if (references) headers.push(`References: ${references}`);
 
   const email = headers.join('\r\n') + '\r\n\r\n' + body;
-  const raw = btoa(unescape(encodeURIComponent(email)))
+  const raw = btoa(utf8ToBinary(email))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
@@ -77,6 +202,88 @@ export async function sendMessage(accessToken, { to, subject, body, threadId, in
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * Work out who a reply should go to.
+ *
+ * Replies follow the last message in the thread: its Reply-To (falling back
+ * to From), plus — for reply-all — everyone else it was addressed to. When
+ * the last message is one *we* sent, we reply to its recipients instead of
+ * to ourselves.
+ */
+export function buildReplyRecipients(thread, myEmail, { replyAll = false } = {}) {
+  const messages = thread?.messages || [];
+  const last = messages[messages.length - 1];
+  if (!last) return { to: [], cc: [] };
+
+  const mine = (myEmail || '').toLowerCase();
+  const sender = (last.senderEmail || parseAddress(last.from).email || '').toLowerCase();
+  const isFromMe = Boolean(mine) && sender === mine;
+
+  const notMe = (addr) => addr.email && addr.email.toLowerCase() !== mine;
+  const emails = (list) => list.map((addr) => addr.email);
+  const dedupe = (list) => {
+    const seen = new Set();
+    return list.filter((email) => {
+      const key = email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const toHeader = parseAddressList(last.to);
+  const ccHeader = parseAddressList(last.cc);
+
+  let to;
+  if (isFromMe) {
+    // Replying to our own message: keep its original audience.
+    to = emails(toHeader.filter(notMe));
+  } else {
+    const replyTo = parseAddressList(last.replyTo);
+    const from = replyTo.length ? replyTo : parseAddressList(last.from);
+    to = emails(from.filter(notMe));
+  }
+
+  let cc = [];
+  if (replyAll) {
+    const extras = [...toHeader, ...ccHeader].filter(notMe);
+    cc = emails(extras).filter((email) => !to.some((t) => t.toLowerCase() === email.toLowerCase()));
+  }
+
+  to = dedupe(to);
+  cc = dedupe(cc);
+
+  // Never end up with an empty To — fall back to the sender, even if it's us.
+  if (!to.length) {
+    const fallback = parseAddressList(last.from);
+    to = emails(fallback);
+  }
+
+  return { to, cc };
+}
+
+/**
+ * Build the subject line for a reply, based on the message being replied to.
+ */
+export function buildReplySubject(thread) {
+  const messages = thread?.messages || [];
+  const last = messages[messages.length - 1];
+  const subject = last?.subject || thread?.subject || '';
+  return /^re:/i.test(subject.trim()) ? subject : `Re: ${subject}`;
+}
+
+/**
+ * Build the References header for a reply: the chain the message we're
+ * replying to already carried, plus its own Message-ID.
+ */
+export function buildReferences(message) {
+  const prior = (message?.references || '').trim();
+  const id = (message?.messageId || '').trim();
+  if (!id) return prior;
+  if (!prior) return id;
+  return prior.includes(id) ? prior : `${prior} ${id}`;
 }
 
 /**
@@ -98,38 +305,33 @@ export function parseMessage(message) {
     headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
 
   const from = getHeader('From');
-  const to = getHeader('To');
-  const subject = getHeader('Subject');
-  const date = getHeader('Date');
-  const messageId = getHeader('Message-ID');
+  const sender = parseAddress(from);
 
-  // Extract sender name and email
-  const fromMatch = from.match(/^"?([^"<]*)"?\s*<?([^>]*)>?$/);
-  const senderName = fromMatch ? fromMatch[1].trim() : from;
-  const senderEmail = fromMatch ? fromMatch[2].trim() : from;
-
-  // Get body content and attachments
-  const body = extractBody(message.payload);
-  const snippet = message.snippet || '';
-  const isUnread = (message.labelIds || []).includes('UNREAD');
-  const attachments = extractAttachments(message.payload);
+  const { html, text } = extractBody(message.payload);
+  // Plain-text bodies are escaped here so that everything downstream — cache,
+  // renderer, quote splitting — deals with one consistent HTML string.
+  const body = html || (text ? escapeHtml(text).replace(/\r?\n/g, '<br>') : '');
 
   return {
     id: message.id,
     threadId: message.threadId,
-    messageId,
+    messageId: getHeader('Message-ID'),
+    references: getHeader('References'),
     from,
-    to,
-    subject,
-    date,
-    senderName,
-    senderEmail,
+    to: getHeader('To'),
+    cc: getHeader('Cc'),
+    replyTo: getHeader('Reply-To'),
+    subject: getHeader('Subject'),
+    date: getHeader('Date'),
+    senderName: sender.name || sender.email,
+    senderEmail: sender.email,
     body,
-    snippet,
-    isUnread,
+    isHtmlBody: Boolean(html),
+    snippet: message.snippet || '',
+    isUnread: (message.labelIds || []).includes('UNREAD'),
     labelIds: message.labelIds || [],
     internalDate: message.internalDate,
-    attachments,
+    attachments: extractAttachments(message.payload),
   };
 }
 
@@ -141,43 +343,81 @@ export async function downloadAttachment(accessToken, messageId, attachmentId) {
     `/messages/${messageId}/attachments/${attachmentId}`,
     accessToken
   );
-  
-  // Decode base64url data
+
   const base64 = data.data.replace(/-/g, '+').replace(/_/g, '/');
   const binaryString = atob(base64);
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
-  
+
   return bytes;
 }
 
-/**
- * Strip quoted text from email body to show only the new content.
- * Handles both HTML blockquotes and plain text quote markers.
- */
-function stripQuotedText(html) {
-  if (!html) return '';
+/** Does this HTML fragment contain any visible text? */
+function hasVisibleText(html) {
+  return (
+    String(html || '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .trim().length > 0
+  );
+}
 
-  // Remove Gmail quoted text (usually in a div with class gmail_quote)
-  html = html.replace(/<div class="gmail_quote">[\s\S]*?<\/div>/gi, '');
-  
-  // Remove blockquotes (quoted previous messages)
-  html = html.replace(/<blockquote[^>]*>[\s\S]*?<\/blockquote>/gi, '');
-  
-  // Remove "On ... wrote:" patterns and everything after
-  html = html.replace(/(<br\s*\/?>|\n)*On\s+.+wrote:[\s\S]*/gi, '');
-  
-  // Remove lines starting with > (plain text quotes converted to HTML)
-  html = html.replace(/^&gt;.*$/gm, '');
-  html = html.replace(/^>.*$/gm, '');
-  
-  // Clean up excessive whitespace
-  html = html.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
-  html = html.trim();
-  
-  return html;
+/**
+ * Markers that reliably start the quoted portion of a reply.
+ *
+ * Each one is anchored to real structure rather than loose prose — an
+ * unanchored "On ... wrote:" match will happily eat the body of a newsletter
+ * that merely contains those words.
+ */
+const QUOTE_MARKERS = [
+  // Gmail wraps quoted history in a div.gmail_quote.
+  /<div[^>]*class="[^"]*\bgmail_quote\b[^"]*"[^>]*>/i,
+  // Outlook / Office 365.
+  /<div[^>]*id="?appendonsend"?[^>]*>/i,
+  /<hr[^>]*id="?stopSpelling"?[^>]*>/i,
+  /-{2,}\s*Original Message\s*-{2,}/i,
+  // "On <date> <someone> wrote:" — only at the start of a line, length-capped,
+  // and only when a quote block or line break follows it.
+  /(?:^|<br\s*\/?>)\s*On\s[^<>]{0,200}?wrote:\s*(?=<br\s*\/?>|<blockquote)/i,
+  // A run of plain-text quote markers at the start of a line.
+  /(?:^|<br\s*\/?>)\s*&gt;\s/i,
+];
+
+/**
+ * Split a message body into the new content and the quoted history beneath it.
+ *
+ * Nothing is ever discarded: `visible + quoted` reconstructs the original. If
+ * we can't find a boundary we're confident about — or splitting would leave
+ * nothing visible — the whole body is returned as visible.
+ */
+export function splitQuotedText(html) {
+  if (!html) return { visible: '', quoted: '' };
+
+  let idx = -1;
+  for (const marker of QUOTE_MARKERS) {
+    const match = marker.exec(html);
+    if (match && (idx === -1 || match.index < idx)) idx = match.index;
+  }
+
+  // A <blockquote> counts as quoted history only when there is content above
+  // it. Plenty of marketing mail wraps its entire body in one.
+  const blockquote = /<blockquote[\s>]/i.exec(html);
+  if (
+    blockquote &&
+    (idx === -1 || blockquote.index < idx) &&
+    hasVisibleText(html.slice(0, blockquote.index))
+  ) {
+    idx = blockquote.index;
+  }
+
+  if (idx <= 0) return { visible: html, quoted: '' };
+
+  const visible = html.slice(0, idx);
+  if (!hasVisibleText(visible)) return { visible: html, quoted: '' };
+
+  return { visible, quoted: html.slice(idx) };
 }
 
 /**
@@ -185,12 +425,11 @@ function stripQuotedText(html) {
  */
 function extractAttachments(payload) {
   const attachments = [];
-  
+
   function findAttachments(parts) {
     if (!parts) return;
-    
-    parts.forEach(part => {
-      // Check if this part is an attachment
+
+    parts.forEach((part) => {
       if (part.filename && part.body?.attachmentId) {
         attachments.push({
           filename: part.filename,
@@ -199,66 +438,47 @@ function extractAttachments(payload) {
           attachmentId: part.body.attachmentId,
         });
       }
-      
-      // Recurse into nested parts
+
       if (part.parts) {
         findAttachments(part.parts);
       }
     });
   }
-  
-  findAttachments(payload.parts);
+
+  findAttachments(payload?.parts);
   return attachments;
 }
 
 /**
- * Recursively extract the body content from message payload.
- * Prefers text/html, falls back to text/plain.
+ * Recursively pull the HTML and plain-text bodies out of a message payload.
  */
-function extractBody(payload) {
-  if (!payload) return '';
+export function extractBody(payload) {
+  if (!payload) return { html: null, text: null };
 
-  // Direct body data
-  if (payload.body?.data) {
+  const mime = payload.mimeType || '';
+
+  if (payload.body?.data && !payload.filename) {
     const decoded = decodeBase64Url(payload.body.data);
-    return stripQuotedText(decoded);
+    if (mime.startsWith('text/html')) return { html: decoded, text: null };
+    return { html: null, text: decoded };
   }
 
-  // Multipart - look through parts
-  if (payload.parts) {
-    // Try HTML first
-    const htmlPart = findPart(payload.parts, 'text/html');
-    if (htmlPart?.body?.data) {
-      const decoded = decodeBase64Url(htmlPart.body.data);
-      return stripQuotedText(decoded);
-    }
+  const htmlPart = findPart(payload.parts, 'text/html');
+  const textPart = findPart(payload.parts, 'text/plain');
 
-    // Fall back to plain text
-    const textPart = findPart(payload.parts, 'text/plain');
-    if (textPart?.body?.data) {
-      const text = decodeBase64Url(textPart.body.data);
-      const htmlText = text.replace(/\n/g, '<br>');
-      return stripQuotedText(htmlText);
-    }
-
-    // Recurse into nested multipart
-    for (const part of payload.parts) {
-      if (part.parts) {
-        const nested = extractBody(part);
-        if (nested) return nested;
-      }
-    }
-  }
-
-  return '';
+  return {
+    html: htmlPart?.body?.data ? decodeBase64Url(htmlPart.body.data) : null,
+    text: textPart?.body?.data ? decodeBase64Url(textPart.body.data) : null,
+  };
 }
 
 /**
- * Find a part with a specific MIME type.
+ * Find the first part with a specific MIME type, skipping attachments.
  */
 function findPart(parts, mimeType) {
+  if (!parts) return null;
   for (const part of parts) {
-    if (part.mimeType === mimeType) return part;
+    if (part.mimeType === mimeType && !part.filename && part.body?.data) return part;
     if (part.parts) {
       const found = findPart(part.parts, mimeType);
       if (found) return found;
@@ -285,6 +505,18 @@ function decodeBase64Url(data) {
 }
 
 /**
+ * Map a thread's label IDs onto the category tab it belongs to.
+ */
+export function categoryFromLabels(labelIds = []) {
+  for (const [label, category] of Object.entries(CATEGORY_LABELS)) {
+    if (labelIds.includes(label)) return category;
+  }
+  // Gmail omits CATEGORY_PERSONAL on plenty of mail; anything without another
+  // category label lands in Primary, which is what the Gmail UI does too.
+  return 'primary';
+}
+
+/**
  * Format a thread for display, extracting key info from its messages.
  */
 export function formatThread(thread) {
@@ -292,13 +524,18 @@ export function formatThread(thread) {
   const lastMessage = messages[messages.length - 1];
   const firstMessage = messages[0];
 
-  // Collect unique participants
-  const participants = new Set();
+  const participants = [];
+  const participantEmails = [];
+  const seen = new Set();
   messages.forEach((m) => {
-    if (m.senderName) participants.add(m.senderName);
+    const key = (m.senderEmail || m.senderName || '').toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    participants.push(m.senderName || m.senderEmail);
+    participantEmails.push(m.senderEmail);
   });
 
-  const hasUnread = messages.some((m) => m.isUnread);
+  const labelIds = [...new Set(messages.flatMap((m) => m.labelIds))];
 
   return {
     id: thread.id,
@@ -307,9 +544,17 @@ export function formatThread(thread) {
     lastMessage,
     firstMessage,
     messages,
-    participants: [...participants],
-    participantCount: participants.size,
-    hasUnread,
-    date: lastMessage ? new Date(parseInt(lastMessage.internalDate, 10)) : new Date(),
+    participants,
+    participantEmails,
+    participantCount: participants.length,
+    lastSenderName: lastMessage?.senderName || '',
+    lastSenderEmail: lastMessage?.senderEmail || '',
+    hasUnread: messages.some((m) => m.isUnread),
+    isStarred: labelIds.includes('STARRED'),
+    labelIds,
+    category: categoryFromLabels(labelIds),
+    date: lastMessage?.internalDate
+      ? new Date(parseInt(lastMessage.internalDate, 10))
+      : new Date(),
   };
 }
