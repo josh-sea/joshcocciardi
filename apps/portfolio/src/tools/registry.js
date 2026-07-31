@@ -34,6 +34,14 @@ const tools = [
     added: "2026-07-20",
     component: lazy(() => import("./channel-surfer")),
   },
+  {
+    slug: "mise",
+    title: "Mise",
+    description:
+      "A convergence chart for implementation work: tasks on the left bracket rightward into one outcome. Sign in to keep plans, progress, and layout in Firestore.",
+    added: "2026-07-31",
+    component: lazy(() => import("./mise")),
+  },
 ];
 
 export default tools;
