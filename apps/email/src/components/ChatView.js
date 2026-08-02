@@ -100,7 +100,8 @@ export default function ChatView({
   const [loadedImages, setLoadedImages] = useState(() => new Set());
   const [alwaysLoadImages, setAlwaysLoadImages] = useState(false);
   const [expandedQuotes, setExpandedQuotes] = useState(() => new Set());
-  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const stickToBottomRef = useRef(true);
   const textareaRef = useRef(null);
 
   const messages = useMemo(
@@ -113,12 +114,50 @@ export default function ChatView({
     [thread?.messages]
   );
 
+  /**
+   * Scroll the message list, and only the message list.
+   *
+   * `scrollIntoView` scrolls every scrollable ancestor, the document
+   * included — which on iOS slides the whole layout up and takes the header
+   * (and its back button) off the top of the screen.
+   */
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (container) container.scrollTop = container.scrollHeight;
   }, []);
 
   useEffect(() => {
+    stickToBottomRef.current = true;
     scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  /**
+   * Message bodies are iframes that report their height after they render,
+   * so the list keeps growing for a moment after it first paints. Stay
+   * pinned to the bottom while that settles — but stop the moment the
+   * reader scrolls up, so we never yank them away from what they're reading.
+   */
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return undefined;
+
+    const onScroll = () => {
+      const distanceFromBottom =
+        container.scrollHeight - (container.scrollTop + container.clientHeight);
+      stickToBottomRef.current = distanceFromBottom < 40;
+    };
+
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) scrollToBottom();
+    });
+    observer.observe(container);
+    Array.from(container.children).forEach((child) => observer.observe(child));
+
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      observer.disconnect();
+      container.removeEventListener('scroll', onScroll);
+    };
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
@@ -228,7 +267,7 @@ export default function ChatView({
         </button>
       </div>
 
-      <div className="messages-container">
+      <div className="messages-container" ref={messagesContainerRef}>
         {messages.map((msg) => {
           const isSent = Boolean(mine) && (msg.senderEmail || '').toLowerCase() === mine;
           const messageDate = formatDateDivider(msg.internalDate);
@@ -296,7 +335,6 @@ export default function ChatView({
             </React.Fragment>
           );
         })}
-        <div ref={messagesEndRef} />
       </div>
 
       {expandedMessage && (

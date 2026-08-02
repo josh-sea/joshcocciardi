@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/projects/electronic-mail/static/css/main.12a815bd.css",
-    "main.js": "/projects/electronic-mail/static/js/main.e3eba36e.js",
+    "main.css": "/projects/electronic-mail/static/css/main.6fa00ac0.css",
+    "main.js": "/projects/electronic-mail/static/js/main.e2ae6134.js",
     "index.html": "/projects/electronic-mail/index.html",
-    "main.12a815bd.css.map": "/projects/electronic-mail/static/css/main.12a815bd.css.map",
-    "main.e3eba36e.js.map": "/projects/electronic-mail/static/js/main.e3eba36e.js.map"
+    "main.6fa00ac0.css.map": "/projects/electronic-mail/static/css/main.6fa00ac0.css.map",
+    "main.e2ae6134.js.map": "/projects/electronic-mail/static/js/main.e2ae6134.js.map"
   },
   "entrypoints": [
-    "static/css/main.12a815bd.css",
-    "static/js/main.e3eba36e.js"
+    "static/css/main.6fa00ac0.css",
+    "static/js/main.e2ae6134.js"
   ]
 }
