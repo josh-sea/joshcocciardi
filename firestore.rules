@@ -288,6 +288,40 @@ service cloud.firestore {
       }
     }
 
+    // Private /work pages (apps/portfolio/src/work). Saved state for the
+    // sign-in-gated tools, one document per (user, page), with the document id
+    // as `{uid}__{pageKey}`.
+    //
+    // This is where "only I can access it" is actually enforced. The client
+    // allowlist in src/work/access.js can be bypassed by anyone willing to read
+    // the bundle; these rules cannot. Two conditions, both required: the caller
+    // owns the document, and the caller's verified Google address is on the
+    // allowlist below. Keep this list in sync with src/work/access.js.
+    match /work_private/{docId} {
+      function isAllowedAccount() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && request.auth.token.email.lower() in ['joshua.cocciardi@gmail.com'];
+      }
+      function ownsDoc() {
+        return request.auth != null && docId.split('__')[0] == request.auth.uid;
+      }
+
+      // `resource` is null when the document doesn't exist yet. Without that
+      // branch the very first load of a page — before anything has been saved —
+      // fails on `resource.data` and reads as permission-denied rather than
+      // "nothing saved yet".
+      allow read: if isAllowedAccount() && ownsDoc()
+        && (resource == null || resource.data.ownerUid == request.auth.uid);
+      allow create: if isAllowedAccount() && ownsDoc()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAllowedAccount() && ownsDoc()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if isAllowedAccount() && ownsDoc()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
     // Radar metadata - read access for clients
     match /radar_sites/{siteId} {
       allow read: if true;
@@ -305,7 +339,7 @@ service cloud.firestore {
     }
     
     // Default authenticated access for other collections.
-    // CanITwo, Recipe Box, Mise and the per-user `users` tree are excluded —
+    // CanITwo, Recipe Box, Mise, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
     // rules above (in Firestore, any matching `allow` wins), and every
     // signed-in user could read and write everyone else's documents.
@@ -319,7 +353,8 @@ service cloud.firestore {
         && collection != 'gmail_tokens'
         && !collection.matches('canitwo_.*')
         && !collection.matches('recipebox_.*')
-        && !collection.matches('mise_.*');
+        && !collection.matches('mise_.*')
+        && collection != 'work_private';
     }
   }
 }

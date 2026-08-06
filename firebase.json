@@ -36,6 +36,19 @@
       ],
       "headers": [
         {
+          "source": "/work/**",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow, noarchive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            }
+          ]
+        },
+        {
           "source": "/projects/moments/**",
           "headers": [
             {
