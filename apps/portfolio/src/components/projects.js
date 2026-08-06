@@ -84,6 +84,13 @@ const playthings = [
     link: "/projects/deadnet",
   },
   {
+    title: "🕰️ Binary Flip Counter",
+    description:
+      "A wooden split-flap clock that counts in base 2. Hours, minutes and seconds each get a tray of flipping tiles, with the decimal value read out alongside so you can check your own binary math.",
+    tech: ["JavaScript", "CSS 3D transforms", "HTML5"],
+    link: "/projects/binary",
+  },
+  {
     title: "🔐 Cam's Secret Decoder",
     description:
       "A retro-styled cipher tool for encoding and decoding secret messages. Features a custom A–Z substitution cipher with a full reference table.",

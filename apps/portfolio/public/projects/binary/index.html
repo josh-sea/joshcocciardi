@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Binary Flip Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #15110d;
+    --bg-vignette: #211a13;
+    --wood-dark: #3a2718;
+    --wood-mid: #8a5a34;
+    --wood-light: #c9955f;
+    --wood-shadow: #2a1c12;
+    --cream: #f0e0c4;
+    --brass: #b8863b;
+    --brass-light: #d9ac6a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: radial-gradient(ellipse at 50% 20%, var(--bg-vignette) 0%, var(--bg) 65%);
+    color: var(--cream);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+
+  .panel {
+    width: 100%;
+    max-width: 460px;
+  }
+
+  .eyebrow {
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--brass-light);
+    margin-bottom: 4px;
+    opacity: 0.85;
+  }
+
+  .eyebrow-sub {
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: #7d6a52;
+    margin-bottom: 28px;
+  }
+
+  .frame {
+    background: linear-gradient(180deg, #4a3220 0%, var(--wood-dark) 100%);
+    border-radius: 10px;
+    padding: 22px 18px 16px;
+    box-shadow:
+      0 24px 48px -12px rgba(0,0,0,0.65),
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      inset 0 -3px 6px rgba(0,0,0,0.4);
+    border: 1px solid #241708;
+  }
+
+  .row {
+    margin-bottom: 22px;
+  }
+  .row:last-child { margin-bottom: 0; }
+
+  .row-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0 2px 8px;
+  }
+
+  .row-label {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    color: var(--brass-light);
+    font-weight: 500;
+  }
+
+  .row-value {
+    font-size: 12px;
+    color: #a08a6a;
+    letter-spacing: 0.04em;
+  }
+
+  .row-value b {
+    color: var(--cream);
+    font-weight: 600;
+  }
+
+  .tray {
+    background: linear-gradient(180deg, var(--wood-shadow) 0%, #1c1108 100%);
+    border-radius: 6px;
+    padding: 10px 8px 4px;
+    display: flex;
+    justify-content: center;
+    gap: clamp(3px, 1.4vw, 6px);
+    box-shadow: inset 0 3px 8px rgba(0,0,0,0.55);
+  }
+
+  .bit-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .bit {
+    width: clamp(30px, 8.6vw, 42px);
+    height: clamp(42px, 12vw, 58px);
+    perspective: 260px;
+    position: relative;
+  }
+
+  .pins {
+    position: absolute;
+    top: -4px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 5px;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .pin {
+    width: 5px;
+    height: 8px;
+    background: linear-gradient(180deg, var(--brass-light), var(--brass));
+    border-radius: 1px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+
+  .bit-inner {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.55s cubic-bezier(.32,.08,.24,1.28);
+  }
+
+  .bit.on .bit-inner {
+    transform: rotateX(-180deg);
+  }
+
+  .bit-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bitter', serif;
+    font-weight: 800;
+    font-size: clamp(18px, 5.4vw, 26px);
+    color: var(--wood-shadow);
+    background:
+      repeating-linear-gradient(100deg, rgba(0,0,0,0.05) 0px, rgba(0,0,0,0.05) 1px, transparent 1px, transparent 6px),
+      linear-gradient(160deg, var(--wood-light) 0%, var(--wood-mid) 55%, #7a4d2b 100%);
+    box-shadow:
+      inset 0 2px 3px rgba(255,255,255,0.25),
+      inset 0 -3px 5px rgba(0,0,0,0.35),
+      0 2px 4px rgba(0,0,0,0.4);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.15);
+  }
+
+  .bit-face::after {
+    content: '';
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    top: 50%;
+    height: 1px;
+    background: rgba(0,0,0,0.18);
+  }
+
+  .bit-back {
+    transform: rotateX(180deg);
+    background:
+      repeating-linear-gradient(100deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 6px),
+      linear-gradient(160deg, #b9895a 0%, #7d5230 55%, #5e3c22 100%);
+  }
+
+  .place {
+    margin-top: 6px;
+    font-size: 9px;
+    color: #6b5a45;
+    letter-spacing: 0.02em;
+  }
+
+  .ledge {
+    height: 8px;
+    margin: 6px 10px 0;
+    background: linear-gradient(180deg, #241708, #150c04);
+    border-radius: 0 0 4px 4px;
+  }
+
+  .readout {
+    text-align: center;
+    margin-top: 26px;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    color: #8f7a5c;
+  }
+
+  .readout span {
+    color: var(--cream);
+    font-weight: 500;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bit-inner { transition-duration: 0.01s; }
+  }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="eyebrow">Mechanical Counter</div>
+  <div class="eyebrow-sub">base 2 &nbsp;·&nbsp; hand-set to local time</div>
+
+  <div class="frame">
+    <div class="row" id="row-hours">
+      <div class="row-head">
+        <span class="row-label">HOURS</span>
+        <span class="row-value">= <b id="dec-hours">00</b></span>
+      </div>
+      <div class="tray" id="tray-hours"></div>
+      <div class="ledge"></div>
+    </div>
+
+    <div class="row" id="row-minutes">
+      <div class="row-head">
+        <span class="row-label">MINUTES</span>
+        <span class="row-value">= <b id="dec-minutes">00</b></span>
+      </div>
+      <div class="tray" id="tray-minutes"></div>
+      <div class="ledge"></div>
+    </div>
+
+    <div class="row" id="row-seconds">
+      <div class="row-head">
+        <span class="row-label">SECONDS</span>
+        <span class="row-value">= <b id="dec-seconds">00</b></span>
+      </div>
+      <div class="tray" id="tray-seconds"></div>
+      <div class="ledge"></div>
+    </div>
+  </div>
+
+  <div class="readout"><span id="readout-text">00:00:00</span></div>
+</div>
+
+<script>
+  const CONFIG = {
+    hours:   { bits: 5, places: [16, 8, 4, 2, 1] },
+    minutes: { bits: 6, places: [32, 16, 8, 4, 2, 1] },
+    seconds: { bits: 6, places: [32, 16, 8, 4, 2, 1] },
+  };
+
+  const state = {};
+
+  function buildTray(key) {
+    const tray = document.getElementById('tray-' + key);
+    const { bits, places } = CONFIG[key];
+    state[key] = new Array(bits).fill(0);
+
+    for (let i = 0; i < bits; i++) {
+      const wrap = document.createElement('div');
+      wrap.className = 'bit-wrap';
+
+      const pins = document.createElement('div');
+      pins.className = 'pins';
+      pins.innerHTML = '<div class="pin"></div><div class="pin"></div>';
+
+      const bit = document.createElement('div');
+      bit.className = 'bit';
+      bit.id = `bit-${key}-${i}`;
+      bit.innerHTML = `
+        <div class="bit-inner">
+          <div class="bit-face bit-front">0</div>
+          <div class="bit-face bit-back">1</div>
+        </div>`;
+
+      const place = document.createElement('div');
+      place.className = 'place';
+      place.textContent = places[i];
+
+      wrap.appendChild(pins);
+      wrap.appendChild(bit);
+      wrap.appendChild(place);
+      tray.appendChild(wrap);
+    }
+  }
+
+  function toBits(value, len) {
+    return value.toString(2).padStart(len, '0').split('').map(Number);
+  }
+
+  function updateRow(key, value) {
+    const { bits } = CONFIG[key];
+    const next = toBits(value, bits);
+    next.forEach((v, i) => {
+      if (state[key][i] !== v) {
+        const el = document.getElementById(`bit-${key}-${i}`);
+        el.classList.toggle('on', v === 1);
+      }
+    });
+    state[key] = next;
+    document.getElementById('dec-' + key).textContent = String(value).padStart(2, '0');
+  }
+
+  ['hours', 'minutes', 'seconds'].forEach(buildTray);
+
+  function tick() {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const s = now.getSeconds();
+
+    updateRow('hours', h);
+    updateRow('minutes', m);
+    updateRow('seconds', s);
+
+    document.getElementById('readout-text').textContent =
+      [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+  }
+
+  tick();
+  setInterval(tick, 1000);
+</script>
+
+</body>
+</html>
