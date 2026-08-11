@@ -11,6 +11,13 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 initializeApp();
 const db = getFirestore();
 
+// Gatekeeper: parental web-filter backend (device HTTP API + push trigger).
+// Required after initializeApp() so its lazy getFirestore()/getMessaging()
+// calls resolve the initialized app.
+const gatekeeper = require('./gatekeeper');
+exports.gatekeeperApi = gatekeeper.gatekeeperApi;
+exports.gatekeeperOnRequest = gatekeeper.gatekeeperOnRequest;
+
 // Recompute a place's aggregates from all of its reviews whenever any
 // review is created or updated. Full recount (not incremental): reviews per
 // place are small, and a recount self-heals any historical drift.

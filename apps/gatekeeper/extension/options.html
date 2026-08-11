@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Gatekeeper</title>
+<style>
+  :root {
+    --ink: #0B0F13;
+    --panel: #151C24;
+    --line: #24313D;
+    --trace: #2B3947;
+    --live: #35D07F;
+    --open: #F2B441;
+    --fault: #E5484D;
+    --text: #E7EEF5;
+    --muted: #7E92A6;
+    --body: #B7C6D4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--ink); color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.55;
+    padding: 48px 24px 96px;
+  }
+  main { max-width: 760px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  h1 { font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin: 6px 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; }
+
+  /* trace divider: the structural device, a break in the line between sections */
+  .rule { display: block; width: 100%; height: 14px; margin: 38px 0 26px; overflow: visible; }
+  .rule path { stroke: var(--trace); stroke-width: 1.5; fill: none; stroke-linecap: round; }
+  .rule circle { fill: var(--trace); }
+
+  section { margin-bottom: 4px; }
+  h2 { font-size: 17px; font-weight: 600; margin-bottom: 3px; }
+  .note { color: var(--muted); font-size: 13.5px; margin-bottom: 16px; }
+
+  label { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+          text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
+  input[type=text], input[type=password], input[type=number], textarea, select {
+    width: 100%; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 9px;
+    padding: 11px 13px; font: inherit; font-size: 14.5px;
+  }
+  textarea { min-height: 92px; resize: vertical; line-height: 1.55; }
+  .list textarea { font-family: var(--mono); font-size: 13px; min-height: 110px; }
+  input:focus, textarea:focus, select:focus {
+    outline: 2px solid var(--open); outline-offset: 1px; border-color: transparent;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+  @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .check { display: flex; align-items: flex-start; gap: 11px; margin-top: 14px; }
+  .check input { margin-top: 4px; accent-color: var(--open); width: 16px; height: 16px; }
+  .check span { font-size: 14.5px; color: var(--body); }
+  .check b { color: var(--text); font-weight: 500; display: block; }
+
+  .bar { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--ink) 30%);
+         padding: 26px 0 8px; display: flex; align-items: center; gap: 14px; }
+  button { font: inherit; font-size: 14px; font-weight: 500; border-radius: 9px;
+           padding: 11px 20px; cursor: pointer; border: 1px solid transparent; }
+  button:focus-visible { outline: 2px solid var(--open); outline-offset: 2px; }
+  .primary { background: var(--open); color: #14181C; }
+  .primary:hover { background: #FFC85C; }
+  .quiet { background: transparent; color: var(--body); border-color: var(--line); }
+  .quiet:hover { background: var(--panel); }
+  .saved { font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+           text-transform: uppercase; color: var(--live); opacity: 0; transition: opacity .2s; }
+  .saved.on { opacity: 1; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+          padding: 15px 17px; margin-bottom: 10px; }
+  .card .who { font-size: 14px; color: var(--body); margin-bottom: 8px; }
+  .card .what { font-family: var(--mono); font-size: 12px; color: var(--muted);
+                word-break: break-all; margin-bottom: 12px; }
+  .card .row { display: flex; gap: 9px; }
+  .card button { padding: 8px 15px; font-size: 13px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+       color: var(--muted); text-align: left; font-weight: 400; padding: 0 10px 9px 0; }
+  td { padding: 9px 10px 9px 0; border-top: 1px solid var(--line); vertical-align: top; color: var(--body); }
+  td.t { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  td.tgt { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+  .tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
+  .tag.allow { color: var(--live); }
+  .tag.ask { color: var(--open); }
+  .tag.block, .tag.deny { color: var(--fault); }
+  .tag.escalate { color: #7FB3FF; }
+  .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .controls select { width: auto; min-width: 150px; }
+  .controls input { flex: 1 1 220px; }
+
+  .summary { display: flex; gap: 26px; flex-wrap: wrap; margin-bottom: 20px;
+             padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .stat .n { font-family: var(--mono); font-size: 24px; letter-spacing: -.02em; }
+  .stat .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+             text-transform: uppercase; color: var(--muted); }
+  .stat.allow .n { color: var(--live); }
+  .stat.ask .n { color: var(--open); }
+  .stat.block .n { color: var(--fault); }
+
+  code { font-family: var(--mono); font-size: .88em; color: var(--body); }
+  button.danger { color: var(--fault); border-color: rgba(229,72,77,.35); }
+  button.danger:hover { background: rgba(229,72,77,.1); }
+  td.secs { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  #gate { position: fixed; inset: 0; background: var(--ink); display: grid; place-items: center; z-index: 10; }
+  #gate .box { width: min(360px, 90vw); text-align: left; }
+  #gate p { color: var(--muted); font-size: 14px; margin-bottom: 4px; }
+  #gate .err { color: var(--fault); font-size: 13px; min-height: 20px; margin-top: 8px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="gate" hidden>
+  <div class="box">
+    <div class="eyebrow">Gatekeeper</div>
+    <h1>PIN</h1>
+    <p>Enter the parent PIN to change settings.</p>
+    <input type="password" id="pin-input" inputmode="numeric" autocomplete="off" />
+    <div class="err" id="pin-err"></div>
+    <div class="bar"><button class="primary" id="pin-go">Unlock</button></div>
+  </div>
+</div>
+
+<main id="app" hidden>
+  <header>
+    <div class="eyebrow">Gatekeeper</div>
+    <h1>Settings</h1>
+    <p class="sub">What Campbell can reach, and what he has to argue for.</p>
+  </header>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section id="account-section">
+    <h2>Account</h2>
+    <p class="note">Connect this browser to a Gatekeeper parent account. When connected, the Anthropic key lives on the server (not in this browser), activity and requests sync to the parent app, and a grown-up can approve requests from their phone.</p>
+    <div id="account-unpaired">
+      <label for="pairCode">Pairing code</label>
+      <p class="note">In the parent app (<b>igatekeeper.web.app</b>) go to <b>Setup → Generate code</b>, then enter the six characters here within 15 minutes.</p>
+      <div class="bar">
+        <input type="text" id="pairCode" placeholder="ABC234" maxlength="6" autocomplete="off" style="text-transform:uppercase;letter-spacing:.15em" />
+        <button class="primary" id="pair-go">Connect</button>
+      </div>
+      <div class="err" id="pair-err"></div>
+    </div>
+    <div id="account-paired" hidden>
+      <p class="note">✅ Connected<span id="acct-kid-wrap"> for <b id="acct-kid"></b></span>. Household <code id="acct-hid"></code>.</p>
+      <p class="note">The Anthropic key below is ignored while connected — it's managed in the parent app.</p>
+      <div class="bar"><button id="unpair-go">Disconnect this browser</button></div>
+    </div>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>Connection</h2>
+    <p class="note">The key is stored in this browser profile. Anyone with devtools access to this profile can read it, so keep a spend limit on it. <b>Connect an account above</b> to keep the key off this device entirely.</p>
+    <div class="check">
+      <input type="checkbox" id="enabled" />
+      <span><b>Gatekeeper is on</b>Turn this off to browse normally on this profile.</span>
+    </div>
+    <label for="apiKey">Anthropic API key</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
+    <div class="grid2">
+      <div>
+        <label for="fastModel">Screening model</label>
+        <input type="text" id="fastModel" />
+      </div>
+      <div>
+        <label for="deepModel">Appeals model</label>
+        <input type="text" id="deepModel" />
+      </div>
+    </div>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>What he's working on</h2>
+    <p class="note">The screener reads this on every call. Keep it current and specific. Naming a live project widens what gets waved through without an appeal.</p>
+    <textarea id="projectContext"></textarea>
+    <div class="grid2">
+      <div><label for="kidName">His name</label><input type="text" id="kidName" /></div>
+      <div><label for="kidAge">Age</label><input type="number" id="kidAge" min="4" max="17" /></div>
+    </div>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section class="list">
+    <h2>Lists</h2>
+    <p class="note">One domain per line. These skip the model entirely, so they cost nothing and never wait.</p>
+    <label for="allowlist">Always allow</label>
+    <textarea id="allowlist"></textarea>
+    <label for="denylist">Always block</label>
+    <textarea id="denylist"></textarea>
+    <label for="bypassHosts">Skip checking entirely</label>
+    <textarea id="bypassHosts"></textarea>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>Behavior</h2>
+    <div class="check">
+      <input type="checkbox" id="checkAllNavigations" />
+      <span><b>Check every page, not just clicked links</b>Catches typed addresses and redirects. Costs one check per new site, then it's cached.</span>
+    </div>
+    <div class="check">
+      <input type="checkbox" id="forceSafeSearch" />
+      <span><b>Force SafeSearch</b>Rewrites Google, Bing, and DuckDuckGo URLs before results load.</span>
+    </div>
+    <div class="grid2">
+      <div>
+        <label for="failMode">If the API is unreachable</label>
+        <select id="failMode">
+          <option value="closed">Ask him for a reason</option>
+          <option value="open">Let it through</option>
+        </select>
+      </div>
+      <div>
+        <label for="passMinutes">Default topic pass (minutes)</label>
+        <input type="number" id="passMinutes" min="5" max="240" />
+      </div>
+    </div>
+    <label for="cacheTtlMinutes">Remember decisions for (minutes)</label>
+    <input type="number" id="cacheTtlMinutes" min="10" />
+
+    <div class="check">
+      <input type="checkbox" id="logVisits" />
+      <span><b>Record allowed pages too</b>Off, the log only shows what got stopped. On, it's a full browsing record with time spent on each page.</span>
+    </div>
+    <div class="check">
+      <input type="checkbox" id="autoArchive" />
+      <span><b>Save a weekly copy to Downloads</b>Writes the whole history to <code>Downloads/gatekeeper/</code> so it survives even if the extension is removed.</span>
+    </div>
+    <label for="retentionDays">Keep history for (days, 0 = forever)</label>
+    <input type="number" id="retentionDays" min="0" />
+
+    <label for="parentPin">Parent PIN</label>
+    <input type="password" id="parentPin" inputmode="numeric" autocomplete="off" placeholder="Leave empty for no PIN" />
+    <label for="dadMinutes">Dad mode length (minutes)</label>
+    <input type="number" id="dadMinutes" min="5" step="5" />
+    <p class="note" style="margin-top:10px">Dad mode stands the whole gate down and unlocks every game, so it needs a PIN set above. From the helper popup, tap "Dad mode," enter the PIN, and browse freely alongside him until it expires or you end it.</p>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>Side quests</h2>
+    <p class="note">Investigating earns game tokens. A token buys a shot at a mini game, gated by a question drawn from what he actually read, so it can't be searched for. He gets three tries; running out costs no token but starts a short cooldown.</p>
+    <div class="check">
+      <input type="checkbox" id="gamesEnabled" />
+      <span><b>Games are on</b>Off, no tokens accrue and the helper shows suggestions only.</span>
+    </div>
+    <div class="grid2">
+      <div>
+        <label for="secondsPerToken">Reading per token (seconds)</label>
+        <input type="number" id="secondsPerToken" min="60" step="30" />
+      </div>
+      <div>
+        <label for="maxTokens">Most tokens he can bank</label>
+        <input type="number" id="maxTokens" min="1" max="10" />
+      </div>
+    </div>
+    <label for="questCooldownMinutes">Cooldown after a failed quest (minutes)</label>
+    <input type="number" id="questCooldownMinutes" min="0" />
+    <label for="graceSeconds">Free-restart window per game session (seconds)</label>
+    <input type="number" id="graceSeconds" min="0" step="15" />
+    <p class="note" style="margin-top:10px">Inside this window a quick death just means a free restart, so a fast loss doesn't waste the reward. A run still going when the window closes plays out to its natural end, which keeps a session in the three-to-five-minute range.</p>
+  </section>
+
+  <div class="bar">
+    <button class="primary" id="save">Save settings</button>
+    <button class="quiet" id="clear-cache">Clear remembered decisions</button>
+    <span class="saved" id="saved">Saved</span>
+  </div>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>Sessions</h2>
+    <p class="note">Each time browsing begins, a grown-up starts a session with a stated goal, and Gatekeeper keeps things pointed at it. Off-topic-but-safe pages are held until a grown-up changes the session. Requires a PIN, since a grown-up sets the goal.</p>
+    <div class="check">
+      <input type="checkbox" id="requireSession" />
+      <span><b>Require a session to browse</b>Off, Gatekeeper judges against the background interests above instead, with no per-session goal.</span>
+    </div>
+    <h2 style="margin-top:18px">Session goals so far</h2>
+    <p class="note">A record of what he's set out to do, newest first. Useful for spotting where his interests are going.</p>
+    <div id="session-history"></div>
+    <div class="bar"><button class="quiet" id="clear-sessions">Clear session history</button></div>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>Waiting on you</h2>
+    <p class="note">Requests the model handed up instead of deciding.</p>
+    <div id="pending"></div>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>Active passes</h2>
+    <p class="note">Topics he argued his way into. They expire on their own.</p>
+    <div id="passes"></div>
+  </section>
+
+  <svg class="rule" viewBox="0 0 700 14" aria-hidden="true">
+    <path d="M6 7 H 300" /><path d="M340 7 H 694" />
+    <circle cx="6" cy="7" r="3" /><circle cx="694" cy="7" r="3" />
+  </svg>
+
+  <section>
+    <h2>Activity</h2>
+    <p class="note">Every page, every search, and every reason he gave. This is the part worth actually reading.</p>
+
+    <div class="controls">
+      <select id="range" aria-label="Date range">
+        <option value="1">Today</option>
+        <option value="7" selected>Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="0">Everything</option>
+      </select>
+      <select id="filter" aria-label="Filter by outcome">
+        <option value="">All outcomes</option>
+        <option value="allow">Allowed</option>
+        <option value="ask">Stopped for a reason</option>
+        <option value="block">Blocked</option>
+        <option value="deny">Appeal denied</option>
+        <option value="escalate">Sent to you</option>
+      </select>
+      <input type="text" id="search" placeholder="Filter by site, title, or words he used" />
+    </div>
+
+    <div id="summary" class="summary"></div>
+    <div id="log"></div>
+
+    <div class="bar">
+      <button class="quiet" id="export-json">Export JSON</button>
+      <button class="quiet" id="export-csv">Export CSV</button>
+      <button class="quiet" id="archive">Save copy to Downloads</button>
+      <button class="quiet danger" id="clear-log">Erase history</button>
+      <span class="saved" id="log-msg"></span>
+    </div>
+  </section>
+</main>
+
+<script src="options.js"></script>
+</body>
+</html>

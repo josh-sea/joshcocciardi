@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Make a game</title>
+<style>
+  :root {
+    --ink: #0B0F13; --panel: #151C24; --line: #24313D; --trace: #2B3947;
+    --live: #35D07F; --open: #F2B441; --fault: #E5484D; --blue: #5AA9FF;
+    --text: #E7EEF5; --muted: #7E92A6; --body: #B7C6D4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--ink); color: var(--text); overflow: hidden;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid; grid-template-columns: 340px 1fr; height: 100vh;
+  }
+  @media (max-width: 720px) { body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+
+  .editor { border-right: 1px solid var(--line); padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+  .name-row { display: flex; gap: 8px; align-items: center; }
+  .name-row input { flex: 1; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+                    border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; font-weight: 600; }
+  .name-row input:focus { outline: 2px solid var(--open); outline-offset: 1px; border-color: transparent; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h2 { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+             color: var(--muted); font-weight: 400; margin-bottom: 10px; }
+
+  textarea {
+    width: 100%; min-height: 66px; resize: vertical; background: #0F151B; color: var(--text);
+    border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; font: inherit; font-size: 14px; line-height: 1.45;
+  }
+  textarea:focus { outline: 2px solid var(--open); outline-offset: 1px; border-color: transparent; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { font: inherit; font-size: 12px; cursor: pointer; background: transparent; color: var(--body);
+          border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; }
+  .chip:hover { border-color: var(--open); color: var(--text); }
+  .send { width: 100%; margin-top: 10px; background: var(--open); color: #14181C; border: none;
+          border-radius: 9px; padding: 11px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .send:hover { background: #FFC85C; }
+  .send:disabled { background: var(--trace); color: var(--muted); cursor: default; }
+
+  .knob { margin-bottom: 12px; }
+  .knob:last-child { margin-bottom: 0; }
+  .knob .top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+  .knob .val { font-family: var(--mono); color: var(--open); }
+  input[type=range] { width: 100%; accent-color: var(--open); }
+
+  .row { display: flex; gap: 8px; }
+  .listrow { display: flex; gap: 6px; margin-top: 6px; }
+  .btn.del { flex: 0 0 auto; color: var(--fault); border-color: rgba(229,72,77,.35); padding: 9px 12px; }
+  .btn.del:hover { background: rgba(229,72,77,.12); color: #FF9B9E; }
+  .btn { flex: 1; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; border-radius: 8px;
+         padding: 9px; border: 1px solid var(--line); background: transparent; color: var(--body); }
+  .btn:hover { background: #1B242D; color: var(--text); }
+  .btn.solid { background: var(--live); color: #08140C; border-color: transparent; }
+  .btn.solid:hover { background: #56E39B; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .msg { font-size: 12.5px; line-height: 1.45; padding: 9px 11px; border-radius: 8px; }
+  .msg.ok { background: rgba(53,208,127,.1); color: #8CE7B6; border: 1px solid rgba(53,208,127,.25); }
+  .msg.bad { background: rgba(229,72,77,.1); color: #F2A5A7; border: 1px solid rgba(229,72,77,.25); }
+  .msg.think { background: rgba(242,180,65,.1); color: #F4D79A; border: 1px solid rgba(242,180,65,.22); }
+
+  details summary { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+                    color: var(--muted); cursor: pointer; }
+  pre { margin-top: 10px; max-height: 220px; overflow: auto; background: #0A0E12; border: 1px solid var(--line);
+        border-radius: 8px; padding: 11px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: #9FB3C6; white-space: pre-wrap; }
+
+  .stage { position: relative; display: grid; place-items: center; background: #05080B; }
+  iframe { width: 100%; height: 100%; border: 0; }
+  .stage-hud { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+               font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .keys { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+          font-size: 12px; color: var(--muted); background: rgba(11,15,19,.6); padding: 6px 12px; border-radius: 999px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div class="editor">
+    <div>
+      <div class="eyebrow">Make a game</div>
+      <div class="name-row">
+        <input type="text" id="game-name" value="My Game" maxlength="40" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Customize your game</h2>
+      <textarea id="request" placeholder="Tell me what to change. Like: let me fly, or give me a laser, or add more enemies"></textarea>
+      <div class="chips" id="chips"></div>
+      <button class="send" id="send">Make the change</button>
+      <div class="msg think" id="msg" hidden></div>
+    </div>
+
+    <div class="card" id="knob-card" hidden>
+      <h2>Tune it yourself</h2>
+      <div id="knobs"></div>
+    </div>
+
+    <div class="card">
+      <h2>Save &amp; load</h2>
+      <div class="row">
+        <button class="btn solid" id="save">Save this game</button>
+        <button class="btn" id="undo" disabled>Undo change</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="mine">My games</button>
+        <button class="btn" id="fresh">Start fresh</button>
+      </div>
+      <div id="list" style="margin-top:10px"></div>
+    </div>
+
+    <details>
+      <summary>Peek at the code</summary>
+      <pre id="code"></pre>
+    </details>
+  </div>
+
+  <div class="stage">
+    <div class="stage-hud" id="stage-hud"></div>
+    <iframe id="game" src="sandbox.html" title="game"></iframe>
+    <div class="keys">← → move · space jump · X shoot · shift dash</div>
+  </div>
+
+  <script src="builder.js"></script>
+</body>
+</html>
