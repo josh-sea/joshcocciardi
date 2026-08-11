@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "Gatekeeper",
+  "version": "1.9.0",
+  "description": "A reasoning layer between a curious kid and the open web, with an optional parent account for live approvals.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "notifications",
+    "downloads",
+    "alarms",
+    "offscreen",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Gatekeeper",
+    "default_popup": "popup.html"
+  },
+  "sandbox": {
+    "pages": [
+      "sandbox.html"
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts; script-src 'self' 'unsafe-inline' 'unsafe-eval'; child-src 'none'; object-src 'none'"
+  }
+}

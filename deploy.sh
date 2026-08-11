@@ -9,6 +9,7 @@
 #   ./deploy.sh playball     - Copy playball (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh canitwo      - Copy canitwo (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh recipebox    - Copy recipebox (no build), copy to portfolio, deploy hosting
+#   ./deploy.sh gatekeeper   - Deploy Gatekeeper parent app + functions + firestore (igatekeeper.web.app)
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
 #
@@ -35,6 +36,7 @@ MOMENTS_DIR="$ROOT_DIR/apps/moment-capture"
 PLAYBALL_DIR="$ROOT_DIR/apps/playball"
 CANITWO_DIR="$ROOT_DIR/apps/canitwo"
 RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
+GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
 log() { echo ""; echo "==> $1"; }
 success() { echo "✅ $1"; }
@@ -119,6 +121,20 @@ deploy_hosting() {
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
 
+deploy_gatekeeper() {
+    log "Deploying Gatekeeper (parent app hosting + functions + firestore)..."
+    cd "$ROOT_DIR"
+    # Static app served directly from apps/gatekeeper/app (no build step), plus
+    # the extension-facing API, push trigger, and the rules/indexes it needs.
+    firebase deploy --only \
+      hosting:igatekeeper,functions:gatekeeperApi,functions:gatekeeperOnRequest,firestore:rules,firestore:indexes \
+      || fail "Gatekeeper deploy failed"
+    success "Gatekeeper deployed"
+    echo ""
+    echo "  Parent console:  https://igatekeeper.web.app"
+    echo "  Extension API:   https://us-central1-josh-cocciardi.cloudfunctions.net/gatekeeperApi"
+}
+
 deploy_firestore() {
     log "Deploying Firestore rules and indexes..."
     cd "$ROOT_DIR"
@@ -194,6 +210,12 @@ case "${1:-all}" in
         build_portfolio
         deploy_hosting
         ;;
+    gatekeeper)
+        echo "========================================"
+        echo "  Deploying Gatekeeper (igatekeeper.web.app)"
+        echo "========================================"
+        deploy_gatekeeper
+        ;;
     firestore)
         echo "========================================"
         echo "  Deploying Firestore only"
@@ -208,7 +230,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|canitwo|recipebox|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|canitwo|recipebox|gatekeeper|firestore|storage]"
         exit 1
         ;;
 esac

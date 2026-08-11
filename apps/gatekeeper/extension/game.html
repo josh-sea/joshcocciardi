@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Side Quest</title>
+<style>
+  :root {
+    --ink: #0B0F13; --panel: #151C24; --line: #24313D; --trace: #2B3947;
+    --live: #35D07F; --open: #F2B441; --fault: #E5484D; --blue: #5AA9FF;
+    --text: #E7EEF5; --muted: #7E92A6; --body: #B7C6D4;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+  html, body { height: 100%; }
+  body {
+    background: var(--ink); color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    padding: 13px 18px; display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+  }
+  header .name { font-size: 15px; font-weight: 600; }
+  header .stat { font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+                 text-transform: uppercase; color: var(--muted); }
+  header .stat b { color: var(--open); }
+  main { flex: 1; position: relative; display: grid; place-items: center; }
+  canvas { display: block; touch-action: none; }
+
+  .screen {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    background: rgba(11,15,19,.93); padding: 28px; z-index: 5;
+  }
+  .screen .inner { max-width: 340px; }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+             text-transform: uppercase; color: var(--muted); }
+  .screen h1 { font-size: 25px; font-weight: 600; letter-spacing: -.01em; margin: 8px 0 6px; }
+  .screen p { color: var(--muted); font-size: 14px; line-height: 1.55; }
+  .screen .big { font-family: var(--mono); font-size: 42px; color: var(--live); margin: 12px 0 2px; }
+  .btn {
+    font: inherit; font-size: 15px; font-weight: 500; border: 1px solid transparent;
+    border-radius: 10px; padding: 12px 22px; cursor: pointer; margin: 6px 5px 0;
+    background: var(--open); color: #14181C;
+  }
+  .btn:hover { background: #FFC85C; }
+  .btn.ghost { background: transparent; color: var(--body); border-color: var(--line); }
+  .btn.ghost:hover { background: var(--panel); }
+  .locked h1 { color: var(--fault); }
+
+  .games { display: grid; gap: 10px; margin-top: 18px; }
+  .gamecard {
+    display: flex; align-items: center; gap: 13px; text-align: left; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px;
+    font: inherit; color: var(--text);
+  }
+  .gamecard:hover { border-color: #35506B; background: #19222C; }
+  .gamecard .icon { width: 42px; height: 42px; border-radius: 10px; flex: none; display: grid; place-items: center; }
+  .gamecard .t { font-size: 15px; font-weight: 600; }
+  .gamecard .d { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .clock { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 14px; letter-spacing: .08em; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="name" id="title">Side Quest</span>
+    <span class="stat" id="score"></span>
+  </header>
+  <main id="stage">
+    <canvas id="c" width="440" height="480"></canvas>
+
+    <div class="screen locked" id="locked" hidden>
+      <div class="inner">
+        <div class="eyebrow">Locked</div>
+        <h1>Earn this first</h1>
+        <p>Games are unlocked by investigating your projects, then answering a question about what you found. Open the helper to start.</p>
+      </div>
+    </div>
+
+    <div class="screen" id="menu" hidden>
+      <div class="inner">
+        <div class="eyebrow">Unlocked</div>
+        <h1>Pick a game</h1>
+        <div class="games" id="game-list"></div>
+        <div class="clock" id="menu-clock"></div>
+      </div>
+    </div>
+
+    <div class="screen" id="over" hidden>
+      <div class="inner">
+        <div class="eyebrow" id="over-eyebrow">Nice run</div>
+        <div class="big" id="final">0</div>
+        <p id="over-msg"></p>
+        <div id="over-actions"></div>
+      </div>
+    </div>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>

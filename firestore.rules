@@ -322,6 +322,83 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid;
     }
 
+    // ── Gatekeeper: parental web-filter accounts ────────────────────────
+    // A household is the unit of ownership: one or more parent accounts
+    // (`owners`) who can see everything under it. The child's browser
+    // extension is NOT a Firebase-auth client — it talks to the Cloud
+    // Functions HTTP API with a per-device bearer token, and those writes
+    // (activity, sessions, incoming requests) land via the Admin SDK, which
+    // bypasses these rules. So the client rules below only ever govern the
+    // parent app: owners read their household and act on requests; the
+    // Anthropic API key is write-only and never readable by any client.
+    function gkOwners(hid) {
+      return get(/databases/$(database)/documents/gatekeeper_households/$(hid)).data.owners;
+    }
+    function gkIsOwner(hid) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/gatekeeper_households/$(hid))
+        && request.auth.uid in gkOwners(hid);
+    }
+
+    match /gatekeeper_households/{hid} {
+      // `resource == null` lets a signed-in parent get() a household that
+      // doesn't exist yet (reads as "not found" rather than denied).
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid in resource.data.owners);
+      // A parent creates their own household with themselves as sole owner.
+      allow create: if request.auth != null
+        && request.resource.data.owners == [request.auth.uid];
+      // Owners can update, but may never write themselves out of the owners
+      // list (that would orphan the household or hand it off silently).
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.owners
+        && request.auth.uid in request.resource.data.owners;
+      allow delete: if request.auth != null
+        && request.auth.uid in resource.data.owners;
+
+      // Secret config — the household's Anthropic API key. Owners may write
+      // it, but NO client may ever read it back. It is consumed only by the
+      // screening Cloud Function via the Admin SDK.
+      match /private/{docId} {
+        allow read: if false;
+        allow write: if gkIsOwner(hid);
+      }
+
+      // Paired child devices and parent push registrations. Extension device
+      // records are minted by the Cloud Function (admin); the parent app
+      // registers its own FCM push token here.
+      match /devices/{deviceId} {
+        allow read: if gkIsOwner(hid);
+        allow write: if gkIsOwner(hid);
+      }
+
+      // Browsing sessions (goal per stretch), mirrored activity log, and the
+      // real-time access requests the child raises. Extension writes arrive
+      // via the Admin SDK; the parent app reads them and, for requests,
+      // flips status to approved/denied.
+      match /sessions/{sessionId} {
+        allow read, write: if gkIsOwner(hid);
+      }
+      match /activity/{eventId} {
+        allow read, write: if gkIsOwner(hid);
+      }
+      match /requests/{requestId} {
+        allow read, write: if gkIsOwner(hid);
+      }
+    }
+
+    // Pairing codes: short-lived code → household lookups the /pair endpoint
+    // (Admin SDK) redeems. An owner creates a code for their own household;
+    // codes are never client-readable, so they can't be enumerated.
+    match /gatekeeper_pairing/{code} {
+      allow read: if false;
+      allow create: if gkIsOwner(request.resource.data.householdId);
+      allow update: if false;
+      allow delete: if request.auth != null
+        && exists(/databases/$(database)/documents/gatekeeper_households/$(resource.data.householdId))
+        && request.auth.uid in gkOwners(resource.data.householdId);
+    }
+
     // Radar metadata - read access for clients
     match /radar_sites/{siteId} {
       allow read: if true;
@@ -354,6 +431,7 @@ service cloud.firestore {
         && !collection.matches('canitwo_.*')
         && !collection.matches('recipebox_.*')
         && !collection.matches('mise_.*')
+        && !collection.matches('gatekeeper_.*')
         && collection != 'work_private';
     }
   }

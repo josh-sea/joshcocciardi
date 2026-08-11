@@ -24,6 +24,14 @@
         { "fieldPath": "threadId", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "decidedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

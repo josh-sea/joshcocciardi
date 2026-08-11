@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Gatekeeper — Parent Console</title>
+  <meta name="description" content="See what your kid is asking to browse, approve or deny access in real time, and review the full history — anywhere." />
+  <meta name="theme-color" content="#4338ca" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Gatekeeper" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="config.js"></script>
+  <script>
+    // Resolved by js/store.js (a module, so it runs after the classic scripts).
+    window.GKStoreReady = new Promise((r) => { window.__gkStoreResolve = r; });
+  </script>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">🛡️ <span>Gatekeeper</span></div>
+  <div class="top-right">
+    <span id="who" class="who"></span>
+    <button id="signout-btn" class="ghost hidden">Sign out</button>
+  </div>
+</header>
+
+<!-- ── Signed-out gate ─────────────────────────────────────────────────── -->
+<main id="signin" class="screen center hidden">
+  <div class="hero">
+    <div class="hero-icon">🛡️</div>
+    <h1>Gatekeeper</h1>
+    <p class="lede">A reasoning layer between a curious kid and the open web — with you in the loop. See what they ask to open, approve or deny it in real time, and read the whole history from anywhere.</p>
+    <button id="signin-btn" class="primary big">Sign in with Google</button>
+    <p class="fineprint">Your account is the parent. The kid's browser pairs to it with a code.</p>
+  </div>
+</main>
+
+<!-- ── App ─────────────────────────────────────────────────────────────── -->
+<main id="app" class="hidden">
+  <nav class="tabs">
+    <button class="tab active" data-tab="requests">Requests <span id="req-badge" class="badge hidden">0</span></button>
+    <button class="tab" data-tab="activity">Activity</button>
+    <button class="tab" data-tab="sessions">Sessions</button>
+    <button class="tab" data-tab="setup">Setup</button>
+  </nav>
+
+  <section id="tab-requests" class="tabpanel">
+    <div id="push-nudge" class="nudge hidden">
+      <span>Get notified the moment a request comes in.</span>
+      <button id="enable-push" class="primary sm">Turn on notifications</button>
+    </div>
+    <div id="requests-list" class="list"></div>
+    <div id="requests-empty" class="empty hidden">
+      <p>No requests yet. When <span class="kid-name">your kid</span> asks to open something the gate isn't sure about, it shows up here — live.</p>
+    </div>
+  </section>
+
+  <section id="tab-activity" class="tabpanel hidden">
+    <div class="filters">
+      <input id="activity-search" type="search" placeholder="Search sites, titles, reasons…" />
+      <select id="activity-outcome">
+        <option value="">All outcomes</option>
+        <option value="allow">Allowed</option>
+        <option value="ask">Asked</option>
+        <option value="appeal">Appealed</option>
+        <option value="block">Blocked</option>
+        <option value="off-session">Off session</option>
+        <option value="escalate">Sent to you</option>
+      </select>
+    </div>
+    <div id="activity-summary" class="summary"></div>
+    <div id="activity-list" class="list"></div>
+    <div id="activity-empty" class="empty hidden"><p>No activity synced yet.</p></div>
+  </section>
+
+  <section id="tab-sessions" class="tabpanel hidden">
+    <div id="sessions-list" class="list"></div>
+    <div id="sessions-empty" class="empty hidden"><p>No sessions yet. A session is a stretch of browsing with a stated goal.</p></div>
+  </section>
+
+  <section id="tab-setup" class="tabpanel hidden">
+    <div class="card">
+      <h2>1 · Pair the kid's browser</h2>
+      <p class="muted">Generate a code, then in the extension open <em>Options → Connect to account</em> and enter it. Codes expire in 15 minutes.</p>
+      <div class="pair-row">
+        <code id="pair-code" class="paircode">— — — — — —</code>
+        <button id="gen-code" class="primary sm">Generate code</button>
+      </div>
+      <p class="muted small">Extension API URL: <code id="api-url"></code></p>
+      <div id="devices" class="devices"></div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Anthropic API key</h2>
+      <p class="muted">Stored server-side and used only to screen pages. It is never sent back to the browser, so it can't be read from the kid's devtools. Put a spend limit on it anyway.</p>
+      <div class="key-row">
+        <input id="key-input" type="password" placeholder="sk-ant-…" autocomplete="off" />
+        <button id="save-key" class="primary sm">Save key</button>
+      </div>
+      <p id="key-status" class="muted small"></p>
+    </div>
+
+    <div class="card">
+      <h2>3 · About your kid</h2>
+      <p class="muted">Context the screener uses. Naming what they're into widens the auto-allow band.</p>
+      <label>Name <input id="cfg-name" type="text" /></label>
+      <label>Age <input id="cfg-age" type="number" min="3" max="18" /></label>
+      <label>What they're working on / into
+        <textarea id="cfg-context" rows="4" placeholder="Breadboard circuits, LEDs, Arduino… also baseball and Lego."></textarea>
+      </label>
+      <button id="save-cfg" class="primary sm">Save</button>
+      <span id="cfg-status" class="muted small"></span>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script type="module" src="js/store.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
