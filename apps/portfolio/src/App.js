@@ -9,6 +9,7 @@ import DoomLifeGame from "./components/DoomLifeGame";
 import ExpenseAnalyzer from "./components/ExpenseAnalyzer";
 import ToolsIndex from "./tools/ToolsIndex";
 import ToolPage from "./tools/ToolPage";
+import WorkPage from "./work/WorkPage";
 import "./App.css";
 
 // Standard site chrome: sticky nav + centered content container.
@@ -45,6 +46,11 @@ const App = () => {
           <Route path="/tools" element={<ToolsIndex />} />
         </Route>
         <Route path="/tools/:slug" element={<ToolPage />} />
+        {/* Private pages: full-bleed, behind the /work allowlist, and absent
+            from every index on the site. `/work` itself has no listing — the
+            bare path falls through to the same "not found" as a bad slug. */}
+        <Route path="/work" element={<WorkPage />} />
+        <Route path="/work/:slug" element={<WorkPage />} />
         {/* short vanity path for the Hit Field analyzer */}
         <Route path="/analyzer" element={<Navigate to="/tools/analyzer" replace />} />
       </Routes>

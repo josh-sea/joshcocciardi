@@ -1,0 +1,11 @@
+# Everything on the site is crawlable except /work, which holds private,
+# sign-in-gated pages that shouldn't appear in search results.
+#
+# robots.txt only asks politely, and a Disallow keeps crawlers from *fetching*
+# a URL rather than from indexing it — so the real signal is the
+# `X-Robots-Tag: noindex` header on /work/** in the repo-root firebase.json,
+# plus the matching meta tag rendered by src/work/WorkPage.js. This file is the
+# third layer, not the load-bearing one.
+User-agent: *
+Disallow: /work
+Allow: /
