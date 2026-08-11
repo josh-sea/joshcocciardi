@@ -68,6 +68,8 @@ export default function App() {
   const [composeOpen, setComposeOpen] = useState(false);
 
   const tokenRef = useRef(null);
+  const viewRef = useRef(view);
+  const composeOpenRef = useRef(composeOpen);
   const refreshTimerRef = useRef(null);
   const backfillTokenRef = useRef(null);
   const requestIdRef = useRef(0);
@@ -79,6 +81,54 @@ export default function App() {
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
+
+  // --- Back navigation -----------------------------------------------------
+
+  /**
+   * Screens here are React state, not URLs. Without a history entry behind
+   * each one, the browser's Back button and the iOS swipe-back gesture leave
+   * the app entirely — which looks like the page reloading — instead of
+   * returning to the message list.
+   *
+   * Opening a screen pushes an entry; every in-app "back" goes through
+   * history.back(), so the browser's own gesture and our buttons follow the
+   * same path and can't disagree about where we are.
+   */
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  useEffect(() => {
+    composeOpenRef.current = composeOpen;
+  }, [composeOpen]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      // Unwind one layer at a time, innermost first.
+      if (composeOpenRef.current) {
+        setComposeOpen(false);
+        return;
+      }
+      if (viewRef.current === VIEW.CHAT) {
+        setCurrentThread(null);
+        setView(VIEW.THREADS);
+      }
+      // On the list with nothing pushed, let the browser navigate away.
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // No URL argument: the entry is a history marker, not a route, so a
+  // refresh still lands on the app's own path.
+  const pushHistoryLayer = useCallback((layer) => {
+    window.history.pushState({ mailLayer: layer }, '');
+  }, []);
+
+  const goBack = useCallback(() => {
+    window.history.back();
+  }, []);
 
   // --- Google Identity Services -------------------------------------------
 
@@ -479,6 +529,7 @@ export default function App() {
 
   const handleOpenThread = useCallback(
     async (thread) => {
+      pushHistoryLayer('chat');
       setView(VIEW.CHAT);
       setCurrentThread({ ...thread, messages: thread.messages || [] });
 
@@ -499,12 +550,11 @@ export default function App() {
         reportError(err, 'Failed to open conversation');
       }
     },
-    [userId, withGmail, markThreadRead, reportError]
+    [userId, withGmail, markThreadRead, reportError, pushHistoryLayer]
   );
 
   const handleBack = () => {
-    setCurrentThread(null);
-    setView(VIEW.THREADS);
+    goBack();
   };
 
   const refreshThreadAfterSend = useCallback(
@@ -554,6 +604,11 @@ export default function App() {
     [currentThread, mailboxEmail, withGmail, refreshThreadAfterSend]
   );
 
+  const handleOpenCompose = useCallback(() => {
+    pushHistoryLayer('compose');
+    setComposeOpen(true);
+  }, [pushHistoryLayer]);
+
   const handleComposeSend = useCallback(
     async ({ to, cc, subject, body }) => {
       await withGmail((accessToken) =>
@@ -598,7 +653,7 @@ export default function App() {
         <ThreadList
           threads={threads}
           onOpenThread={handleOpenThread}
-          onCompose={() => setComposeOpen(true)}
+          onCompose={handleOpenCompose}
           onSignOut={handleSignOut}
           onRefresh={loadThreads}
           onLoadMore={loadMoreThreads}
@@ -622,12 +677,12 @@ export default function App() {
           accessToken={token?.access_token}
           onBack={handleBack}
           onSend={handleSendReply}
-          onOpenCompose={() => setComposeOpen(true)}
+          onOpenCompose={handleOpenCompose}
         />
       )}
 
       {composeOpen && (
-        <ComposeModal onClose={() => setComposeOpen(false)} onSend={handleComposeSend} />
+        <ComposeModal onClose={goBack} onSend={handleComposeSend} />
       )}
     </>
   );

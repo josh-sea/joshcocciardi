@@ -1,3 +1,17 @@
+/*
+ * The app manages its own scrolling: each screen is a full-height flex
+ * column with exactly one scrollable region inside it. The document itself
+ * must not scroll — on iOS, 100vh is taller than the visible viewport (it
+ * ignores the browser's toolbars), so a scrollable document lets the whole
+ * layout slide up and carries the header off the top of the screen with it.
+ */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
