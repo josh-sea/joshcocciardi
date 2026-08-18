@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Modal from '../Layout/Modal';
 import SoldForm from './SoldForm';
+import PhotoIdentify from './PhotoIdentify';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShop } from '../../contexts/ShopContext';
 import {
@@ -139,6 +140,21 @@ const ItemDetail = ({ mode, item, onClose }) => {
     await deleteItemPhoto(photo.path);
   };
 
+  // Apply an AI photo-identification candidate: fill fields it's confident
+  // about without clobbering anything the user already typed.
+  const applyCandidate = (c) =>
+    setForm((f) => ({
+      ...f,
+      name: (c.name || '').trim() || f.name,
+      category: c.category || f.category,
+      sport: c.sport || f.sport,
+      league: c.league || f.league,
+      itemType: c.itemType || f.itemType,
+      graded: c.graded === true ? true : f.graded,
+      gradingCompany: c.gradingCompany || f.gradingCompany,
+      grade: c.grade || f.grade,
+    }));
+
   // The first photo is the cover: it's the card thumbnail and the one "Search
   // by photo" uses. Making a photo the cover just moves it to the front.
   const setCover = async (photo) => {
@@ -271,6 +287,11 @@ const ItemDetail = ({ mode, item, onClose }) => {
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
             📷 Save the item first, then reopen it to add or upload photos.
           </p>
+        )}
+
+        {/* AI identify from the cover photo */}
+        {isEdit && photos.length > 0 && (
+          <PhotoIdentify photoUrl={photos[0]?.url} onApply={applyCandidate} />
         )}
 
         {/* Cost + acquisition */}

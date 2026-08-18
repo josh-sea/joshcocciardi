@@ -7,7 +7,7 @@ import { toNumberOrNull } from '../../utils/format';
 // The whole point of the app: get an item in with as little friction as
 // possible. Type a name, hit enter, keep going. Price is optional; everything
 // else gets filled in later from the item card.
-const QuickAdd = ({ onOpenDetailed }) => {
+const QuickAdd = ({ onOpenDetailed, onOpenBulk }) => {
   const { user } = useAuth();
   const { activeShopId } = useShop();
   const [name, setName] = useState('');
@@ -66,16 +66,25 @@ const QuickAdd = ({ onOpenDetailed }) => {
           </button>
         </div>
       </form>
-      <div className="mt-2 flex items-center justify-between px-1">
-        <button
-          type="button"
-          className="text-xs font-medium text-sky-600 hover:text-sky-700"
-          onClick={onOpenDetailed}
-        >
-          + Add with full details instead
-        </button>
+      <div className="mt-2 flex items-center justify-between gap-3 px-1">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <button
+            type="button"
+            className="text-xs font-medium text-sky-600 hover:text-sky-700"
+            onClick={onOpenDetailed}
+          >
+            + Add with full details
+          </button>
+          <button
+            type="button"
+            className="text-xs font-medium text-sky-600 hover:text-sky-700"
+            onClick={onOpenBulk}
+          >
+            🎤 Bulk add by voice
+          </button>
+        </div>
         {justAdded && (
-          <span className="text-xs text-emerald-600">Added “{justAdded}” ✓</span>
+          <span className="shrink-0 text-xs text-emerald-600">Added “{justAdded}” ✓</span>
         )}
       </div>
     </div>
