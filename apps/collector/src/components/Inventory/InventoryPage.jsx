@@ -88,8 +88,8 @@ const InventoryPage = () => {
           <LoadingSpinner label="Loading your collection…" />
         ) : itemsError ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-700">
-            Couldn&apos;t load items. If this is the first run, the Firestore index may
-            still be building — give it a minute and refresh.
+            Couldn&apos;t load items. Check your connection and refresh — if it keeps
+            happening, the shop&apos;s security rules may not be deployed yet.
           </div>
         ) : filtered.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 px-4 py-12 text-center text-slate-400">

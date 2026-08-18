@@ -6,7 +6,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -41,17 +40,28 @@ const blankItem = (shopId, createdBy) => ({
 // Live subscription to every item in a shop, newest first. Returns the
 // unsubscribe function. Both members share this stream, so an add by one shows
 // up for the other without a refresh.
+//
+// We query on shopId only (a single-field filter, which Firestore indexes
+// automatically) and sort newest-first in JS. That deliberately avoids a
+// composite index, so the app works the moment the rules deploy — no
+// Firebase-console step. A shop's item count is small enough that client-side
+// sorting is a non-issue. A just-added item has a null createdAt until the
+// server timestamp resolves, so it's floated to the top.
 export const subscribeShopItems = (shopId, onData, onError) => {
   const q = query(
     collection(db, 'collector_items'),
-    where('shopId', '==', shopId),
-    orderBy('createdAt', 'desc')
+    where('shopId', '==', shopId)
   );
   return onSnapshot(
     q,
     (snap) => {
       const items = [];
       snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+      items.sort(
+        (a, b) =>
+          (b.createdAt?.seconds ?? Number.MAX_SAFE_INTEGER) -
+          (a.createdAt?.seconds ?? Number.MAX_SAFE_INTEGER)
+      );
       onData(items);
     },
     onError
