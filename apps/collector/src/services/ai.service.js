@@ -17,7 +17,7 @@
 // ships to the client; access is gated by the Firebase project.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const AI_ENABLED = false;
+export const AI_ENABLED = true;
 
 // ── Shared: shrink a photo before sending (model doesn't need 12 MP) ─────────
 const shrinkPhoto = async (file, maxEdge = 1600) => {
@@ -51,13 +51,13 @@ const blobToBase64 = (blob) =>
 // if it slips out). The user reviews and edits the rows before anything saves.
 export const parseBulkItems = async ({ text = '', audioBlob = null }) => {
   if (!AI_ENABLED) return mockParseBulk({ text, audioBlob });
-  return geminiParseBulk({ text, audioBlob }); // eslint-disable-line no-unreachable
+  return geminiParseBulk({ text, audioBlob });
 };
 
 // Identify a collectible from a photo and propose field values to autofill.
 export const identifyFromPhoto = async (file) => {
   if (!AI_ENABLED) return mockIdentify();
-  return geminiIdentify(file); // eslint-disable-line no-unreachable
+  return geminiIdentify(file);
 };
 
 // ── PREVIEW STUBS (canned data; remove once AI_ENABLED) ──────────────────────
@@ -169,8 +169,13 @@ const geminiParseBulk = async ({ text, audioBlob }) => {
   } else {
     parts.push({ text: `\nWhat they said:\n${text}` });
   }
-  const result = await model.generateContent(parts);
-  const data = JSON.parse(result.response.text());
+  let data;
+  try {
+    const result = await model.generateContent(parts);
+    data = JSON.parse(result.response.text());
+  } catch (e) {
+    throw new Error(friendlyAIError(e));
+  }
   return {
     items: (data.items || []).map((it) => ({
       name: String(it.name || '').trim(),
@@ -215,7 +220,36 @@ const geminiIdentify = async (file) => {
     'each with a short human "label", a full "name", and the best category, ' +
     'sport, league, itemType, and grading info you can read. "confidence" is 0–1. ' +
     'Only fill fields you are reasonably sure of; leave the rest empty.';
-  const result = await model.generateContent([{ text: intro }, part]);
-  const data = JSON.parse(result.response.text());
+  let data;
+  try {
+    const result = await model.generateContent([{ text: intro }, part]);
+    data = JSON.parse(result.response.text());
+  } catch (e) {
+    throw new Error(friendlyAIError(e));
+  }
   return { candidates: data.candidates || [] };
 };
+
+// Turn Firebase AI Logic errors into something a user (and you) can act on.
+// The most likely first-run error is simply that AI Logic isn't switched on in
+// the Firebase console yet. Mirrors apps/recipebox/js/ai.js.
+function friendlyAIError(e) {
+  const msg = `${e?.message || e} ${e?.code || ''}`;
+  if (/app check/i.test(msg)) {
+    return 'This project requires App Check, but the app isn’t registered for it. In the Firebase console, register the web app under App Check or turn off enforcement for AI Logic.';
+  }
+  if (/not.enabled|to be enabled|has not been used|SERVICE_DISABLED|PERMISSION_DENIED|403/i.test(msg)) {
+    return 'AI isn’t switched on for this project yet. In the Firebase console open “AI Logic” and enable the Gemini Developer API, then try again.';
+  }
+  if (/prepayment|credits are depleted|billing/i.test(msg)) {
+    return 'The project is out of Gemini credits. Check billing in Google AI Studio, then try again.';
+  }
+  if (/quota|RESOURCE_EXHAUSTED|429/i.test(msg)) {
+    return 'The AI is over its rate limit right now. Give it a minute and try again.';
+  }
+  if (/Failed to fetch|NetworkError|network error|offline|timed? ?out/i.test(msg)) {
+    return 'Couldn’t reach the AI — check your connection and try again.';
+  }
+  console.warn('[ai] request failed:', e);
+  return `The AI hit an unexpected error${e?.code ? ` (${e.code})` : ''}. Try again in a minute.`;
+}

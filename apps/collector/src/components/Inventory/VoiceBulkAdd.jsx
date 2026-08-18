@@ -33,7 +33,12 @@ const VoiceBulkAdd = ({ onClose }) => {
         audioBlob: useAudio ? rec.blob : null,
       });
       setRows(res.items.map((r) => ({ ...r, pricePaid: r.pricePaid ?? '' })));
-      setNote(res.note || '');
+      setNote(
+        res.note ||
+          (res.items.length
+            ? ''
+            : 'Didn’t catch any items — try again (start with the item name), or add rows manually below.')
+      );
       setStep('review');
     } catch (err) {
       setError(err.message || 'Could not read that. Try again.');
