@@ -1,0 +1,115 @@
+import { useMemo, useState } from 'react';
+import { useShop } from '../../contexts/ShopContext';
+import { ITEM_STATUS } from '../../utils/constants';
+import { money } from '../../utils/format';
+import LoadingSpinner from '../Layout/LoadingSpinner';
+import QuickAdd from './QuickAdd';
+import ItemCard from './ItemCard';
+import ItemDetail from './ItemDetail';
+
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: ITEM_STATUS.INVENTORY, label: 'In stock' },
+  { key: ITEM_STATUS.SOLD, label: 'Sold' },
+];
+
+const InventoryPage = () => {
+  const { items, itemsLoading, itemsError } = useShop();
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
+  const [creating, setCreating] = useState(false);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (statusFilter !== 'all' && it.status !== statusFilter) return false;
+      if (!q) return true;
+      const haystack = [
+        it.name,
+        it.category,
+        it.sport,
+        it.league,
+        it.itemType,
+        it.acquiredFrom,
+        it.assignedTo,
+        it.gradingCompany,
+        ...(it.tags || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [items, statusFilter, search]);
+
+  const inStock = items.filter((i) => i.status === ITEM_STATUS.INVENTORY);
+  const stockValue = inStock.reduce((sum, i) => sum + (i.pricePaid || 0), 0);
+
+  const selected = items.find((i) => i.id === selectedId) || null;
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-4">
+      <QuickAdd onOpenDetailed={() => setCreating(true)} />
+
+      {/* Quick stock summary */}
+      <div className="mt-3 flex items-center gap-4 px-1 text-sm text-slate-500">
+        <span><strong className="text-slate-900">{inStock.length}</strong> in stock</span>
+        <span><strong className="text-slate-900">{money(stockValue)}</strong> cost basis</span>
+        <span><strong className="text-slate-900">{items.length}</strong> total</span>
+      </div>
+
+      {/* Filters */}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          className="field sm:max-w-xs"
+          placeholder="Search name, tag, category…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setStatusFilter(f.key)}
+              className={`rounded-md px-3 py-1.5 font-medium ${
+                statusFilter === f.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="mt-4 space-y-2">
+        {itemsLoading ? (
+          <LoadingSpinner label="Loading your collection…" />
+        ) : itemsError ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-700">
+            Couldn&apos;t load items. If this is the first run, the Firestore index may
+            still be building — give it a minute and refresh.
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 px-4 py-12 text-center text-slate-400">
+            {items.length === 0
+              ? 'Nothing here yet. Add your first item above ☝️'
+              : 'No items match that filter.'}
+          </div>
+        ) : (
+          filtered.map((it) => (
+            <ItemCard key={it.id} item={it} onClick={() => setSelectedId(it.id)} />
+          ))
+        )}
+      </div>
+
+      {creating && <ItemDetail mode="create" onClose={() => setCreating(false)} />}
+      {selected && (
+        <ItemDetail mode="edit" item={selected} onClose={() => setSelectedId(null)} />
+      )}
+    </div>
+  );
+};
+
+export default InventoryPage;

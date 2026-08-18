@@ -30,6 +30,10 @@
           "destination": "/projects/recipebox/index.html"
         },
         {
+          "source": "/projects/collector/**",
+          "destination": "/projects/collector/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }

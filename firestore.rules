@@ -399,6 +399,76 @@ service cloud.firestore {
         && request.auth.uid in gkOwners(resource.data.householdId);
     }
 
+    // ── Collector Shop: shared collectible inventory ─────────────────────
+    // A "shop" is a shared workspace two (or more) people belong to. Membership
+    // (memberUids) gates reading and writing the items under it, so everyone in
+    // a shop sees and edits the same collection. Someone joins by presenting an
+    // invite code, which resolves — via /collector_invites — to a shop id.
+    function collectorIsMember(shopId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/collector_shops/$(shopId))
+        && request.auth.uid in get(/databases/$(database)/documents/collector_shops/$(shopId)).data.memberUids;
+    }
+
+    // Lightweight per-user profile (display name) for this app only. Readable by
+    // any signed-in user so a shop can render friendly member names.
+    match /collector_users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Invite codes: code → shopId. Any signed-in user may read one (to redeem a
+    // code they were handed); only an existing shop member may mint or revoke one.
+    match /collector_invites/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && collectorIsMember(request.resource.data.shopId);
+      allow update: if false;
+      allow delete: if request.auth != null
+        && collectorIsMember(resource.data.shopId);
+    }
+
+    match /collector_shops/{shopId} {
+      // `resource == null` lets a get() on a missing shop read as "not found"
+      // rather than a permissions error.
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid in resource.data.memberUids);
+      // Create your own shop with yourself as the sole owner and member.
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid];
+      allow update: if request.auth != null && (
+        // Member housekeeping (rename, etc.): ownership can't move and the
+        // editor must remain a member. Members are trusted co-owners of the shop.
+        (request.auth.uid in resource.data.memberUids
+          && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.ownerId == resource.data.ownerId)
+        ||
+        // Self-join: the only change is adding yourself, and you must present a
+        // valid invite code (an existing /collector_invites doc) that points at
+        // THIS shop. That binds the join to a real code rather than letting any
+        // signed-in user add themselves to an arbitrary shop id.
+        (request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['members', 'memberUids', 'lastJoinedVia'])
+          && request.resource.data.memberUids.removeAll(resource.data.memberUids) == [request.auth.uid]
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+          && exists(/databases/$(database)/documents/collector_invites/$(request.resource.data.lastJoinedVia))
+          && get(/databases/$(database)/documents/collector_invites/$(request.resource.data.lastJoinedVia)).data.shopId == shopId)
+      );
+      allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Items belong to a shop; any member of that shop can read/write/delete them.
+    match /collector_items/{itemId} {
+      allow read: if collectorIsMember(resource.data.shopId);
+      allow create: if request.auth != null
+        && request.resource.data.createdBy == request.auth.uid
+        && collectorIsMember(request.resource.data.shopId);
+      allow update: if collectorIsMember(resource.data.shopId)
+        && collectorIsMember(request.resource.data.shopId);
+      allow delete: if collectorIsMember(resource.data.shopId);
+    }
+
     // Radar metadata - read access for clients
     match /radar_sites/{siteId} {
       allow read: if true;
@@ -432,6 +502,7 @@ service cloud.firestore {
         && !collection.matches('recipebox_.*')
         && !collection.matches('mise_.*')
         && !collection.matches('gatekeeper_.*')
+        && !collection.matches('collector_.*')
         && collection != 'work_private';
     }
   }
