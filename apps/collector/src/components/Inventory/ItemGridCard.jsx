@@ -1,9 +1,6 @@
 import { money } from '../../utils/format';
-import { ITEM_STATUS } from '../../utils/constants';
+import { ITEM_STATUS, categoryLine as catLine } from '../../utils/constants';
 import { useLongPress } from '../../hooks/useLongPress';
-
-const catLine = (item) =>
-  [item.category, item.sport, item.league, item.itemType].filter(Boolean).join(' · ');
 
 // A Pinterest-style tile: photo-forward, natural aspect ratio (so the grid
 // masonries), tap to open, long-press the photo (or the ⤢ button) to lightbox.

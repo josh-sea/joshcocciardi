@@ -1,10 +1,5 @@
 import { money } from '../../utils/format';
-import { ITEM_STATUS } from '../../utils/constants';
-
-const categoryLine = (item) => {
-  const bits = [item.category, item.sport, item.league, item.itemType].filter(Boolean);
-  return bits.join(' · ');
-};
+import { ITEM_STATUS, categoryLine } from '../../utils/constants';
 
 const ItemCard = ({ item, onClick }) => {
   const sold = item.status === ITEM_STATUS.SOLD;

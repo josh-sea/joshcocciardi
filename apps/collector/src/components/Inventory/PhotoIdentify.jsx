@@ -45,7 +45,8 @@ const PhotoIdentify = ({ onApply, currentFile }) => {
   const onMainClick = () => (currentFile ? identify(currentFile) : inputRef.current?.click());
 
   const summary = (c) =>
-    [c.category, c.sport, c.league, c.itemType, c.graded ? `${c.gradingCompany} ${c.grade}`.trim() : null]
+    [c.category, c.game, c.sport, c.league, c.product, c.publisher, c.year,
+     c.graded ? `${c.gradingCompany} ${c.grade}`.trim() : null]
       .filter(Boolean)
       .join(' · ');
 

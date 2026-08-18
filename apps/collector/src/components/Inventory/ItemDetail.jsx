@@ -5,10 +5,10 @@ import PhotoIdentify from './PhotoIdentify';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShop } from '../../contexts/ShopContext';
 import {
-  CATEGORIES,
-  SPORTS,
-  LEAGUES_BY_SPORT,
-  ITEM_TYPES,
+  TAXONOMY,
+  categoryById,
+  levelOptions,
+  resolveCategoryId,
   GRADING_COMPANIES,
   ACQUIRED_SOURCES,
   ITEM_STATUS,
@@ -61,9 +61,7 @@ const emptyForm = {
   acquiredFrom: '',
   acquiredAt: '',
   category: '',
-  sport: '',
-  league: '',
-  itemType: '',
+  taxa: {},
   graded: false,
   grade: '',
   gradingCompany: '',
@@ -72,22 +70,30 @@ const emptyForm = {
   notes: '',
 };
 
-const fromItem = (item) => ({
-  name: item.name || '',
-  pricePaid: item.pricePaid ?? '',
-  acquiredFrom: item.acquiredFrom || '',
-  acquiredAt: item.acquiredAt ? item.acquiredAt.slice(0, 10) : '',
-  category: item.category || '',
-  sport: item.sport || '',
-  league: item.league || '',
-  itemType: item.itemType || '',
-  graded: !!item.graded,
-  grade: item.grade || '',
-  gradingCompany: item.gradingCompany || '',
-  assignedTo: item.assignedTo || '',
-  tags: item.tags || [],
-  notes: item.notes || '',
-});
+// Best-effort read of an item into the form, tolerating pre-taxonomy items
+// (which stored a category label + flat sport/league/itemType).
+const fromItem = (item) => {
+  const category = resolveCategoryId(item.category) || '';
+  let taxa = item.taxa && typeof item.taxa === 'object' ? { ...item.taxa } : {};
+  if (!Object.keys(taxa).length) {
+    if (category === 'sports') taxa = { sport: item.sport || '', league: item.league || '' };
+    else if (category === 'memorabilia') taxa = { itemType: item.itemType || '', sport: item.sport || '' };
+  }
+  return {
+    name: item.name || '',
+    pricePaid: item.pricePaid ?? '',
+    acquiredFrom: item.acquiredFrom || '',
+    acquiredAt: item.acquiredAt ? item.acquiredAt.slice(0, 10) : '',
+    category,
+    taxa,
+    graded: !!item.graded,
+    grade: item.grade || '',
+    gradingCompany: item.gradingCompany || '',
+    assignedTo: item.assignedTo || '',
+    tags: item.tags || [],
+    notes: item.notes || '',
+  };
+};
 
 const ItemDetail = ({ mode, item, onClose }) => {
   const { user } = useAuth();
@@ -119,15 +125,38 @@ const ItemDetail = ({ mode, item, onClose }) => {
 
   const removeTag = (t) => set({ tags: form.tags.filter((x) => x !== t) });
 
+  // Choosing a category resets its levels; choosing a level clears any levels
+  // that depend on it (so switching Sport wipes a now-invalid League).
+  const setCategory = (id) => setForm((f) => ({ ...f, category: id, taxa: {} }));
+  const setLevel = (levelKey, value) =>
+    setForm((f) => {
+      const cat = categoryById(f.category);
+      const taxa = { ...f.taxa, [levelKey]: value };
+      cat?.levels.forEach((lvl) => {
+        if (lvl.by === levelKey) delete taxa[lvl.key];
+      });
+      return { ...f, taxa };
+    });
+
+  // Keep only taxa keys that are real levels of the chosen category.
+  const cleanTaxa = () => {
+    const cat = categoryById(form.category);
+    if (!cat) return {};
+    const out = {};
+    cat.levels.forEach((lvl) => {
+      const v = form.taxa[lvl.key];
+      if (v) out[lvl.key] = v;
+    });
+    return out;
+  };
+
   const serialize = () => ({
     name: form.name.trim() || 'Untitled item',
     pricePaid: toNumberOrNull(form.pricePaid),
     acquiredFrom: form.acquiredFrom.trim(),
     acquiredAt: form.acquiredAt ? new Date(form.acquiredAt).toISOString() : null,
     category: form.category,
-    sport: form.sport, // a sport can apply to any category (a card, a jersey…)
-    league: form.league,
-    itemType: form.itemType,
+    taxa: cleanTaxa(),
     graded: form.graded,
     grade: form.graded ? form.grade.trim() : '',
     gradingCompany: form.graded ? form.gradingCompany : '',
@@ -192,31 +221,46 @@ const ItemDetail = ({ mode, item, onClose }) => {
     await deleteItemPhoto(photo.path);
   };
 
-  // Apply an AI photo-identification candidate. The model's field values are
-  // free text ("Trading Card", "Pokémon Card"…), so snap each to the matching
-  // dropdown option — otherwise the <select> can't show it and it looks like
-  // nothing happened. Anything with no match is dropped rather than left as an
-  // invalid value. Name falls back to the label. Never clobbers existing input.
+  // Apply an AI photo-identification candidate. Resolve the category, then walk
+  // that category's levels and snap the model's free-text values onto the real
+  // dropdown options (a level with no confident match is left blank rather than
+  // set to something invalid). Name falls back to label. Never clobbers input.
   const applyCandidate = (c) =>
     setForm((f) => {
-      const category = matchOption(c.category, CATEGORIES);
-      const sport = matchOption(c.sport, SPORTS);
-      const league = sport ? matchOption(c.league, LEAGUES_BY_SPORT[sport] || []) : '';
-      const itemType = matchOption(c.itemType, ITEM_TYPES);
+      const category = resolveCategoryId(c.category) || f.category;
+      const cat = categoryById(category);
+
+      // Which model fields feed each level key.
+      const source = (key) => {
+        if (key === 'game') return c.game || c.sport;
+        if (key === 'product' || key === 'format') return c.product || c.format || c.itemType;
+        if (key === 'publisher') return c.publisher;
+        if (key === 'itemType') return c.itemType;
+        if (key === 'sport') return c.sport;
+        if (key === 'league') return c.league;
+        return c[key];
+      };
+
+      const taxa = { ...f.taxa };
+      cat?.levels.forEach((lvl) => {
+        const matched = matchOption(source(lvl.key), levelOptions(category, lvl, taxa));
+        if (matched) taxa[lvl.key] = matched;
+      });
+
       const gradingCompany = matchOption(c.gradingCompany, GRADING_COMPANIES);
       const graded = c.graded === true;
+
       // Merge AI tags (+ the year as a tag) into whatever's already there.
       const aiTags = [...(Array.isArray(c.tags) ? c.tags : []), c.year]
         .map((t) => String(t || '').trim().replace(/^#/, '').toLowerCase())
         .filter(Boolean);
       const tags = Array.from(new Set([...f.tags, ...aiTags]));
+
       return {
         ...f,
         name: (c.name || c.label || '').trim() || f.name,
-        category: category || f.category,
-        sport: sport || f.sport,
-        league: league || f.league,
-        itemType: itemType || f.itemType,
+        category,
+        taxa,
         graded: graded || f.graded,
         gradingCompany: graded && gradingCompany ? gradingCompany : f.gradingCompany,
         grade: graded && c.grade ? String(c.grade) : f.grade,
@@ -245,7 +289,7 @@ const ItemDetail = ({ mode, item, onClose }) => {
     }
   };
 
-  const leagues = LEAGUES_BY_SPORT[form.sport] || [];
+  const activeCategory = categoryById(form.category);
 
   return (
     <Modal title={isEdit ? 'Item details' : 'Add item'} onClose={onClose} wide>
@@ -408,53 +452,37 @@ const ItemDetail = ({ mode, item, onClose }) => {
           </datalist>
         </div>
 
-        {/* Category cascade */}
+        {/* Category → dynamic levels */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Category</label>
             <select
               className="field"
               value={form.category}
-              onChange={(e) => set({ category: e.target.value })}
+              onChange={(e) => setCategory(e.target.value)}
             >
               <option value="">—</option>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {TAXONOMY.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </div>
-          <div>
-            <label className="label">Type</label>
-            <select
-              className="field"
-              value={form.itemType}
-              onChange={(e) => set({ itemType: e.target.value })}
-            >
-              <option value="">—</option>
-              {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Sport</label>
-            <select
-              className="field"
-              value={form.sport}
-              onChange={(e) => set({ sport: e.target.value, league: '' })}
-            >
-              <option value="">—</option>
-              {SPORTS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">League</label>
-            <select
-              className="field"
-              value={form.league}
-              onChange={(e) => set({ league: e.target.value })}
-              disabled={!form.sport}
-            >
-              <option value="">—</option>
-              {leagues.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </div>
+          {activeCategory?.levels.map((lvl) => {
+            const opts = levelOptions(form.category, lvl, form.taxa);
+            const disabled = lvl.by && !form.taxa[lvl.by];
+            return (
+              <div key={lvl.key}>
+                <label className="label">{lvl.label}</label>
+                <select
+                  className="field"
+                  value={form.taxa[lvl.key] || ''}
+                  onChange={(e) => setLevel(lvl.key, e.target.value)}
+                  disabled={disabled}
+                >
+                  <option value="">—</option>
+                  {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            );
+          })}
         </div>
 
         {/* Grading */}

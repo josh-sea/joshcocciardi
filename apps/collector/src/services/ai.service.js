@@ -17,7 +17,7 @@
 // ships to the client; access is gated by the Firebase project.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CATEGORIES, SPORTS, ITEM_TYPES, GRADING_COMPANIES } from '../utils/constants';
+import { TAXONOMY, GRADING_COMPANIES } from '../utils/constants';
 
 export const AI_ENABLED = true;
 
@@ -199,6 +199,10 @@ const geminiIdentify = async (file) => {
             category: Schema.string(),
             sport: Schema.string(),
             league: Schema.string(),
+            game: Schema.string(),
+            product: Schema.string(),
+            format: Schema.string(),
+            publisher: Schema.string(),
             itemType: Schema.string(),
             graded: Schema.boolean(),
             gradingCompany: Schema.string(),
@@ -219,26 +223,37 @@ const geminiIdentify = async (file) => {
   const blob = typeof file === 'string' ? await (await fetch(file)).blob() : file;
   const shrunk = await shrinkPhoto(blob);
   const part = { inlineData: { data: await blobToBase64(shrunk), mimeType: 'image/jpeg' } };
+  // Describe the taxonomy so the model fills the fields that match the category.
+  const catLines = TAXONOMY.filter((c) => c.levels.length)
+    .map((c) => {
+      const lv = c.levels
+        .map((l) => `${l.key} ∈ [${(l.options || Object.keys(l.optionsBy || {})).join(', ')}]`)
+        .join('; ')
+      return `  • ${c.label} → set ${lv}`;
+    })
+    .join('\n');
   const intro =
-    'Identify this collectible (sports card, trading card, comic, memorabilia, ' +
-    'jersey, etc.) from the photo. Return up to 3 candidates, most likely first. ' +
-    'For each candidate ALWAYS set BOTH "label" (a short human title) AND "name" ' +
-    '(the full item name a collector would use) — never leave "name" empty. ' +
-    '"confidence" is 0–1.\n' +
-    'For these fields, use ONLY a value from the given list, or "" if unsure/not applicable:\n' +
-    `- category: one of [${CATEGORIES.join(', ')}]. A Pokémon/Magic/trading card is "Trading Cards".\n` +
-    `- itemType: one of [${ITEM_TYPES.join(', ')}]. A card is "Card".\n` +
-    `- sport: one of [${SPORTS.join(', ')}] — ONLY for actual sports; leave "" for non-sport cards like Pokémon.\n` +
-    `- gradingCompany: one of [${GRADING_COMPANIES.join(', ')}] (only if graded).\n` +
-    'league: the league/set if obvious, else "". grade: the numeric grade if it is a graded slab, else "".\n' +
-    'ALSO fill these to capture the specifics:\n' +
-    '- year: the release year as a 4-digit string if known (e.g. "2002"), else "".\n' +
+    'Identify this collectible from the photo. Return up to 3 candidates, most ' +
+    'likely first. For each candidate ALWAYS set BOTH "label" (a short human ' +
+    'title) AND "name" (the full name a collector would use) — never leave ' +
+    '"name" empty. "confidence" is 0–1.\n\n' +
+    'First choose "category" — exactly one of: ' +
+    `${TAXONOMY.map((c) => c.label).join(', ')}. A Pokémon/Magic/Yu-Gi-Oh/Lorcana ` +
+    'card is "Trading Card Game" (NOT Sports). A football/basketball/baseball etc. ' +
+    'card is "Sports Cards".\n' +
+    'Then fill ONLY the fields for that category, each from its list (or "" if unsure):\n' +
+    `${catLines}\n` +
+    'For a graded slab set graded=true, gradingCompany ∈ ' +
+    `[${GRADING_COMPANIES.join(', ')}], and grade to the number. Leave sport/league ` +
+    'empty for non-sport cards.\n' +
+    'ALSO always capture the specifics:\n' +
+    '- year: 4-digit release year as a string if known (e.g. "2002"), else "".\n' +
     '- tags: 3–8 short lowercase keyword tags a collector would search by — the ' +
     'character/player/subject, the set/edition, the game or brand, the team, and ' +
     'any notable variant (e.g. ["pokemon","gengar","expedition","reverse holo"]). ' +
-    'No "#". Do not repeat the year here.\n' +
-    '- notes: one short line with extra detail worth recording (set/edition, card ' +
-    'number, parallel/variant, anything notable), else "".';
+    'No "#". Do not repeat the year.\n' +
+    '- notes: one short line with extra detail (set/edition, card number, ' +
+    'parallel/variant, anything notable), else "".';
   let data;
   try {
     const result = await model.generateContent([{ text: intro }, part]);
