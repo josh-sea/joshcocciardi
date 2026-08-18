@@ -1,23 +1,32 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { identifyFromPhoto, AI_ENABLED } from '../../services/ai.service';
 import { percent } from '../../utils/format';
 
-// "Identify with AI" for the item editor. Runs on the cover photo, shows a few
-// candidate matches with confidence, and applies the one you pick to the form.
-// In preview mode it returns sample candidates so you can see the layout.
-const PhotoIdentify = ({ photoUrl, onApply }) => {
+// "Identify with AI" — take or choose a photo of the item and let Gemini
+// propose what it is, then apply the pick to the form.
+//
+// It runs on the freshly selected File (sent straight to the model), NOT on an
+// already-uploaded Storage URL. Fetching a Storage download URL cross-origin is
+// blocked by CORS (Safari reports "Load failed"), so going straight from the
+// File sidesteps that entirely and works on mobile with no bucket config.
+const PhotoIdentify = ({ onApply }) => {
+  const inputRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [candidates, setCandidates] = useState([]);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
-  const run = async () => {
+  const onPick = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
     setOpen(true);
     setLoading(true);
     setError('');
+    setCandidates([]);
     try {
-      const res = await identifyFromPhoto(photoUrl);
+      const res = await identifyFromPhoto(file);
       setCandidates(res.candidates || []);
       setNote(res.note || '');
     } catch (err) {
@@ -36,19 +45,25 @@ const PhotoIdentify = ({ photoUrl, onApply }) => {
     <div>
       <button
         type="button"
-        onClick={run}
+        onClick={() => inputRef.current?.click()}
         className="btn-secondary w-full text-sm"
-        disabled={!photoUrl || loading}
-        title={photoUrl ? 'Identify this item from its cover photo' : 'Add a photo first'}
+        disabled={loading}
       >
-        ✨ {loading ? 'Identifying…' : 'Identify with AI'}
+        ✨ {loading ? 'Identifying…' : 'Identify with AI — take or choose a photo'}
       </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onPick}
+      />
 
       {open && (
         <div className="mt-2 rounded-lg border border-slate-200 p-2">
           {!AI_ENABLED && (
             <div className="mb-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-              Preview — sample matches. Real version reads your photo with Gemini.
+              Preview — sample matches.
             </div>
           )}
           {loading ? (
@@ -56,7 +71,9 @@ const PhotoIdentify = ({ photoUrl, onApply }) => {
           ) : error ? (
             <div className="py-2 text-center text-sm text-red-600">{error}</div>
           ) : candidates.length === 0 ? (
-            <div className="py-2 text-center text-sm text-slate-400">No matches found.</div>
+            <div className="py-3 text-center text-sm text-slate-400">
+              No confident match. Try a clearer, straight-on photo of the front.
+            </div>
           ) : (
             <>
               {note && <div className="mb-2 px-1 text-[11px] text-slate-400">{note}</div>}

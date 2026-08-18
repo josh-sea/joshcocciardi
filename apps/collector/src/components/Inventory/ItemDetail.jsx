@@ -219,6 +219,9 @@ const ItemDetail = ({ mode, item, onClose }) => {
           />
         </div>
 
+        {/* AI identify — snap/choose a photo of the item to autofill fields */}
+        <PhotoIdentify onApply={applyCandidate} />
+
         {/* Sold banner (edit mode) */}
         {sold && (
           <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
@@ -320,11 +323,6 @@ const ItemDetail = ({ mode, item, onClose }) => {
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
             📷 Save the item first, then reopen it to add or upload photos.
           </p>
-        )}
-
-        {/* AI identify from the cover photo */}
-        {isEdit && photos.length > 0 && (
-          <PhotoIdentify photoUrl={photos[0]?.url} onApply={applyCandidate} />
         )}
 
         {/* Cost + acquisition */}
