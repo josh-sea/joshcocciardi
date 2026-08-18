@@ -139,6 +139,14 @@ const ItemDetail = ({ mode, item, onClose }) => {
     await deleteItemPhoto(photo.path);
   };
 
+  // The first photo is the cover: it's the card thumbnail and the one "Search
+  // by photo" uses. Making a photo the cover just moves it to the front.
+  const setCover = async (photo) => {
+    const next = [photo, ...photos.filter((p) => p.path !== photo.path)];
+    setPhotos(next);
+    await updateItem(item.id, { photos: next });
+  };
+
   const handleDelete = async () => {
     setSaving(true);
     try {
@@ -197,24 +205,54 @@ const ItemDetail = ({ mode, item, onClose }) => {
           <div>
             <label className="label">Photos</label>
             <div className="flex flex-wrap gap-2">
-              {photos.map((p) => (
-                <div key={p.path} className="group relative h-20 w-20 overflow-hidden rounded-lg bg-slate-100">
-                  <img src={p.url} alt="" className="h-full w-full object-cover" />
+              {photos.map((p, i) => (
+                <div
+                  key={p.path}
+                  className={`group relative h-24 w-24 overflow-hidden rounded-lg bg-slate-100 ${
+                    i === 0 ? 'ring-2 ring-sky-500' : ''
+                  }`}
+                >
+                  <img src={p.url} alt={i === 0 ? 'Cover photo' : `Photo ${i + 1}`} className="h-full w-full object-cover" />
+                  {i === 0 ? (
+                    <span className="absolute left-1 top-1 rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      Cover
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setCover(p)}
+                      className="absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-black/80"
+                      title="Use as cover / title photo"
+                    >
+                      Make cover
+                    </button>
+                  )}
                   <button
                     onClick={() => removePhoto(p)}
-                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white"
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white hover:bg-black/80"
                     title="Remove"
                   >
                     ✕
                   </button>
                 </div>
               ))}
-              <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-center text-xs text-slate-400 hover:border-sky-400 hover:text-sky-500">
-                {uploading ? '…' : (<><span className="text-xl">📷</span>Add</>)}
+              {/* Take a photo (opens the camera on mobile) */}
+              <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-center text-xs text-slate-400 hover:border-sky-400 hover:text-sky-500">
+                {uploading ? '…' : (<><span className="text-xl">📷</span>Take photo</>)}
                 <input
                   type="file"
                   accept="image/*"
                   capture="environment"
+                  className="hidden"
+                  onChange={handlePhotos}
+                  disabled={uploading}
+                />
+              </label>
+              {/* Upload from library / files (multiple allowed) */}
+              <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 text-center text-xs text-slate-400 hover:border-sky-400 hover:text-sky-500">
+                {uploading ? '…' : (<><span className="text-xl">🖼️</span>Upload</>)}
+                <input
+                  type="file"
+                  accept="image/*"
                   multiple
                   className="hidden"
                   onChange={handlePhotos}
@@ -222,10 +260,16 @@ const ItemDetail = ({ mode, item, onClose }) => {
                 />
               </label>
             </div>
+            {photos.length > 1 && (
+              <p className="mt-1 px-1 text-xs text-slate-400">
+                The cover (outlined) is the thumbnail and the photo used by “Search by photo.”
+                Tap “Make cover” on any other photo to change it.
+              </p>
+            )}
           </div>
         ) : (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            📷 Save the item first, then reopen it to add photos.
+            📷 Save the item first, then reopen it to add or upload photos.
           </p>
         )}
 
