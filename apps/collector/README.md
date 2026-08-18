@@ -39,31 +39,44 @@ project (Auth, Firestore, Storage) with the other apps here.
 
 Security rules for these live in the repo-root `firestore.rules` and
 `storage.rules` (shared, deployed project). Item photos live in Storage under
-`collector/{shopId}/...` and are gated by shop membership. The `collector_items`
-query needs the composite index in the root `firestore.indexes.json`.
+`collector/{shopId}/...` and are gated by shop membership. **No composite index
+is required** — the item stream queries on `shopId` only (a single-field filter
+Firestore indexes automatically) and sorts newest-first in the client.
 
-## Local development
+## How this ships (no local setup needed)
+
+The Firebase web config is public by design and committed in `.env.production`
+(same values the other apps in this repo use), so the production build is
+reproducible from any Claude Code web session — no laptop, no secrets to wire up.
+
+The build output is **committed** under
+`apps/portfolio/public/projects/collector/`, mirroring how `moment-capture` is
+handled. On merge to `master`, `.github/workflows/deploy.yml` deploys hosting +
+Firestore rules + Storage rules automatically. So the loop is: edit here → open a
+PR → merge → it's live at `/projects/collector`. Nothing to run by hand.
+
+When the app source changes, rebuild and re-commit the output (this is what a
+Claude Code session does for you):
+
+```bash
+cd apps/collector && npm ci && npm run build
+rm -rf ../portfolio/public/projects/collector
+mkdir -p ../portfolio/public/projects/collector
+cp -r dist/. ../portfolio/public/projects/collector/
+```
+
+## Local development (optional)
 
 ```bash
 cd apps/collector
-cp .env.example .env.local   # fill in the josh-cocciardi Firebase web config
+cp .env.example .env.local   # already-public josh-cocciardi Firebase config
 npm install
 npm run dev
 ```
 
-`npm run build` outputs to `dist/` (base path `/projects/collector`).
-
-## Deploy
-
-From the repo root:
-
-```bash
-./deploy.sh collector
-```
-
-That builds the app, copies `dist/` into `apps/portfolio/public/projects/collector`,
-deploys the Firestore rules + indexes, and pushes hosting. First deploy: give the
-new `collector_items` index a minute to finish building.
+`npm run build` outputs to `dist/` (base path `/projects/collector`). The repo
+root also has a `./deploy.sh collector` target for deploying from a machine with
+the Firebase CLI, but it isn't required for the merge-to-deploy flow above.
 
 ## Notes on collectible-value data
 

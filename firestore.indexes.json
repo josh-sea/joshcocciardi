@@ -32,14 +32,6 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "decidedAt", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "collector_items",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "shopId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []
