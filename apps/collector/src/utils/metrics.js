@@ -1,4 +1,4 @@
-import { ITEM_STATUS } from './constants';
+import { ITEM_STATUS, categoryLabel } from './constants';
 
 // Everything the dashboard reports, computed from the raw item list. Metrics
 // are careful about missing data: an item with no price paid isn't counted as
@@ -46,7 +46,7 @@ export const computeMetrics = (items) => {
   // Value by category (uses cost basis of in-stock items with a known price).
   const byCategory = {};
   for (const i of inStock) {
-    const key = i.category || 'Uncategorized';
+    const key = categoryLabel(i.category) || 'Uncategorized';
     const paid = num(i.pricePaid) || 0;
     if (!byCategory[key]) byCategory[key] = { count: 0, value: 0 };
     byCategory[key].count += 1;

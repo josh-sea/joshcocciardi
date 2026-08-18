@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useShop } from '../../contexts/ShopContext';
-import { ITEM_STATUS } from '../../utils/constants';
+import { ITEM_STATUS, itemTaxaText } from '../../utils/constants';
 import { money } from '../../utils/format';
 import LoadingSpinner from '../Layout/LoadingSpinner';
 import QuickAdd from './QuickAdd';
@@ -38,13 +38,11 @@ const InventoryPage = () => {
       if (!q) return true;
       const haystack = [
         it.name,
-        it.category,
-        it.sport,
-        it.league,
-        it.itemType,
+        itemTaxaText(it),
         it.acquiredFrom,
         it.assignedTo,
         it.gradingCompany,
+        it.notes,
         ...(it.tags || []),
       ]
         .filter(Boolean)
