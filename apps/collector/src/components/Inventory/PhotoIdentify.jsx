@@ -9,7 +9,7 @@ import { percent } from '../../utils/format';
 // already-uploaded Storage URL. Fetching a Storage download URL cross-origin is
 // blocked by CORS (Safari reports "Load failed"), so going straight from the
 // File sidesteps that entirely and works on mobile with no bucket config.
-const PhotoIdentify = ({ onApply }) => {
+const PhotoIdentify = ({ onApply, currentFile }) => {
   const inputRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -17,9 +17,7 @@ const PhotoIdentify = ({ onApply }) => {
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
-  const onPick = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
+  const identify = async (file) => {
     if (!file) return;
     setOpen(true);
     setLoading(true);
@@ -36,6 +34,16 @@ const PhotoIdentify = ({ onApply }) => {
     }
   };
 
+  const onPick = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    identify(file);
+  };
+
+  // If a photo was added this session, identify from it directly; otherwise the
+  // button opens the camera/library picker.
+  const onMainClick = () => (currentFile ? identify(currentFile) : inputRef.current?.click());
+
   const summary = (c) =>
     [c.category, c.sport, c.league, c.itemType, c.graded ? `${c.gradingCompany} ${c.grade}`.trim() : null]
       .filter(Boolean)
@@ -45,12 +53,25 @@ const PhotoIdentify = ({ onApply }) => {
     <div>
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={onMainClick}
         className="btn-secondary w-full text-sm"
         disabled={loading}
       >
-        ✨ {loading ? 'Identifying…' : 'Identify with AI — take or choose a photo'}
+        ✨ {loading
+          ? 'Identifying…'
+          : currentFile
+            ? 'Identify with AI (uses your photo)'
+            : 'Identify with AI — take or choose a photo'}
       </button>
+      {currentFile && !loading && (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="mt-1 w-full text-center text-[11px] font-medium text-sky-600 hover:text-sky-700"
+        >
+          use a different photo
+        </button>
+      )}
       <input
         ref={inputRef}
         type="file"
