@@ -37,3 +37,16 @@ export const ebaySoldUrl = (item) => {
 export const openEbaySold = (item) => {
   window.open(ebaySoldUrl(item), '_blank', 'noopener,noreferrer');
 };
+
+// Search by photo. eBay's own image search only accepts an in-app upload — there
+// is no public URL to launch it with a given image — so we hand the item's photo
+// to Google Lens, which *does* take a hosted image URL and reverse-image-searches
+// the web (eBay and other marketplace listings included). Our photos are on
+// public Firebase Storage download URLs, so Lens can fetch them.
+export const googleLensUrl = (imageUrl) =>
+  `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
+
+export const openImageSearch = (imageUrl) => {
+  if (!imageUrl) return;
+  window.open(googleLensUrl(imageUrl), '_blank', 'noopener,noreferrer');
+};

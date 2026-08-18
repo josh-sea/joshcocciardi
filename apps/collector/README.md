@@ -13,14 +13,18 @@ project (Auth, Firestore, Storage) with the other apps here.
 
 - **One-tap add.** Type a name, hit enter — that's a valid item. Price is
   optional (look it up later), and so is everything else.
-- **Add detail whenever.** Photos (snap from your phone), category → sport →
-  league → type, graded/grade/company, tags, where you got it, who it's
+- **Add detail whenever.** Photos (snap from your phone — auto-resized in the
+  browser to fit under the 5 MB cap, no camera-settings fiddling), category →
+  sport → league → type, graded/grade/company, tags, where you got it, who it's
   assigned to, notes.
 - **Log sales.** Sale price is the only required field; where it sold, who
   bought it, and fees are optional and sharpen the profit math.
-- **eBay sold comps.** One button opens eBay's *completed & sold* listings for
-  the item, sorted by most recent — the real going rate, not active asks. No API
-  key needed.
+- **Value lookups.** One button opens eBay's *completed & sold* listings for
+  the item name, sorted by most recent — the real going rate, not active asks.
+  A second **Search by photo** button reverse-image-searches the item's photo
+  via Google Lens (eBay doesn't expose a URL to launch its own image search with
+  a supplied image, so Lens — which accepts a hosted image URL — is the working
+  path). No API key needed for either.
 - **Dashboard.** Item counts, cost basis on hand, sold-to-date, realized profit
   (sold − cost − fees), average paid/sold/profit, profit margin & ROI, best
   flip, and a by-category cost-basis breakdown. Items missing a price are

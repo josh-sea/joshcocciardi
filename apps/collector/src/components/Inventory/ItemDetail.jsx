@@ -13,7 +13,8 @@ import {
   ITEM_STATUS,
 } from '../../utils/constants';
 import { toNumberOrNull, money, shortDate } from '../../utils/format';
-import { openEbaySold } from '../../utils/ebay';
+import { openEbaySold, openImageSearch } from '../../utils/ebay';
+import { compressImage } from '../../utils/image';
 import { addItem, updateItem, deleteItem, unmarkSold } from '../../services/items.service';
 import { uploadItemPhoto, deleteItemPhoto } from '../../services/storage.service';
 
@@ -115,7 +116,9 @@ const ItemDetail = ({ mode, item, onClose }) => {
     try {
       const added = [];
       for (const file of files) {
-        const p = await uploadItemPhoto(activeShopId, item.id, file);
+        // Downscale big phone photos to fit under the 5 MB storage cap.
+        const prepared = await compressImage(file);
+        const p = await uploadItemPhoto(activeShopId, item.id, prepared);
         added.push(p);
       }
       const next = [...photos, ...added];
@@ -123,7 +126,7 @@ const ItemDetail = ({ mode, item, onClose }) => {
       await updateItem(item.id, { photos: next });
     } catch (err) {
       console.error('Photo upload failed:', err);
-      alert('Photo upload failed. Images must be under 5MB.');
+      alert('Photo upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -398,15 +401,35 @@ const ItemDetail = ({ mode, item, onClose }) => {
           />
         </div>
 
-        {/* eBay comps */}
-        <button
-          type="button"
-          onClick={() => openEbaySold({ ...serialize() })}
-          className="btn-secondary w-full text-sm"
-          disabled={!form.name.trim()}
-        >
-          🔎 Check recent eBay sold prices
-        </button>
+        {/* Comps / value lookups */}
+        <div>
+          <div className="label">Look up value</div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => openEbaySold({ ...serialize() })}
+              className="btn-secondary flex-1 text-sm"
+              disabled={!form.name.trim()}
+              title="Recently sold eBay listings for this name"
+            >
+              🔎 eBay sold prices
+            </button>
+            <button
+              type="button"
+              onClick={() => openImageSearch(photos[0]?.url)}
+              className="btn-secondary flex-1 text-sm"
+              disabled={!photos.length}
+              title={photos.length ? 'Reverse image search this photo' : 'Add a photo first'}
+            >
+              🖼️ Search by photo
+            </button>
+          </div>
+          {!photos.length && (
+            <p className="mt-1 px-1 text-xs text-slate-400">
+              Add a photo to enable visual search (Google Lens).
+            </p>
+          )}
+        </div>
 
         {/* Actions */}
         <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
