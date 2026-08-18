@@ -33,6 +33,27 @@ project (Auth, Firestore, Storage) with the other apps here.
 - **Shared shop.** Create a shop, share the 6-character invite code, and the
   other person joins the same live inventory. Changes sync in real time.
 
+## AI features (preview — layout only, not yet wired to a model)
+
+Two AI-assisted flows are scaffolded so they can be reviewed before the model is
+turned on. Both live behind `AI_ENABLED = false` in `src/services/ai.service.js`,
+which currently returns canned sample results:
+
+- **Bulk add by voice** (`components/Inventory/VoiceBulkAdd.jsx`) — record or
+  type a brain-dump ("a Brady rookie I paid 38 for, and a $3 Pikachu…"); it's
+  split into editable `{name, price}` rows you confirm, then all added at once.
+- **Identify with AI** (`components/Inventory/PhotoIdentify.jsx`) — from an
+  item's cover photo, propose candidate identities and autofill the fields you
+  pick.
+
+When approved, flip `AI_ENABLED` to `true` and enable **AI Logic (Gemini
+Developer API)** in the Firebase console. The real Gemini calls are already
+written in `ai.service.js` using **Firebase AI Logic** — the same no-API-key
+approach Recipe Box uses (`apps/recipebox/js/ai.js`); access is gated by the
+Firebase project, nothing secret ships to the client. Voice is sent to Gemini as
+audio (it transcribes and structures in one call); photos are shrunk client-side
+first.
+
 ## Data model (Firestore, all namespaced `collector_*`)
 
 - `collector_users/{uid}` — display-name profile for this app.

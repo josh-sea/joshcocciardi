@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Modal from '../Layout/Modal';
 import SoldForm from './SoldForm';
+import PhotoIdentify from './PhotoIdentify';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShop } from '../../contexts/ShopContext';
 import {
@@ -17,6 +18,25 @@ import { openEbaySold, openImageSearch } from '../../utils/ebay';
 import { compressImage } from '../../utils/image';
 import { addItem, updateItem, deleteItem, unmarkSold } from '../../services/items.service';
 import { uploadItemPhoto, deleteItemPhoto } from '../../services/storage.service';
+
+// Turn a Firebase Storage error into something readable — and keep the raw
+// code visible, since it points straight at the cause (rules vs. App Check vs.
+// bucket not set up vs. network).
+const photoErrorMessage = (err) => {
+  const code = err?.code || '';
+  const base = {
+    'storage/unauthorized':
+      "Storage denied the upload. It's a Storage rules / permission issue (or App Check).",
+    'storage/unauthenticated': 'You appear to be signed out. Sign in again and retry.',
+    'storage/retry-limit-exceeded': 'The upload kept timing out — check your connection and retry.',
+    'storage/canceled': 'The upload was canceled.',
+    'storage/quota-exceeded': 'The project storage quota is full.',
+    'storage/object-not-found': 'Storage path not found.',
+    'storage/unknown': "Storage returned an unknown error — often the bucket isn't set up yet.",
+  }[code];
+  const detail = base || err?.message || 'Unknown error.';
+  return code ? `${detail}  [${code}]` : detail;
+};
 
 const emptyForm = {
   name: '',
@@ -61,6 +81,7 @@ const ItemDetail = ({ mode, item, onClose }) => {
   const [tagInput, setTagInput] = useState('');
   const [photos, setPhotos] = useState(item?.photos || []);
   const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const [saving, setSaving] = useState(false);
   const [showSold, setShowSold] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -113,11 +134,19 @@ const ItemDetail = ({ mode, item, onClose }) => {
     e.target.value = '';
     if (!files.length || !isEdit) return;
     setUploading(true);
+    setPhotoError('');
     try {
       const added = [];
       for (const file of files) {
-        // Downscale big phone photos to fit under the 5 MB storage cap.
-        const prepared = await compressImage(file);
+        // Downscale big phone photos to fit under the 5 MB storage cap. If
+        // compression itself fails (odd format, etc.) fall back to the original
+        // so the upload — and its error, if any — is about Storage, not canvas.
+        let prepared = file;
+        try {
+          prepared = await compressImage(file);
+        } catch (err) {
+          console.error('Image compression failed, using original:', err);
+        }
         const p = await uploadItemPhoto(activeShopId, item.id, prepared);
         added.push(p);
       }
@@ -126,7 +155,7 @@ const ItemDetail = ({ mode, item, onClose }) => {
       await updateItem(item.id, { photos: next });
     } catch (err) {
       console.error('Photo upload failed:', err);
-      alert('Photo upload failed. Please try again.');
+      setPhotoError(photoErrorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -138,6 +167,21 @@ const ItemDetail = ({ mode, item, onClose }) => {
     await updateItem(item.id, { photos: next });
     await deleteItemPhoto(photo.path);
   };
+
+  // Apply an AI photo-identification candidate: fill fields it's confident
+  // about without clobbering anything the user already typed.
+  const applyCandidate = (c) =>
+    setForm((f) => ({
+      ...f,
+      name: (c.name || '').trim() || f.name,
+      category: c.category || f.category,
+      sport: c.sport || f.sport,
+      league: c.league || f.league,
+      itemType: c.itemType || f.itemType,
+      graded: c.graded === true ? true : f.graded,
+      gradingCompany: c.gradingCompany || f.gradingCompany,
+      grade: c.grade || f.grade,
+    }));
 
   // The first photo is the cover: it's the card thumbnail and the one "Search
   // by photo" uses. Making a photo the cover just moves it to the front.
@@ -260,6 +304,11 @@ const ItemDetail = ({ mode, item, onClose }) => {
                 />
               </label>
             </div>
+            {photoError && (
+              <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                {photoError}
+              </p>
+            )}
             {photos.length > 1 && (
               <p className="mt-1 px-1 text-xs text-slate-400">
                 The cover (outlined) is the thumbnail and the photo used by “Search by photo.”
@@ -271,6 +320,11 @@ const ItemDetail = ({ mode, item, onClose }) => {
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
             📷 Save the item first, then reopen it to add or upload photos.
           </p>
+        )}
+
+        {/* AI identify from the cover photo */}
+        {isEdit && photos.length > 0 && (
+          <PhotoIdentify photoUrl={photos[0]?.url} onApply={applyCandidate} />
         )}
 
         {/* Cost + acquisition */}

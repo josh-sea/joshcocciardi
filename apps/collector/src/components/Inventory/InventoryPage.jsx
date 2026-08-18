@@ -6,6 +6,7 @@ import LoadingSpinner from '../Layout/LoadingSpinner';
 import QuickAdd from './QuickAdd';
 import ItemCard from './ItemCard';
 import ItemDetail from './ItemDetail';
+import VoiceBulkAdd from './VoiceBulkAdd';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -19,6 +20,7 @@ const InventoryPage = () => {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [bulkVoice, setBulkVoice] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -50,7 +52,7 @@ const InventoryPage = () => {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-4">
-      <QuickAdd onOpenDetailed={() => setCreating(true)} />
+      <QuickAdd onOpenDetailed={() => setCreating(true)} onOpenBulk={() => setBulkVoice(true)} />
 
       {/* Quick stock summary */}
       <div className="mt-3 flex items-center gap-4 px-1 text-sm text-slate-500">
@@ -104,6 +106,7 @@ const InventoryPage = () => {
         )}
       </div>
 
+      {bulkVoice && <VoiceBulkAdd onClose={() => setBulkVoice(false)} />}
       {creating && <ItemDetail mode="create" onClose={() => setCreating(false)} />}
       {selected && (
         <ItemDetail mode="edit" item={selected} onClose={() => setSelectedId(null)} />
