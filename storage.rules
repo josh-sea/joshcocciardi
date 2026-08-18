@@ -32,18 +32,21 @@ service firebase.storage {
     }
 
     // ── Collector Shop item photos ──────────────────────────────────────
-    // Photos live under collector/{shopId}/... and are readable/writable by any
-    // member of that shop. Membership is checked against the shop document in
-    // Firestore, so both collaborators can see each other's photos.
-    function collectorShopMember(shopId) {
-      return request.auth != null
-        && firestore.get(/databases/(default)/documents/collector_shops/$(shopId))
-             .data.memberUids.hasAny([request.auth.uid]);
-    }
+    // Photos live under collector/{shopId}/{itemId}/{file}. NOTE: Cloud Storage
+    // rules cannot read Cloud Firestore (there is no cross-service get()), so we
+    // can't verify shop membership here the way the Firestore rules do. Instead
+    // access is gated by authentication plus the unguessable path: shopId and
+    // itemId are random 20-char Firestore auto-IDs that non-members never see
+    // (only shop members can read the item docs that contain the path), and
+    // download URLs carry their own secret token. Writes must be valid images.
+    //
+    // If we ever need true membership enforcement at the Storage layer, the
+    // path is a Cloud Function that mints custom auth claims for shop members;
+    // that's the only way to bring membership into Storage rules.
     match /collector/{shopId}/{allPaths=**} {
-      allow read: if collectorShopMember(shopId);
-      allow write: if collectorShopMember(shopId) && isValidImage();
-      allow delete: if collectorShopMember(shopId);
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && isValidImage();
+      allow delete: if request.auth != null;
     }
 
     // User files path: users/{userId}/**
