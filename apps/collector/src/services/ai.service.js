@@ -17,6 +17,8 @@
 // ships to the client; access is gated by the Firebase project.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { CATEGORIES, SPORTS, ITEM_TYPES, GRADING_COMPANIES } from '../utils/constants';
+
 export const AI_ENABLED = true;
 
 // ── Shared: shrink a photo before sending (model doesn't need 12 MP) ─────────
@@ -216,10 +218,16 @@ const geminiIdentify = async (file) => {
   const part = { inlineData: { data: await blobToBase64(shrunk), mimeType: 'image/jpeg' } };
   const intro =
     'Identify this collectible (sports card, trading card, comic, memorabilia, ' +
-    'jersey, etc.) from the photo. Return up to 3 candidates, most likely first, ' +
-    'each with a short human "label", a full "name", and the best category, ' +
-    'sport, league, itemType, and grading info you can read. "confidence" is 0–1. ' +
-    'Only fill fields you are reasonably sure of; leave the rest empty.';
+    'jersey, etc.) from the photo. Return up to 3 candidates, most likely first. ' +
+    'For each candidate ALWAYS set BOTH "label" (a short human title) AND "name" ' +
+    '(the full item name a collector would use) — never leave "name" empty. ' +
+    '"confidence" is 0–1.\n' +
+    'For these fields, use ONLY a value from the given list, or "" if unsure/not applicable:\n' +
+    `- category: one of [${CATEGORIES.join(', ')}]. A Pokémon/Magic/trading card is "Trading Cards".\n` +
+    `- itemType: one of [${ITEM_TYPES.join(', ')}]. A card is "Card".\n` +
+    `- sport: one of [${SPORTS.join(', ')}] — ONLY for actual sports; leave "" for non-sport cards like Pokémon.\n` +
+    `- gradingCompany: one of [${GRADING_COMPANIES.join(', ')}] (only if graded).\n` +
+    'league: the league/set if obvious, else "". grade: the numeric grade if it is a graded slab, else "".';
   let data;
   try {
     const result = await model.generateContent([{ text: intro }, part]);

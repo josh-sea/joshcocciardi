@@ -38,6 +38,23 @@ const photoErrorMessage = (err) => {
   return code ? `${detail}  [${code}]` : detail;
 };
 
+// Snap a free-text value from the AI onto one of our fixed dropdown options.
+// Case-insensitive exact match first, then a loose contains-match (so
+// "Trading Card" → "Trading Cards", "Pokémon Card" → "Card"). No match → "".
+const matchOption = (val, options) => {
+  if (!val) return '';
+  const v = String(val).trim().toLowerCase();
+  if (!v) return '';
+  return (
+    options.find((o) => o.toLowerCase() === v) ||
+    options.find((o) => {
+      const ol = o.toLowerCase();
+      return ol.includes(v) || v.includes(ol);
+    }) ||
+    ''
+  );
+};
+
 const emptyForm = {
   name: '',
   pricePaid: '',
@@ -82,6 +99,10 @@ const ItemDetail = ({ mode, item, onClose }) => {
   const [photos, setPhotos] = useState(item?.photos || []);
   const [uploading, setUploading] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  // The most recent photo File added this session — kept in memory so "Identify
+  // with AI" can reuse it without re-shooting (and without fetching a Storage
+  // URL, which CORS blocks). Lost on reload, which is fine: pick a photo then.
+  const [lastPhotoFile, setLastPhotoFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showSold, setShowSold] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -137,6 +158,7 @@ const ItemDetail = ({ mode, item, onClose }) => {
     setPhotoError('');
     try {
       const added = [];
+      let lastPrepared = null;
       for (const file of files) {
         // Downscale big phone photos to fit under the 5 MB storage cap. If
         // compression itself fails (odd format, etc.) fall back to the original
@@ -149,7 +171,9 @@ const ItemDetail = ({ mode, item, onClose }) => {
         }
         const p = await uploadItemPhoto(activeShopId, item.id, prepared);
         added.push(p);
+        lastPrepared = prepared;
       }
+      if (lastPrepared) setLastPhotoFile(lastPrepared);
       const next = [...photos, ...added];
       setPhotos(next);
       await updateItem(item.id, { photos: next });
@@ -168,20 +192,31 @@ const ItemDetail = ({ mode, item, onClose }) => {
     await deleteItemPhoto(photo.path);
   };
 
-  // Apply an AI photo-identification candidate: fill fields it's confident
-  // about without clobbering anything the user already typed.
+  // Apply an AI photo-identification candidate. The model's field values are
+  // free text ("Trading Card", "Pokémon Card"…), so snap each to the matching
+  // dropdown option — otherwise the <select> can't show it and it looks like
+  // nothing happened. Anything with no match is dropped rather than left as an
+  // invalid value. Name falls back to the label. Never clobbers existing input.
   const applyCandidate = (c) =>
-    setForm((f) => ({
-      ...f,
-      name: (c.name || '').trim() || f.name,
-      category: c.category || f.category,
-      sport: c.sport || f.sport,
-      league: c.league || f.league,
-      itemType: c.itemType || f.itemType,
-      graded: c.graded === true ? true : f.graded,
-      gradingCompany: c.gradingCompany || f.gradingCompany,
-      grade: c.grade || f.grade,
-    }));
+    setForm((f) => {
+      const category = matchOption(c.category, CATEGORIES);
+      const sport = matchOption(c.sport, SPORTS);
+      const league = sport ? matchOption(c.league, LEAGUES_BY_SPORT[sport] || []) : '';
+      const itemType = matchOption(c.itemType, ITEM_TYPES);
+      const gradingCompany = matchOption(c.gradingCompany, GRADING_COMPANIES);
+      const graded = c.graded === true;
+      return {
+        ...f,
+        name: (c.name || c.label || '').trim() || f.name,
+        category: category || f.category,
+        sport: sport || f.sport,
+        league: league || f.league,
+        itemType: itemType || f.itemType,
+        graded: graded || f.graded,
+        gradingCompany: graded && gradingCompany ? gradingCompany : f.gradingCompany,
+        grade: graded && c.grade ? String(c.grade) : f.grade,
+      };
+    });
 
   // The first photo is the cover: it's the card thumbnail and the one "Search
   // by photo" uses. Making a photo the cover just moves it to the front.
@@ -219,8 +254,8 @@ const ItemDetail = ({ mode, item, onClose }) => {
           />
         </div>
 
-        {/* AI identify — snap/choose a photo of the item to autofill fields */}
-        <PhotoIdentify onApply={applyCandidate} />
+        {/* AI identify — reuse the photo added this session, or snap/choose one */}
+        <PhotoIdentify onApply={applyCandidate} currentFile={lastPhotoFile} />
 
         {/* Sold banner (edit mode) */}
         {sold && (
