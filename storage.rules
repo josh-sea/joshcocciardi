@@ -31,6 +31,21 @@ service firebase.storage {
              && request.resource.contentType.matches('audio/.*');
     }
 
+    // ── Collector Shop item photos ──────────────────────────────────────
+    // Photos live under collector/{shopId}/... and are readable/writable by any
+    // member of that shop. Membership is checked against the shop document in
+    // Firestore, so both collaborators can see each other's photos.
+    function collectorShopMember(shopId) {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/collector_shops/$(shopId))
+             .data.memberUids.hasAny([request.auth.uid]);
+    }
+    match /collector/{shopId}/{allPaths=**} {
+      allow read: if collectorShopMember(shopId);
+      allow write: if collectorShopMember(shopId) && isValidImage();
+      allow delete: if collectorShopMember(shopId);
+    }
+
     // User files path: users/{userId}/**
     match /users/{userId}/{allPaths=**} {
       // Allow read if authenticated user owns the files

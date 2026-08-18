@@ -24,6 +24,13 @@ const apps = [
     link: "/projects/moments",
   },
   {
+    title: "🗃️ Collector Shop",
+    description:
+      "Shared inventory tracker for sports cards, comics, and memorabilia. Add items in one tap (name and you're done), then fill in price paid, category, grading, tags, and photos later. Log sales, check recent eBay sold comps, and watch a live dashboard of cost basis, profit, and margins. Two collaborators share one shop with an invite code.",
+    tech: ["React", "Vite", "Firebase", "Firestore", "Storage", "Tailwind CSS"],
+    link: "/projects/collector",
+  },
+  {
     title: "⚾ Playball",
     description:
       "Walk-up music manager for game day. Pull in Spotify playlists, set start/stop times per song, assign players to songs, and drag the batting order — the playlist re-syncs to Spotify automatically.",

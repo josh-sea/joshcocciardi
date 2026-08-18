@@ -6,6 +6,7 @@
 #   ./deploy.sh portfolio    - Build portfolio only, deploy hosting
 #   ./deploy.sh email        - Build email app, copy to portfolio, deploy hosting
 #   ./deploy.sh moments      - Build moment-capture, copy to portfolio, deploy hosting
+#   ./deploy.sh collector    - Build collector shop, copy to portfolio, deploy hosting
 #   ./deploy.sh playball     - Copy playball (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh canitwo      - Copy canitwo (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh recipebox    - Copy recipebox (no build), copy to portfolio, deploy hosting
@@ -17,6 +18,7 @@
 #   apps/portfolio/   - Main React portfolio SPA (CRA)
 #   apps/email/       - Gmail reader app (CRA) → served at /projects/electronic-mail
 #   apps/moment-capture/ - Moment capture app (Vite) → served at /projects/moments
+#   apps/collector/   - Collector Shop inventory app (Vite) → served at /projects/collector
 #   apps/playball/    - Playball walk-up music app (static) → served at /projects/playball
 #   apps/canitwo/     - CanITwo bathroom finder (static) → served at /projects/canitwo
 #   apps/recipebox/   - Gram & Pop's Recipe Box (static) → gramandpops.com,
@@ -33,6 +35,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORTFOLIO_DIR="$ROOT_DIR/apps/portfolio"
 EMAIL_DIR="$ROOT_DIR/apps/email"
 MOMENTS_DIR="$ROOT_DIR/apps/moment-capture"
+COLLECTOR_DIR="$ROOT_DIR/apps/collector"
 PLAYBALL_DIR="$ROOT_DIR/apps/playball"
 CANITWO_DIR="$ROOT_DIR/apps/canitwo"
 RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
@@ -67,6 +70,19 @@ build_moments() {
     rm -rf "$PORTFOLIO_DIR/public/projects/moments"/*
     cp -r "$MOMENTS_DIR/dist"/* "$PORTFOLIO_DIR/public/projects/moments/"
     success "moment-capture copied"
+}
+
+build_collector() {
+    log "Building collector shop app..."
+    cd "$COLLECTOR_DIR"
+    npm run build || fail "collector build failed"
+    success "collector built"
+
+    log "Copying collector to portfolio/public/projects/collector..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/collector"
+    rm -rf "$PORTFOLIO_DIR/public/projects/collector"/*
+    cp -r "$COLLECTOR_DIR/dist"/* "$PORTFOLIO_DIR/public/projects/collector/"
+    success "collector copied"
 }
 
 build_playball() {
@@ -114,6 +130,7 @@ deploy_hosting() {
     echo "  Gram & Pop's:   https://gramandpops.com  (Recipe Box at the root)"
     echo "  Email:          https://www.joshcocciardi.com/projects/electronic-mail"
     echo "  Moments:        https://www.joshcocciardi.com/projects/moments"
+    echo "  Collector Shop: https://www.joshcocciardi.com/projects/collector"
     echo "  Playball:       https://www.joshcocciardi.com/projects/playball"
     echo "  CanITwo:        https://www.joshcocciardi.com/projects/canitwo"
     echo "  Recipe Box:     https://www.joshcocciardi.com/projects/recipebox"
@@ -156,6 +173,7 @@ case "${1:-all}" in
         echo "========================================"
         build_email
         build_moments
+        build_collector
         build_playball
         build_canitwo
         build_recipebox
@@ -184,6 +202,15 @@ case "${1:-all}" in
         echo "========================================"
         build_moments
         build_portfolio
+        deploy_hosting
+        ;;
+    collector)
+        echo "========================================"
+        echo "  Deploying collector shop"
+        echo "========================================"
+        build_collector
+        build_portfolio
+        deploy_firestore
         deploy_hosting
         ;;
     playball)
@@ -230,7 +257,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|playball|canitwo|recipebox|gatekeeper|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|playball|canitwo|recipebox|gatekeeper|firestore|storage]"
         exit 1
         ;;
 esac
