@@ -205,6 +205,11 @@ const ItemDetail = ({ mode, item, onClose }) => {
       const itemType = matchOption(c.itemType, ITEM_TYPES);
       const gradingCompany = matchOption(c.gradingCompany, GRADING_COMPANIES);
       const graded = c.graded === true;
+      // Merge AI tags (+ the year as a tag) into whatever's already there.
+      const aiTags = [...(Array.isArray(c.tags) ? c.tags : []), c.year]
+        .map((t) => String(t || '').trim().replace(/^#/, '').toLowerCase())
+        .filter(Boolean);
+      const tags = Array.from(new Set([...f.tags, ...aiTags]));
       return {
         ...f,
         name: (c.name || c.label || '').trim() || f.name,
@@ -215,6 +220,9 @@ const ItemDetail = ({ mode, item, onClose }) => {
         graded: graded || f.graded,
         gradingCompany: graded && gradingCompany ? gradingCompany : f.gradingCompany,
         grade: graded && c.grade ? String(c.grade) : f.grade,
+        tags,
+        // Only fill notes if the user hasn't written their own.
+        notes: f.notes.trim() ? f.notes : String(c.notes || '').trim(),
       };
     });
 

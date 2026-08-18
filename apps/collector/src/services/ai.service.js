@@ -203,6 +203,9 @@ const geminiIdentify = async (file) => {
             graded: Schema.boolean(),
             gradingCompany: Schema.string(),
             grade: Schema.string(),
+            year: Schema.string(),
+            tags: Schema.array({ items: Schema.string() }),
+            notes: Schema.string(),
             confidence: Schema.number(),
           },
         }),
@@ -227,7 +230,15 @@ const geminiIdentify = async (file) => {
     `- itemType: one of [${ITEM_TYPES.join(', ')}]. A card is "Card".\n` +
     `- sport: one of [${SPORTS.join(', ')}] — ONLY for actual sports; leave "" for non-sport cards like Pokémon.\n` +
     `- gradingCompany: one of [${GRADING_COMPANIES.join(', ')}] (only if graded).\n` +
-    'league: the league/set if obvious, else "". grade: the numeric grade if it is a graded slab, else "".';
+    'league: the league/set if obvious, else "". grade: the numeric grade if it is a graded slab, else "".\n' +
+    'ALSO fill these to capture the specifics:\n' +
+    '- year: the release year as a 4-digit string if known (e.g. "2002"), else "".\n' +
+    '- tags: 3–8 short lowercase keyword tags a collector would search by — the ' +
+    'character/player/subject, the set/edition, the game or brand, the team, and ' +
+    'any notable variant (e.g. ["pokemon","gengar","expedition","reverse holo"]). ' +
+    'No "#". Do not repeat the year here.\n' +
+    '- notes: one short line with extra detail worth recording (set/edition, card ' +
+    'number, parallel/variant, anything notable), else "".';
   let data;
   try {
     const result = await model.generateContent([{ text: intro }, part]);
