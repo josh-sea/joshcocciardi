@@ -18,6 +18,11 @@ const gatekeeper = require('./gatekeeper');
 exports.gatekeeperApi = gatekeeper.gatekeeperApi;
 exports.gatekeeperOnRequest = gatekeeper.gatekeeperOnRequest;
 
+// Workbook Reader: single-word text-to-speech (callable). Isolated in its own
+// module so its lazy TTS client only initializes when the function runs.
+const workbook = require('./workbook');
+exports.synthesizeWord = workbook.synthesizeWord;
+
 // Recompute a place's aggregates from all of its reviews whenever any
 // review is created or updated. Full recount (not incremental): reviews per
 // place are small, and a recount self-heals any historical drift.

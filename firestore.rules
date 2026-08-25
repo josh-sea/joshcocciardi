@@ -484,7 +484,34 @@ service cloud.firestore {
     match /client_usage/{clientId} {
       allow read, write: if true;
     }
-    
+
+    // ── Workbook Reader ──────────────────────────────────────────────────
+    // Adult-owned tree: the grown-up's profile, their kid profiles, and each
+    // kid's saved workbook pages. Ownership is the path (the adult's uid), so
+    // the rule is a simple owner check all the way down.
+    match /workbook_users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      match /kids/{kidId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+        match /pages/{pageId} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+    }
+
+    // Shared, cross-user word-audio cache: workbook_audio/{slug} points at a
+    // Storage mp3 for one spoken word. Any signed-in user may read every clip
+    // (so every child benefits from words others have already heard) and create
+    // a missing one on a cache miss. Clips are immutable — no updates/deletes —
+    // so a cached word can never be swapped out from under other users.
+    match /workbook_audio/{slug} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.slug == slug
+        && request.resource.data.url is string;
+      allow update, delete: if false;
+    }
+
     // Default authenticated access for other collections.
     // CanITwo, Recipe Box, Mise, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
@@ -503,6 +530,7 @@ service cloud.firestore {
         && !collection.matches('mise_.*')
         && !collection.matches('gatekeeper_.*')
         && !collection.matches('collector_.*')
+        && !collection.matches('workbook_.*')
         && collection != 'work_private';
     }
   }

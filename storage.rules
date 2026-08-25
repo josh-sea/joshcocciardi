@@ -49,6 +49,26 @@ service firebase.storage {
       allow delete: if request.auth != null;
     }
 
+    // ── Workbook Reader ─────────────────────────────────────────────────
+    // Shared, cross-user word-audio cache. Any signed-in user can read every
+    // clip (so every child gets instant playback for words others already
+    // tapped) and add a missing one. This MUST come before the per-adult
+    // /workbook/{userId}/** rule below so "audio" isn't matched as a uid.
+    // (Storage rules OR across matching allows, so the owner rule denying
+    // isOwner('audio') can't block this.)
+    match /workbook/audio/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidAudio();
+    }
+
+    // Original workbook page photos, owned by the adult whose uid is the first
+    // path segment: workbook/{adultUid}/{kidId}/{pageId}/original.jpg
+    match /workbook/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidImage();
+      allow delete: if isOwner(userId);
+    }
+
     // User files path: users/{userId}/**
     match /users/{userId}/{allPaths=**} {
       // Allow read if authenticated user owns the files

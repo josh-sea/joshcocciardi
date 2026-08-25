@@ -7,6 +7,7 @@
 #   ./deploy.sh email        - Build email app, copy to portfolio, deploy hosting
 #   ./deploy.sh moments      - Build moment-capture, copy to portfolio, deploy hosting
 #   ./deploy.sh collector    - Build collector shop, copy to portfolio, deploy hosting
+#   ./deploy.sh workbook     - Build workbook reader, deploy hosting + rules + TTS function
 #   ./deploy.sh playball     - Copy playball (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh canitwo      - Copy canitwo (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh recipebox    - Copy recipebox (no build), copy to portfolio, deploy hosting
@@ -19,6 +20,7 @@
 #   apps/email/       - Gmail reader app (CRA) → served at /projects/electronic-mail
 #   apps/moment-capture/ - Moment capture app (Vite) → served at /projects/moments
 #   apps/collector/   - Collector Shop inventory app (Vite) → served at /projects/collector
+#   apps/workbook/    - Workbook Reader accessibility app (Vite) → served at /projects/workbook
 #   apps/playball/    - Playball walk-up music app (static) → served at /projects/playball
 #   apps/canitwo/     - CanITwo bathroom finder (static) → served at /projects/canitwo
 #   apps/recipebox/   - Gram & Pop's Recipe Box (static) → gramandpops.com,
@@ -39,6 +41,7 @@ COLLECTOR_DIR="$ROOT_DIR/apps/collector"
 PLAYBALL_DIR="$ROOT_DIR/apps/playball"
 CANITWO_DIR="$ROOT_DIR/apps/canitwo"
 RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
+WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
 log() { echo ""; echo "==> $1"; }
@@ -83,6 +86,19 @@ build_collector() {
     rm -rf "$PORTFOLIO_DIR/public/projects/collector"/*
     cp -r "$COLLECTOR_DIR/dist"/* "$PORTFOLIO_DIR/public/projects/collector/"
     success "collector copied"
+}
+
+build_workbook() {
+    log "Building workbook reader app..."
+    cd "$WORKBOOK_DIR"
+    npm run build || fail "workbook build failed"
+    success "workbook built"
+
+    log "Copying workbook to portfolio/public/projects/workbook..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/workbook"
+    rm -rf "$PORTFOLIO_DIR/public/projects/workbook"/*
+    cp -r "$WORKBOOK_DIR/dist"/* "$PORTFOLIO_DIR/public/projects/workbook/"
+    success "workbook copied"
 }
 
 build_playball() {
@@ -131,6 +147,7 @@ deploy_hosting() {
     echo "  Email:          https://www.joshcocciardi.com/projects/electronic-mail"
     echo "  Moments:        https://www.joshcocciardi.com/projects/moments"
     echo "  Collector Shop: https://www.joshcocciardi.com/projects/collector"
+    echo "  Workbook:       https://www.joshcocciardi.com/projects/workbook"
     echo "  Playball:       https://www.joshcocciardi.com/projects/playball"
     echo "  CanITwo:        https://www.joshcocciardi.com/projects/canitwo"
     echo "  Recipe Box:     https://www.joshcocciardi.com/projects/recipebox"
@@ -150,6 +167,14 @@ deploy_gatekeeper() {
     echo ""
     echo "  Parent console:  https://igatekeeper.web.app"
     echo "  Extension API:   https://us-central1-josh-cocciardi.cloudfunctions.net/gatekeeperApi"
+}
+
+deploy_workbook_function() {
+    log "Deploying Workbook TTS function (synthesizeWord)..."
+    cd "$ROOT_DIR"
+    # Needs the Cloud Text-to-Speech API enabled on the josh-cocciardi project.
+    firebase deploy --only functions:synthesizeWord || warn "synthesizeWord deploy failed (is the Text-to-Speech API enabled?)"
+    success "synthesizeWord deployed"
 }
 
 deploy_firestore() {
@@ -177,6 +202,7 @@ case "${1:-all}" in
         build_playball
         build_canitwo
         build_recipebox
+        build_workbook
         build_portfolio
         deploy_firestore
         deploy_hosting
@@ -237,6 +263,17 @@ case "${1:-all}" in
         build_portfolio
         deploy_hosting
         ;;
+    workbook)
+        echo "========================================"
+        echo "  Deploying workbook reader"
+        echo "========================================"
+        build_workbook
+        build_portfolio
+        deploy_firestore
+        deploy_storage
+        deploy_workbook_function
+        deploy_hosting
+        ;;
     gatekeeper)
         echo "========================================"
         echo "  Deploying Gatekeeper (igatekeeper.web.app)"
@@ -257,7 +294,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|playball|canitwo|recipebox|gatekeeper|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|gatekeeper|firestore|storage]"
         exit 1
         ;;
 esac

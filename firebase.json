@@ -34,6 +34,10 @@
           "destination": "/projects/collector/index.html"
         },
         {
+          "source": "/projects/workbook/**",
+          "destination": "/projects/workbook/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }

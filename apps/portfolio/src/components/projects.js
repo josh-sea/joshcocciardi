@@ -31,6 +31,13 @@ const apps = [
     link: "/projects/collector",
   },
   {
+    title: "📖 Workbook Reader",
+    description:
+      "A reading aid for a kid who's still learning. Snap a photo of a workbook page and AI rebuilds the questions and directions on screen — then tapping any word reads it aloud. Spoken-word audio is cached in a shared, cross-family bank so common words play instantly and never regenerate, with an on-device voice fallback for offline or older devices. Grown-ups sign in and manage a profile per child; the child does the work on paper.",
+    tech: ["React", "Vite", "Firebase", "Gemini Vision", "Cloud TTS", "PWA"],
+    link: "/projects/workbook",
+  },
+  {
     title: "⚾ Playball",
     description:
       "Walk-up music manager for game day. Pull in Spotify playlists, set start/stop times per song, assign players to songs, and drag the batting order — the playlist re-syncs to Spotify automatically.",
