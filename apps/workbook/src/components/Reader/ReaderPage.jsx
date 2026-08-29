@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useKid } from '../../contexts/KidContext';
 import { getPage } from '../../services/pages.service';
+import { prefetchCachedUrls } from '../../services/tts.service';
 import { tokenize, isSpeakable } from '../../utils/words';
 import Word from './Word';
 import LoadingSpinner from '../Layout/LoadingSpinner';
@@ -47,6 +48,12 @@ const ReaderPage = () => {
       setLoading(true);
       const p = await getPage(currentUser.uid, activeKidId, pageId);
       if (!cancelled) { setPage(p); setLoading(false); }
+      // Warm the in-memory URL map from the shared cache (no generation) so any
+      // already-cached word plays with the nicer cloud voice on the first tap.
+      if (p) {
+        const words = [p.title, ...p.blocks.map((b) => b.text)].join(' ').split(/\s+/);
+        prefetchCachedUrls(words).catch(() => {});
+      }
     })();
     return () => { cancelled = true; };
   }, [currentUser, activeKidId, pageId]);
