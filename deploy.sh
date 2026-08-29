@@ -11,6 +11,7 @@
 #   ./deploy.sh playball     - Copy playball (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh canitwo      - Copy canitwo (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh recipebox    - Copy recipebox (no build), copy to portfolio, deploy hosting
+#   ./deploy.sh psx          - Copy psx station (no build), deploy hosting + rules
 #   ./deploy.sh gatekeeper   - Deploy Gatekeeper parent app + functions + firestore (igatekeeper.web.app)
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
@@ -25,6 +26,7 @@
 #   apps/canitwo/     - CanITwo bathroom finder (static) → served at /projects/canitwo
 #   apps/recipebox/   - Gram & Pop's Recipe Box (static) → gramandpops.com,
 #                       mirrored at /projects/recipebox
+#   apps/psx/         - PSX Station browser emulator (static) → served at /projects/psx
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
 # (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
@@ -41,6 +43,7 @@ COLLECTOR_DIR="$ROOT_DIR/apps/collector"
 PLAYBALL_DIR="$ROOT_DIR/apps/playball"
 CANITWO_DIR="$ROOT_DIR/apps/canitwo"
 RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
+PSX_DIR="$ROOT_DIR/apps/psx"
 WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
@@ -128,6 +131,15 @@ build_recipebox() {
     success "recipebox copied"
 }
 
+build_psx() {
+    log "Copying psx station to portfolio/public/projects/psx (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/psx"
+    rm -rf "$PORTFOLIO_DIR/public/projects/psx"/*
+    cp -r "$PSX_DIR"/* "$PORTFOLIO_DIR/public/projects/psx/"
+    rm -f "$PORTFOLIO_DIR/public/projects/psx/README.md"
+    success "psx station copied"
+}
+
 build_portfolio() {
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
@@ -151,6 +163,7 @@ deploy_hosting() {
     echo "  Playball:       https://www.joshcocciardi.com/projects/playball"
     echo "  CanITwo:        https://www.joshcocciardi.com/projects/canitwo"
     echo "  Recipe Box:     https://www.joshcocciardi.com/projects/recipebox"
+    echo "  PSX Station:    https://www.joshcocciardi.com/projects/psx"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
@@ -202,6 +215,7 @@ case "${1:-all}" in
         build_playball
         build_canitwo
         build_recipebox
+        build_psx
         build_workbook
         build_portfolio
         deploy_firestore
@@ -263,6 +277,16 @@ case "${1:-all}" in
         build_portfolio
         deploy_hosting
         ;;
+    psx)
+        echo "========================================"
+        echo "  Deploying PSX Station"
+        echo "========================================"
+        build_psx
+        build_portfolio
+        deploy_firestore
+        deploy_storage
+        deploy_hosting
+        ;;
     workbook)
         echo "========================================"
         echo "  Deploying workbook reader"
@@ -294,7 +318,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|gatekeeper|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|gatekeeper|firestore|storage]"
         exit 1
         ;;
 esac

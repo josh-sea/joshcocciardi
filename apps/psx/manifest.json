@@ -1,0 +1,14 @@
+{
+  "name": "PSX Station",
+  "short_name": "PSX",
+  "description": "A PlayStation 1 emulator in the browser. Discs stay on your device; save states follow you.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0b12",
+  "theme_color": "#0b0b12",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

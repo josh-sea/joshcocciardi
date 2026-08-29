@@ -69,6 +69,24 @@ service firebase.storage {
       allow delete: if isOwner(userId);
     }
 
+    // ── PSX Station save data ───────────────────────────────────────────
+    // Owner-only, under psx/{uid}/{discId}/. Deliberately narrow: only the
+    // save states, their screenshots and the memory card sync here. Disc
+    // images stay in the player's browser, so a 600MB .7z can never land in
+    // the bucket (and never costs egress on the way back out).
+    //
+    // The 32MB ceiling is the same one the app enforces client-side; real PS1
+    // states run 1-9MB depending on the core, and a memory card is ~128KB.
+    function isValidPsxSave() {
+      return request.resource.size < 32 * 1024 * 1024;
+    }
+
+    match /psx/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidPsxSave();
+      allow delete: if isOwner(userId);
+    }
+
     // User files path: users/{userId}/**
     match /users/{userId}/{allPaths=**} {
       // Allow read if authenticated user owns the files
