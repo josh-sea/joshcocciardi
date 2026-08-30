@@ -25,6 +25,16 @@ const state = {
 let markCloudReady = () => {};
 state.cloudReady = new Promise(resolve => { markCloudReady = resolve; });
 
+// iPadOS reports itself as a Mac, so the touch-point count is what separates a
+// tablet from a desktop with a touchscreen monitor.
+const IS_MOBILE = /iphone|ipad|ipod|android/i.test(navigator.userAgent)
+  || (navigator.maxTouchPoints > 1 && /macintosh/i.test(navigator.userAgent));
+
+// The core writes its real failures to stderr, which EmulatorJS throws away
+// unless its debug flag is on. We tap it (see hookEmulatorRuntime) and keep the
+// tail, so a dead screen can say what actually happened.
+const coreLog = [];
+
 /* ── Tiny DOM helpers ──────────────────────────────────────────────────── */
 
 const $ = sel => document.querySelector(sel);
@@ -504,6 +514,26 @@ async function openSettings() {
 
 /* ── Player ────────────────────────────────────────────────────────────── */
 
+// True when a disc is big enough that this device is likely to fail booting it.
+// Acknowledged once per disc, because someone who knows their machine can
+// handle it shouldn't be asked twice.
+function oversizedForDevice(disc) {
+  const limit = IS_MOBILE ? CFG.mobile_disc_warn_bytes : CFG.large_disc_warn_bytes;
+  return disc.size > limit && !disc.largeWarnAck;
+}
+
+async function confirmOversized(disc) {
+  const ok = await confirmDialog(
+    'This disc may not boot here',
+    `"${disc.title}" is ${fmtBytes(disc.size)}. ${memoryAdvice()} You can try it anyway — if it fails `
+    + 'you get a black screen rather than a crash, and nothing is lost.',
+    'Try it anyway',
+    false,
+  );
+  if (ok) await Library.patchGame(disc.id, { largeWarnAck: true });
+  return ok;
+}
+
 async function bootPlayer(discId) {
   const disc = await Library.getGame(discId);
   if (!disc) {
@@ -514,6 +544,18 @@ async function bootPlayer(discId) {
 
   state.discId = discId;
   state.disc = disc;
+
+  if (oversizedForDevice(disc)) {
+    // state.disc is set so memoryAdvice() can name the size, but nothing has
+    // booted yet — backing out is just a return to the library.
+    if (!await confirmOversized(disc)) {
+      state.discId = null;
+      state.disc = null;
+      location.hash = '#/';
+      location.reload();
+      return;
+    }
+  }
 
   $('#view-library').hidden = true;
   $('#view-player').hidden = false;
@@ -550,6 +592,8 @@ async function bootPlayer(discId) {
   }
   window.EJS_onGameStart = onGameStart;
 
+  hookEmulatorRuntime();
+
   const script = el('script', { src: `${CFG.emulator_data_path}loader.js` });
   script.onerror = () => showBootError();
   document.body.appendChild(script);
@@ -559,7 +603,11 @@ async function bootPlayer(discId) {
   // the emulator actually appearing instead of trusting the events.
   const startedAt = Date.now();
   const watchdog = setInterval(() => {
-    if (window.EJS_emulator) return clearInterval(watchdog);
+    if (window.EJS_emulator) {
+      clearInterval(watchdog);
+      watchCanvas(window.EJS_emulator);
+      return;
+    }
     if (Date.now() - startedAt > CFG.emulator_boot_timeout_ms) {
       clearInterval(watchdog);
       showBootError();
@@ -569,20 +617,110 @@ async function bootPlayer(discId) {
   renderSlots();
 }
 
-function showBootError() {
+/* ── Failure reporting ─────────────────────────────────────────────────────
+   A core that runs out of memory, or a graphics context the browser reclaims,
+   leaves the canvas black while the page around it keeps working — no error,
+   nothing in the UI, nothing a phone user can inspect. These three hooks turn
+   each of those into something readable.                                     */
+
+// EmulatorJS builds the Emscripten module config itself and hands print/printErr
+// that only log in debug mode. The core assigns window.EJS_Runtime after we
+// run, so we intercept the assignment and fold our own handlers into the config
+// on the way through.
+function hookEmulatorRuntime() {
+  let runtime;
+  const wrap = fn => function (config) {
+    const theirs = config.printErr;
+    config.printErr = msg => {
+      noteCoreMessage(msg);
+      if (typeof theirs === 'function') theirs(msg);
+    };
+    config.onAbort = what => showCoreStopped(String(what || 'the core aborted'));
+    return fn.call(this, config);
+  };
+
+  try {
+    Object.defineProperty(window, 'EJS_Runtime', {
+      configurable: true,
+      get: () => runtime,
+      set(fn) { runtime = typeof fn === 'function' ? wrap(fn) : fn; },
+    });
+  } catch (e) {
+    // Not fatal — we just lose the detail in any error we end up showing.
+    console.warn('[psx] could not tap the core runtime:', e.message);
+  }
+}
+
+const OOM_RE = /out of memory|cannot enlarge memory|memory access out of bounds|allocation failed|abort\(oom\)|rangeerror/i;
+
+function noteCoreMessage(msg) {
+  const line = String(msg).slice(0, 300);
+  coreLog.push(line);
+  if (coreLog.length > 40) coreLog.shift();
+  if (OOM_RE.test(line)) showCoreStopped('the core ran out of memory');
+}
+
+function memoryAdvice() {
+  const size = state.disc ? fmtBytes(state.disc.size) : 'this disc';
+  return `Booting holds the disc twice — once as a JavaScript array and once inside the core's `
+    + `own filesystem — so ${size} of disc wants well over double that in memory`
+    + (IS_MOBILE ? ', and a phone or tablet gives a browser tab far less of it than a computer does' : '')
+    + '. Converting the disc to CHD usually cuts it to a third of the size and is the fix that '
+    + 'actually sticks; a smaller disc, or the same disc on a desktop browser, also works.';
+}
+
+function showCoreStopped(reason) {
+  showPlayerError({
+    title: `The emulator stopped — ${reason}.`,
+    detail: memoryAdvice(),
+  });
+}
+
+// Shows one overlay per player session; the first failure is the useful one and
+// a dying core can emit the same complaint dozens of times.
+function showPlayerError({ title, detail }) {
   const host = $('#game');
-  if (host.querySelector('.boot-error')) return;
+  if (!host || host.querySelector('.boot-error')) return;
+
+  const tail = coreLog.slice(-8).join('\n');
   host.appendChild(el('div', { class: 'boot-error' },
-    el('p', {}, 'The emulator could not be loaded.'),
-    el('p', { class: 'muted tiny' },
-      `PSX Station pulls the emulator from ${new URL(CFG.emulator_data_path).host} each visit, so it needs a `
-      + 'connection to start a game — your discs and saves are all still here on the device. '
-      + 'A content blocker can also swallow the request.'),
+    el('p', {}, title),
+    el('p', { class: 'muted tiny' }, detail),
+    tail ? el('details', { class: 'boot-error-log' },
+      el('summary', { class: 'muted tiny' }, 'Emulator output'),
+      el('pre', {}, tail),
+    ) : null,
     el('div', { class: 'boot-error-actions' },
       el('button', { class: 'btn btn-primary btn-sm', onclick: () => location.reload() }, 'Try again'),
       el('button', { class: 'btn btn-ghost btn-sm', onclick: () => navigate('#/') }, 'Back to library'),
     ),
   ));
+}
+
+function showBootError() {
+  showPlayerError({
+    title: 'The emulator could not be loaded.',
+    detail: `PSX Station pulls the emulator from ${new URL(CFG.emulator_data_path).host} each visit, so it `
+      + 'needs a connection to start a game — your discs and saves are all still here on the device. '
+      + 'A content blocker can also swallow the request.',
+  });
+}
+
+// A browser under memory pressure will take the WebGL context back and leave
+// the page running, which is the other way this ends up as a black rectangle.
+function watchCanvas(emulator) {
+  const canvas = emulator?.canvas;
+  if (!canvas || canvas.dataset.psxWatched) return;
+  canvas.dataset.psxWatched = '1';
+  canvas.addEventListener('webglcontextlost', e => {
+    e.preventDefault();
+    showPlayerError({
+      title: 'The browser reclaimed the graphics context.',
+      detail: `This is what a black screen mid-game usually is: the tab asked for more memory than the `
+        + `browser was willing to hold, so it took the 3D context back and left the page running. `
+        + memoryAdvice(),
+    });
+  });
 }
 
 async function onGameStart() {
