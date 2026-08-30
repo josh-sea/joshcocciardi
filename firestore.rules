@@ -42,6 +42,13 @@ service cloud.firestore {
       match /playball_lineups/{lineupId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
+
+      // PSX Station: one row per disc fingerprint. The disc images themselves
+      // never leave the player's device — this is just the index (title, size,
+      // playtime) plus pointers to which save-state slots exist in Storage.
+      match /psx_games/{discId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
     
     // CanITwo: community flags on reviews. Create-only, one per user per

@@ -38,6 +38,13 @@ const apps = [
     link: "/projects/workbook",
   },
   {
+    title: "🎮 PSX Station",
+    description:
+      "A PlayStation 1 emulator in a browser tab. Drop in a disc image you own — .7z, .bin/.cue, .chd — and it plays, with gamepad and touch controls. Discs stay on your device because they're enormous; the save states and memory cards sync to your account, so you can put a game down on the desktop and pick it back up on a phone.",
+    tech: ["JavaScript", "WebAssembly", "EmulatorJS", "IndexedDB", "Firebase Auth", "Cloud Storage", "PWA"],
+    link: "/projects/psx",
+  },
+  {
     title: "⚾ Playball",
     description:
       "Walk-up music manager for game day. Pull in Spotify playlists, set start/stop times per song, assign players to songs, and drag the batting order — the playlist re-syncs to Spotify automatically.",

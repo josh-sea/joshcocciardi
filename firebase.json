@@ -38,6 +38,10 @@
           "destination": "/projects/workbook/index.html"
         },
         {
+          "source": "/projects/psx/**",
+          "destination": "/projects/psx/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -80,6 +84,15 @@
         },
         {
           "source": "/projects/recipebox/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/projects/psx/**/*.@(js|css)",
           "headers": [
             {
               "key": "Cache-Control",

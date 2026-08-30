@@ -9,7 +9,7 @@
 #      value: the entire contents of that JSON file
 #
 # What it deploys (mirrors ./deploy.sh):
-#   - copies the static apps (playball, canitwo, recipebox) into portfolio/public
+#   - copies the static apps (playball, canitwo, recipebox, psx) into portfolio/public
 #   - builds the mail app and copies it to portfolio/public/projects/electronic-mail
 #   - builds the portfolio (the built copy of moments is committed under
 #     apps/portfolio/public/projects/)
@@ -51,7 +51,7 @@ jobs:
 
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox; do
+          for app in playball canitwo recipebox psx; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
