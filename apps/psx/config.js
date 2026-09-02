@@ -45,4 +45,11 @@ window.APP_CONFIG = {
   // is decompressed into memory before it boots, so very large discs can fail
   // on low-RAM devices rather than on disk.
   large_disc_warn_bytes: 900 * 1024 * 1024,
+
+  // The same limit for phones and tablets, where it bites far sooner. Booting
+  // holds the disc twice — once as a JavaScript array, once inside the core's
+  // in-memory filesystem — so a 500MB disc wants well over a gigabyte, and
+  // mobile Safari hands out a fraction of what a desktop browser will. Past
+  // this size the disc gets a one-time warning before it boots.
+  mobile_disc_warn_bytes: 400 * 1024 * 1024,
 };

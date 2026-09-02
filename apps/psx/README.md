@@ -83,6 +83,44 @@ is what reattaches it to your cloud saves.
   reattaches them. The remove dialog offers to delete them too, which is the
   only thing that clears them out of Storage.
 
+## When a game goes black
+
+A PS1 disc has to be held **twice** while it boots: once as a JavaScript array
+of the whole file, and again inside the core's own in-memory filesystem. A
+500MB disc therefore wants well over a gigabyte, and a phone hands a browser
+tab a fraction of what a desktop does. When that budget runs out you get a
+black rectangle with the page still working around it — either the core aborts,
+or the browser quietly takes the WebGL context back.
+
+Neither of those says anything on its own. EmulatorJS routes the core's stderr
+into handlers that only log when its debug flag is set, and it has no
+`webglcontextlost` handling at all. So the app taps both:
+
+- `hookEmulatorRuntime()` in `js/app.js` intercepts the `window.EJS_Runtime`
+  assignment and folds our own `printErr` and `onAbort` into the Emscripten
+  module config before the core sees it. Out-of-memory output raises the
+  overlay immediately, and the last few lines of real core output are shown
+  under "Emulator output" — which is the only way to read them on a phone.
+- The boot watchdog binds a `webglcontextlost` listener to the emulator's
+  canvas once it exists.
+
+Discs past `mobile_disc_warn_bytes` (mobile) or `large_disc_warn_bytes`
+(desktop) get a one-time warning before booting, acknowledged per disc so it
+only asks once.
+
+**The fix that actually sticks is converting the disc to CHD.** It is a
+compressed disc format the core reads natively, typically a third of the size
+of a `.bin`/`.cue` pair, and it cuts both copies at once. `chdman` (ships with
+MAME) does it:
+
+```bash
+chdman createcd -i "Wipeout XL.cue" -o "Wipeout XL.chd"
+```
+
+A `.7z` is the wrong shape for this even though it is small on disk: it has to
+be fully decompressed into memory before anything can boot, so it costs *more*
+peak memory than the raw disc, not less.
+
 ## Things worth knowing
 
 - **Switching games reloads the page.** EmulatorJS mounts a canvas, a WASM core

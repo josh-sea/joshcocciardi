@@ -275,10 +275,9 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .playerbar-actions { display: flex; align-items: center; gap: 6px; }
 
-.game-host { flex: 1; min-height: 0; background: #000; }
+.game-host { position: relative; flex: 1; min-height: 0; background: #000; }
 .game-host > div { width: 100%; height: 100%; }
 
-.boot-error { padding: 24px; color: var(--danger); text-align: center; }
 
 .saves-panel {
   position: absolute;
@@ -416,17 +415,42 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .card-art:hover .card-disc { transform: none; }
 }
 
-/* Shown in place of the emulator when its CDN can't be reached. */
+/* Covers the emulator when it can't load, dies, or loses its graphics context.
+   Sits above the canvas and the emulator's own menu bar, with its own ground so
+   a half-drawn frame can't show through. */
 .boot-error {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  max-width: 44ch;
-  margin: 12vh auto 0;
-  padding: 0 20px;
+  padding: 24px;
+  background: var(--bg);
   text-align: center;
+  overflow-y: auto;
 }
-.boot-error > p:first-child { margin: 0; font-weight: 600; color: var(--danger); }
+.boot-error > p:first-child { font-weight: 600; color: var(--danger); }
 .boot-error > p { margin: 0; }
 .boot-error-actions { display: flex; gap: 8px; margin-top: 8px; }
+.boot-error > p:first-child,
+.boot-error > p,
+.boot-error-actions,
+.boot-error-log { max-width: 44ch; width: 100%; }
+.boot-error-log > summary { cursor: pointer; margin-bottom: 6px; }
+.boot-error-log > pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  color: var(--muted);
+}
