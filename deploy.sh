@@ -12,6 +12,7 @@
 #   ./deploy.sh canitwo      - Copy canitwo (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh recipebox    - Copy recipebox (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh psx          - Copy psx station (no build), deploy hosting + rules
+#   ./deploy.sh solra        - Run the Solra tests, copy (no build), deploy hosting
 #   ./deploy.sh gatekeeper   - Deploy Gatekeeper parent app + functions + firestore (igatekeeper.web.app)
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
@@ -27,6 +28,7 @@
 #   apps/recipebox/   - Gram & Pop's Recipe Box (static) → gramandpops.com,
 #                       mirrored at /projects/recipebox
 #   apps/psx/         - PSX Station browser emulator (static) → served at /projects/psx
+#   apps/solra/       - Solra Trainer language practice tool (static) → served at /projects/solra
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
 # (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
@@ -44,6 +46,7 @@ PLAYBALL_DIR="$ROOT_DIR/apps/playball"
 CANITWO_DIR="$ROOT_DIR/apps/canitwo"
 RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
 PSX_DIR="$ROOT_DIR/apps/psx"
+SOLRA_DIR="$ROOT_DIR/apps/solra"
 WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
@@ -140,6 +143,23 @@ build_psx() {
     success "psx station copied"
 }
 
+build_solra() {
+    # No build step, but the language modules carry a dependency-free test
+    # suite that renders and decodes every word. Cheap, so always run it.
+    log "Testing Solra..."
+    cd "$SOLRA_DIR"
+    node test/roundtrip.mjs || fail "Solra round-trip tests failed"
+
+    log "Copying solra to portfolio/public/projects/solra (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/solra"
+    rm -rf "$PORTFOLIO_DIR/public/projects/solra"/*
+    cp -r "$SOLRA_DIR"/* "$PORTFOLIO_DIR/public/projects/solra/"
+    rm -rf "$PORTFOLIO_DIR/public/projects/solra/test"
+    rm -f "$PORTFOLIO_DIR/public/projects/solra/README.md" \
+          "$PORTFOLIO_DIR/public/projects/solra/package.json"
+    success "solra copied"
+}
+
 build_portfolio() {
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
@@ -164,6 +184,7 @@ deploy_hosting() {
     echo "  CanITwo:        https://www.joshcocciardi.com/projects/canitwo"
     echo "  Recipe Box:     https://www.joshcocciardi.com/projects/recipebox"
     echo "  PSX Station:    https://www.joshcocciardi.com/projects/psx"
+    echo "  Solra Trainer:  https://www.joshcocciardi.com/projects/solra"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
@@ -216,6 +237,7 @@ case "${1:-all}" in
         build_canitwo
         build_recipebox
         build_psx
+        build_solra
         build_workbook
         build_portfolio
         deploy_firestore
@@ -287,6 +309,14 @@ case "${1:-all}" in
         deploy_storage
         deploy_hosting
         ;;
+    solra)
+        echo "========================================"
+        echo "  Deploying Solra Trainer"
+        echo "========================================"
+        build_solra
+        build_portfolio
+        deploy_hosting
+        ;;
     workbook)
         echo "========================================"
         echo "  Deploying workbook reader"
@@ -318,7 +348,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|gatekeeper|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|gatekeeper|firestore|storage]"
         exit 1
         ;;
 esac

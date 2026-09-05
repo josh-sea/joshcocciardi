@@ -42,6 +42,10 @@
           "destination": "/projects/psx/index.html"
         },
         {
+          "source": "/projects/solra/**",
+          "destination": "/projects/solra/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -93,6 +97,15 @@
         },
         {
           "source": "/projects/psx/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/projects/solra/**/*.@(js|css)",
           "headers": [
             {
               "key": "Cache-Control",

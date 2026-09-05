@@ -1,0 +1,10 @@
+{
+  "name": "solra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Practice tool for Solra, a tonal language for machines.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/roundtrip.mjs"
+  }
+}
