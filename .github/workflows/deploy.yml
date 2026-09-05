@@ -9,7 +9,7 @@
 #      value: the entire contents of that JSON file
 #
 # What it deploys (mirrors ./deploy.sh):
-#   - copies the static apps (playball, canitwo, recipebox, psx) into portfolio/public
+#   - copies the static apps (playball, canitwo, recipebox, psx, solra) into portfolio/public
 #   - builds the mail app and copies it to portfolio/public/projects/electronic-mail
 #   - builds the portfolio (the built copy of moments is committed under
 #     apps/portfolio/public/projects/)
@@ -49,13 +49,21 @@ jobs:
           cache: npm
           cache-dependency-path: apps/portfolio/package-lock.json
 
+      # Solra ships its own dependency-free round-trip suite: it renders every
+      # word in the lexicon and decodes the samples back. No install needed.
+      - name: Test Solra
+        working-directory: apps/solra
+        run: node test/roundtrip.mjs
+
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx; do
+          for app in playball canitwo recipebox psx solra; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
-            rm -f "apps/portfolio/public/projects/$app/README.md"
+            rm -rf "apps/portfolio/public/projects/$app/test"
+            rm -f "apps/portfolio/public/projects/$app/README.md" \
+                  "apps/portfolio/public/projects/$app/package.json"
           done
 
       # The mail app is a CRA build, not a static copy. Its config comes from

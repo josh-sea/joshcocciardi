@@ -1,0 +1,14 @@
+{
+  "name": "Solra Trainer",
+  "short_name": "Solra",
+  "description": "Practice tool for Solra, a tonal language for machines. Ear training, minimal pairs, dictionary, composer and a microphone decoder.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080b10",
+  "theme_color": "#080b10",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

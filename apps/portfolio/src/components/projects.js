@@ -45,6 +45,13 @@ const apps = [
     link: "/projects/psx",
   },
   {
+    title: "🎼 Solra Trainer",
+    description:
+      "A practice tool for a constructed language whose phonemes are pure tones instead of vowels and consonants. Ear training against the language's own pitch reference, minimal-pair drills inside a word family, a searchable 192-word dictionary, a sentence composer that runs the spec's deterministic validator, and a microphone decoder that reads the tones back with Goertzel filters. Every sound is synthesised in the browser; nothing is recorded audio.",
+    tech: ["JavaScript", "Web Audio", "AudioWorklet", "Goertzel DSP", "Spaced repetition", "PWA"],
+    link: "/projects/solra",
+  },
+  {
     title: "⚾ Playball",
     description:
       "Walk-up music manager for game day. Pull in Spotify playlists, set start/stop times per song, assign players to songs, and drag the batting order — the playlist re-syncs to Spotify automatically.",
