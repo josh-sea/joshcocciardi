@@ -50,6 +50,15 @@ const tools = [
     tech: ["React", "Firebase Auth", "Firestore"],
     component: lazy(() => import("./mise")),
   },
+  {
+    slug: "draft-night",
+    title: "Draft Night",
+    description:
+      "A live decision tree for one seat in one fantasy football draft: strike names as they go, and the board, the clock, and every downstream branch reprice themselves.",
+    added: "2026-09-08",
+    tech: ["React", "localStorage"],
+    component: lazy(() => import("./draft-night")),
+  },
 ];
 
 export default tools;
