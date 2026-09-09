@@ -54,9 +54,9 @@ const tools = [
     slug: "draft-night",
     title: "Draft Night",
     description:
-      "A live decision tree for one seat in one fantasy football draft: strike names as they go, and the board, the clock, and every downstream branch reprice themselves.",
+      "A live fantasy draft board: strike names as they go and the clock, the branches, and your roster reprice themselves. Sign in to keep several leagues, each with its own settings and draft.",
     added: "2026-09-08",
-    tech: ["React", "localStorage"],
+    tech: ["React", "Firebase Auth", "Firestore"],
     component: lazy(() => import("./draft-night")),
   },
 ];
