@@ -5,7 +5,7 @@ import App from './App';
 // Completing a redirect sign-in has to happen on whatever route the browser
 // comes back to, not just inside a lazily-loaded tool. Importing this here runs
 // its one getRedirectResult() call on every page load.
-import './lib/auth';
+import { redirectSettled } from './lib/auth';
 import reportWebVitals from './reportWebVitals';
 import 'semantic-ui-css/semantic.min.css'
 
@@ -14,15 +14,18 @@ import 'semantic-ui-css/semantic.min.css'
 // from a previous deployment and must be evicted.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
-    const unregisterPromises = registrations
-      .filter((reg) => !reg.scope.includes('/projects/moments/'))
-      .map((reg) => reg.unregister());
-    if (unregisterPromises.length > 0) {
-      Promise.all(unregisterPromises).then(() => {
+    const stale = registrations.filter((reg) => !reg.scope.includes('/projects/moments/'));
+    if (stale.length === 0) return;
+    Promise.all(stale.map((reg) => reg.unregister()))
+      // Never reload while a returning sign-in is being written to IndexedDB:
+      // tearing the page down mid-write loses the credential and lands you back
+      // signed out. redirectSettled resolves immediately when there is no
+      // redirect in flight, so the ordinary case is unaffected.
+      .then(() => redirectSettled)
+      .then(() => {
         // Reload once so the page loads without SW interference
         window.location.reload();
       });
-    }
   });
 }
 
