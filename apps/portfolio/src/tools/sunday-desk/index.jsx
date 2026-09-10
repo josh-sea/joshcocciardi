@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut } from "firebase/auth";
-import { auth } from "../../lib/firebase";
+import {
+  authMessage,
+  redirectSettled,
+  resetPassword,
+  signInWithEmail,
+  signInWithGoogle,
+  signOutEverywhere,
+  signUpWithEmail,
+  watchAuth,
+} from "../../lib/auth";
 import Setup from "./Setup";
 import { readDeviceCreds, writeDeviceCreds } from "./creds";
 import { clearCreds, saveCreds, saveLeague, watchConnection } from "./store";
@@ -53,6 +61,16 @@ const num = (v, digits = 1) => (typeof v === "number" ? v.toFixed(digits) : "—
 
 export default function SundayDesk() {
   const [user, setUser] = useState(undefined);
+  // Returning from a Google redirect, "no user yet" and "signed out" look the
+  // same until getRedirectResult settles. Waiting stops the sign-in screen
+  // flashing up over a session that is about to arrive.
+  const [redirectDone, setRedirectDone] = useState(false);
+  const [authError, setAuthError] = useState(null);
+  const [authNotice, setAuthNotice] = useState(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [authMode, setAuthMode] = useState("in"); // in | up | reset
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [tab, setTab] = useState("matchup");
   const [connection, setConnection] = useState(undefined);
   const [deviceCreds, setDeviceCreds] = useState(() => readDeviceCreds());
@@ -77,7 +95,17 @@ export default function SundayDesk() {
     };
   }, []);
 
-  useEffect(() => onAuthStateChanged(auth, (u) => setUser(u || null)), []);
+  useEffect(() => {
+    let alive = true;
+    redirectSettled.finally(() => {
+      if (alive) setRedirectDone(true);
+    });
+    const stop = watchAuth((u) => setUser(u || null));
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -461,7 +489,20 @@ export default function SundayDesk() {
   );
 
   // ---- shell -------------------------------------------------------------
-  if (user === undefined) {
+  const runAuth = async (fn) => {
+    setSigningIn(true);
+    setAuthError(null);
+    setAuthNotice(null);
+    try {
+      await fn();
+    } catch (e) {
+      setAuthError(authMessage(e));
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
+  if (user === undefined || (!user && !redirectDone)) {
     return (
       <div className="sd">
         <style>{css}</style>
@@ -490,17 +531,83 @@ export default function SundayDesk() {
             <button
               className="btn"
               type="button"
-              onClick={async () => {
-                const provider = new GoogleAuthProvider();
-                try {
-                  await signInWithPopup(auth, provider);
-                } catch (e) {
-                  await signInWithRedirect(auth, provider);
+              disabled={signingIn}
+              onClick={() =>
+                runAuth(async () => {
+                  await signInWithGoogle();
+                })
+              }
+            >
+              {signingIn ? "Opening Google…" : "Continue with Google"}
+            </button>
+
+            <div className="orrule">or use an email and password</div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (authMode === "reset") {
+                  return runAuth(async () => {
+                    await resetPassword(email.trim());
+                    setAuthNotice("Reset sent. Check your email, then sign in.");
+                    setAuthMode("in");
+                  });
                 }
+                if (authMode === "up") {
+                  return runAuth(() => signUpWithEmail(email.trim(), password));
+                }
+                return runAuth(() => signInWithEmail(email.trim(), password));
               }}
             >
-              Continue with Google
-            </button>
+              <label className="field">
+                <span className="flabel">Email</span>
+                <input
+                  className="input"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+              {authMode !== "reset" && (
+                <label className="field">
+                  <span className="flabel">Password</span>
+                  <input
+                    className="input"
+                    type="password"
+                    required
+                    minLength={6}
+                    autoComplete={authMode === "up" ? "new-password" : "current-password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </label>
+              )}
+              <button className="btn ghost" type="submit" disabled={signingIn}>
+                {authMode === "up" ? "Create account" : authMode === "reset" ? "Send reset email" : "Sign in"}
+              </button>
+            </form>
+
+            {authError && <div className="err">{authError}</div>}
+            {authNotice && <div className="ok">{authNotice}</div>}
+
+            <div className="row" style={{ marginTop: 12 }}>
+              {authMode === "in" ? (
+                <>
+                  <button className="linkish" type="button" onClick={() => setAuthMode("up")}>
+                    Create an account
+                  </button>
+                  <button className="linkish" type="button" onClick={() => setAuthMode("reset")}>
+                    Forgot password
+                  </button>
+                </>
+              ) : (
+                <button className="linkish" type="button" onClick={() => setAuthMode("in")}>
+                  ◂ Back to sign in
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -518,7 +625,7 @@ export default function SundayDesk() {
               {connection?.leagueId ? `League ${connection.leagueId} · ${connection.season}` : "No league connected"}
             </p>
           </div>
-          <button className="linkish" type="button" onClick={() => signOut(auth)}>
+          <button className="linkish" type="button" onClick={() => signOutEverywhere()}>
             sign out
           </button>
         </header>

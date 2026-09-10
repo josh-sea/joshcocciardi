@@ -23,7 +23,7 @@ import {
   treeFits,
 } from "./league";
 import { bestAvailable } from "./recommend";
-import { watchAuth, signOutOfDraftNight } from "./auth";
+import { redirectSettled, watchAuth, signOutOfDraftNight } from "./auth";
 import { createLeague, deleteLeague, saveDraft, saveSettings, watchLeagues } from "./store";
 import LeagueScreen from "./LeagueScreen";
 import css from "./styles";
@@ -111,6 +111,7 @@ const DraftNight = () => {
   const [availOnly, setAvailOnly] = useState(false);
 
   const [user, setUser] = useState(undefined); // undefined while auth resolves
+  const [redirectDone, setRedirectDone] = useState(false);
   const [leagues, setLeagues] = useState([]);
   // The uid whose league list has actually arrived. A boolean "loading" flag
   // can't be trusted here: on the render where auth resolves, a setState from
@@ -141,7 +142,20 @@ const DraftNight = () => {
     };
   }, []);
 
-  useEffect(() => watchAuth((u) => setUser(u || null)), []);
+  useEffect(() => {
+    let alive = true;
+    // Same reason as Sunday Desk: until the redirect leg settles, "signed out"
+    // is a guess, and guessing wrong shows the sign-in screen to someone who
+    // is mid-sign-in.
+    redirectSettled.finally(() => {
+      if (alive) setRedirectDone(true);
+    });
+    const stop = watchAuth((u) => setUser(u || null));
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, []);
 
   useEffect(() => {
     writeLS(DRAFT_KEY, JSON.stringify(localDraft));
@@ -858,7 +872,7 @@ const DraftNight = () => {
   // the draft this person is in. Showing it and then swapping it out under them
   // is worse than a beat of "restoring" — at a draft table a wrong roster reads
   // as lost work.
-  const restoring = user === undefined || listLoading;
+  const restoring = user === undefined || (!user && !redirectDone) || listLoading;
 
   const picksLeft = ROUNDS - minePlayers.length;
   const trayCounts = ["QB", "RB", "WR", "TE", "DST", "K"].filter((p) => TARGETS[p] > 0);
