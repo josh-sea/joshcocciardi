@@ -146,6 +146,56 @@ const css = `
   background:var(--panel2);color:var(--muted);font-variant-numeric:tabular-nums;}
 .dn .cnt span.filled{color:var(--chalk);}
 .dn .tray b{font-size:11.5px;color:var(--muted);font-weight:600;white-space:nowrap;}
+
+/* ---- header as a button (opens the league screen) ---- */
+.dn header .slot{background:none;border:none;padding:0;text-align:left;cursor:pointer;
+  color:inherit;font:inherit;display:flex;align-items:flex-start;gap:9px;}
+.dn header .slot span{font-size:12.5px;color:var(--muted);line-height:1.35;}
+
+/* ---- forms and buttons on the league screen ---- */
+.dn .bigbtn{width:100%;background:var(--signal);border:none;color:#161007;font:inherit;
+  font-size:14px;font-weight:800;padding:11px;border-radius:9px;cursor:pointer;margin-top:8px;}
+.dn .bigbtn.ghost{background:var(--panel2);color:var(--chalk);border:1px solid var(--line);}
+.dn .bigbtn:disabled{opacity:.5;cursor:default;}
+.dn .btnrow{display:flex;gap:8px;flex-wrap:wrap;}
+.dn .btnrow .bigbtn{flex:1;min-width:150px;}
+.dn .orrule{text-align:center;font-size:11.5px;color:var(--muted);margin:12px 0 4px;letter-spacing:.04em;}
+.dn .field{display:block;margin-top:10px;}
+.dn .flabel{display:block;font-size:10.5px;font-weight:800;color:var(--muted);
+  letter-spacing:.05em;text-transform:uppercase;margin-bottom:4px;}
+.dn .tinput{width:100%;background:#20372C;border:1px solid var(--line);border-radius:8px;
+  color:var(--chalk);font:inherit;font-size:16px;padding:9px 11px;}
+.dn .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.dn .grid2 .field{margin-top:0;}
+.dn .slotgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.dn .slotgrid .field{margin-top:0;}
+.dn .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;}
+.dn .chips button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+  font:inherit;font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:999px;cursor:pointer;}
+.dn .chips button[aria-pressed="true"]{background:var(--signal);border-color:var(--signal);color:#161007;}
+.dn .chips button:disabled{cursor:default;}
+.dn .err{margin-top:10px;font-size:13px;color:var(--alert);}
+.dn .ok{margin-top:10px;font-size:13px;color:var(--go);}
+.dn .linkrow{display:flex;gap:14px;margin-top:12px;flex-wrap:wrap;}
+.dn .linkish{background:none;border:none;padding:0;color:var(--signal);font:inherit;
+  font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:underline;}
+
+/* ---- who's signed in ---- */
+.dn .whoami{display:flex;align-items:center;gap:9px;padding:10px 0 14px;border-bottom:1px solid var(--line);margin-bottom:12px;}
+.dn .avatar{width:28px;height:28px;flex:0 0 28px;border-radius:50%;background:var(--panel2);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+  color:var(--muted);overflow:hidden;}
+.dn .avatar img{width:100%;height:100%;object-fit:cover;}
+.dn .whoname{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ---- league list ---- */
+.dn .leaguerow{display:flex;align-items:center;gap:8px;padding:9px 3px;border-bottom:1px solid var(--line);}
+.dn .leaguerow.on{background:#22190B;}
+.dn .leagueopen{flex:1;min-width:0;background:none;border:none;padding:0;text-align:left;
+  color:inherit;font:inherit;cursor:pointer;}
+.dn .leaguerow .nm{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dn .leaguerow.on .nm{color:var(--signal);}
+.dn .leaguerow .meta{font-size:11.5px;color:var(--muted);}
 `;
 
 export default css;

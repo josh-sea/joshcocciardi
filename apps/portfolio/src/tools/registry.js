@@ -54,10 +54,19 @@ const tools = [
     slug: "draft-night",
     title: "Draft Night",
     description:
-      "A live decision tree for one seat in one fantasy football draft: strike names as they go, and the board, the clock, and every downstream branch reprice themselves.",
+      "A live fantasy draft board: strike names as they go and the clock, the branches, and your roster reprice themselves. Sign in to keep several leagues, each with its own settings and draft.",
     added: "2026-09-08",
-    tech: ["React", "localStorage"],
+    tech: ["React", "Firebase Auth", "Firestore"],
     component: lazy(() => import("./draft-night")),
+  },
+  {
+    slug: "sunday-desk",
+    title: "Sunday Desk",
+    description:
+      "The in-season half of the fantasy tools: matchup and live scoring, both rosters, standings, and the waiver wire, read from a private ESPN league.",
+    added: "2026-09-10",
+    tech: ["React", "Cloud Functions", "ESPN Fantasy API"],
+    component: lazy(() => import("./sunday-desk")),
   },
 ];
 

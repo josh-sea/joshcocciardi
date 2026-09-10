@@ -23,6 +23,12 @@ exports.gatekeeperOnRequest = gatekeeper.gatekeeperOnRequest;
 const workbook = require('./workbook');
 exports.synthesizeWord = workbook.synthesizeWord;
 
+// Draft Night / Sunday Desk: ESPN Fantasy read proxy. A browser cannot attach
+// ESPN's cookies to a cross-site request, so private-league reads go through
+// here. Isolated in its own module and gated on Firebase Auth.
+const espn = require('./espn');
+exports.espnFantasy = espn.espnFantasy;
+
 // Recompute a place's aggregates from all of its reviews whenever any
 // review is created or updated. Full recount (not incremental): reviews per
 // place are small, and a recount self-heals any historical drift.

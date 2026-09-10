@@ -295,6 +295,43 @@ service cloud.firestore {
       }
     }
 
+    // ── Draft Night: fantasy draft boards ────────────────────────────────
+    // One document per league, holding both the league configuration (teams,
+    // draft slot, roster shape, scoring) and that draft's live state (`gone`
+    // and `mine`, arrays of player names). Config and state share a document
+    // so a pick and the league it belongs to can never disagree.
+    //
+    // Private to the owner: ownership is set at create and can never be
+    // reassigned. Signed-out drafters keep everything in localStorage and
+    // never touch this collection at all.
+    match /draftnight_leagues/{leagueId} {
+      // `resource == null` lets a get() on a missing league read as "not
+      // found" instead of a permissions error, the same pattern Mise uses.
+      allow read: if request.auth != null
+        && (resource == null || request.auth.uid == resource.data.ownerUid);
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // ── Draft Night: stored ESPN league credentials ──────────────────────
+    // One document per user, id == uid. Holds the league/team ids plus the
+    // espn_s2 and SWID cookies, which are what let the espnFantasy function
+    // read a private ESPN league on that user's behalf.
+    //
+    // These are full ESPN account session cookies, not scoped API keys, so
+    // this collection is owner-only in both directions and the document id is
+    // pinned to the uid — there is no query that can return someone else's.
+    // The catchall at the bottom already excludes draftnight_*; this block is
+    // what grants the owner their own access back.
+    match /draftnight_espn/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Private /work pages (apps/portfolio/src/work). Saved state for the
     // sign-in-gated tools, one document per (user, page), with the document id
     // as `{uid}__{pageKey}`.
@@ -535,6 +572,7 @@ service cloud.firestore {
         && !collection.matches('canitwo_.*')
         && !collection.matches('recipebox_.*')
         && !collection.matches('mise_.*')
+        && !collection.matches('draftnight_.*')
         && !collection.matches('gatekeeper_.*')
         && !collection.matches('collector_.*')
         && !collection.matches('workbook_.*')
