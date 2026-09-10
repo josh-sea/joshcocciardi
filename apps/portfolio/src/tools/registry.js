@@ -59,6 +59,15 @@ const tools = [
     tech: ["React", "Firebase Auth", "Firestore"],
     component: lazy(() => import("./draft-night")),
   },
+  {
+    slug: "sunday-desk",
+    title: "Sunday Desk",
+    description:
+      "The in-season half of the fantasy tools: matchup and live scoring, both rosters, standings, and the waiver wire, read from a private ESPN league.",
+    added: "2026-09-10",
+    tech: ["React", "Cloud Functions", "ESPN Fantasy API"],
+    component: lazy(() => import("./sunday-desk")),
+  },
 ];
 
 export default tools;

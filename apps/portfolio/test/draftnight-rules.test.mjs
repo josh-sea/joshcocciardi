@@ -37,6 +37,25 @@ await check("signed-out CANNOT create", assertFails(setDoc(doc(anon, COL, "L3"),
 
 await check("alice deletes her own league", assertSucceeds(deleteDoc(doc(alice, COL, "L1"))));
 
+const CRED = "draftnight_espn";
+const creds = { leagueId: "579622", teamId: "5", season: 2026, espnS2: "AEB-secret", swid: "{abc}" };
+
+console.log("\ndraftnight_espn (stored ESPN session cookies):");
+await check("alice writes her own credentials", assertSucceeds(setDoc(doc(alice, CRED, "alice"), creds)));
+await check("alice reads them back", assertSucceeds(getDoc(doc(alice, CRED, "alice"))));
+await check("alice rotates her espn_s2", assertSucceeds(updateDoc(doc(alice, CRED, "alice"), { espnS2: "new" })));
+await check("bob CANNOT read alice's cookies", assertFails(getDoc(doc(bob, CRED, "alice"))));
+await check("bob CANNOT overwrite alice's cookies", assertFails(setDoc(doc(bob, CRED, "alice"), creds)));
+await check("bob CANNOT delete alice's cookies", assertFails(deleteDoc(doc(bob, CRED, "alice"))));
+// Owner-only by document id means there is no listable query shape at all,
+// not even for the owner — which is the point for a collection of session
+// cookies.
+await check("nobody can list the credential collection", assertFails(getDocs(collection(bob, CRED))));
+await check("not even the owner can list it", assertFails(getDocs(collection(alice, CRED))));
+await check("signed-out CANNOT read credentials", assertFails(getDoc(doc(anon, CRED, "alice"))));
+await check("signed-out CANNOT write credentials", assertFails(setDoc(doc(anon, CRED, "carol"), creds)));
+await check("alice deletes her own credentials", assertSucceeds(deleteDoc(doc(alice, CRED, "alice"))));
+
 await env.cleanup();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

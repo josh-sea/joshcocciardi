@@ -318,6 +318,20 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid;
     }
 
+    // ── Draft Night: stored ESPN league credentials ──────────────────────
+    // One document per user, id == uid. Holds the league/team ids plus the
+    // espn_s2 and SWID cookies, which are what let the espnFantasy function
+    // read a private ESPN league on that user's behalf.
+    //
+    // These are full ESPN account session cookies, not scoped API keys, so
+    // this collection is owner-only in both directions and the document id is
+    // pinned to the uid — there is no query that can return someone else's.
+    // The catchall at the bottom already excludes draftnight_*; this block is
+    // what grants the owner their own access back.
+    match /draftnight_espn/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Private /work pages (apps/portfolio/src/work). Saved state for the
     // sign-in-gated tools, one document per (user, page), with the document id
     // as `{uid}__{pageKey}`.
