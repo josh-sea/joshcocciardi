@@ -347,18 +347,28 @@ export default function SundayDesk() {
           const themStarters = (themTeam?.roster || []).filter((e) => !e.bench);
           const projTotal = (roster) =>
             roster.reduce((n, e) => n + (weekPoints(e.player, activeWeek).projected || 0), 0);
+          /* ESPN populates per-player actuals well before it settles the
+             matchup's own totalPoints, so mid-week the team score sits at 0
+             while players underneath it are already scoring. Add the starters
+             up ourselves and only defer to ESPN's number when it is higher,
+             which is the finalized week. */
+          const liveTotal = (roster, reported) =>
+            Math.max(
+              typeof reported === "number" ? reported : 0,
+              roster.reduce((n, e) => n + (weekPoints(e.player, activeWeek).actual || 0), 0)
+            );
           return (
             <>
               <div className="score">
                 <div className="side">
                   <div className="tname">{meTeam?.name || "You"}</div>
-                  <div className="tpts">{num(matchup.me?.totalPoints)}</div>
+                  <div className="tpts">{num(liveTotal(meStarters, matchup.me?.totalPoints))}</div>
                   <div className="tproj">proj {num(projTotal(meStarters))}</div>
                 </div>
                 <div className="vs">vs</div>
                 <div className="side">
                   <div className="tname">{themTeam?.name || "Opponent"}</div>
-                  <div className="tpts">{num(matchup.them?.totalPoints)}</div>
+                  <div className="tpts">{num(liveTotal(themStarters, matchup.them?.totalPoints))}</div>
                   <div className="tproj">proj {num(projTotal(themStarters))}</div>
                 </div>
               </div>
