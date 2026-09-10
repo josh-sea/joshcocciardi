@@ -94,6 +94,7 @@ const css = `
 .sd .howto li{font-size:13px;color:#C9D6CD;margin-bottom:9px;line-height:1.5;}
 .sd .howto .warn{margin-top:12px;padding:10px 11px;background:#2A1A17;border-left:3px solid var(--alert);
   border-radius:6px;font-size:12.5px;color:#F0C9C4;}
+.sd .orrule{text-align:center;font-size:11.5px;color:var(--muted);margin:14px 0 2px;letter-spacing:.04em;}
 .sd footer{padding:24px 0 8px;font-size:11.5px;color:var(--muted);}
 `;
 

@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
+// Completing a redirect sign-in has to happen on whatever route the browser
+// comes back to, not just inside a lazily-loaded tool. Importing this here runs
+// its one getRedirectResult() call on every page load.
+import './lib/auth';
 import reportWebVitals from './reportWebVitals';
 import 'semantic-ui-css/semantic.min.css'
 
