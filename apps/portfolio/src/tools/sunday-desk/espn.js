@@ -13,53 +13,27 @@
 
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../lib/firebase";
+import { isBench, slotName } from "./players";
 
 const callEspn = httpsCallable(functions, "espnFantasy");
 
-export const POSITIONS = { 1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DST" };
+// Season-level reads that ESPN serves to anyone. No cookies, no proxy — which
+// is why the bye planner keeps working after an espn_s2 goes stale.
+const PUBLIC_BASE = "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons";
 
-export const SLOTS = {
-  0: "QB", 1: "TQB", 2: "RB", 3: "RB/WR", 4: "WR", 5: "WR/TE", 6: "TE",
-  7: "OP", 16: "D/ST", 17: "K", 18: "P", 19: "HC", 20: "BE", 21: "IR", 23: "FLEX",
-};
+export {
+  POSITIONS,
+  SLOTS,
+  PRO_TEAMS,
+  posName,
+  slotName,
+  teamAbbrev,
+  isBench,
+  injuryLabel,
+  weekPoints,
+  fullName,
+} from "./players";
 
-export const PRO_TEAMS = {
-  0: "FA", 1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL", 7: "DEN",
-  8: "DET", 9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV", 14: "LAR", 15: "MIA",
-  16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ", 21: "PHI", 22: "ARI",
-  23: "PIT", 24: "LAC", 25: "SF", 26: "SEA", 27: "TB", 28: "WSH", 29: "CAR",
-  30: "JAX", 33: "BAL", 34: "HOU",
-};
-
-export const posName = (id) => POSITIONS[id] || `POS ${id}`;
-export const slotName = (id) => SLOTS[id] || `slot ${id}`;
-export const teamAbbrev = (id) => PRO_TEAMS[id] || `T${id}`;
-
-export const isBench = (slotId) => slotId === 20 || slotId === 21;
-
-// ESPN spells injuries in caps with underscores.
-export const injuryLabel = (status) => {
-  if (!status || status === "ACTIVE" || status === "NORMAL") return null;
-  return String(status).replace(/_/g, " ").toLowerCase();
-};
-
-/* A player's stat array holds one entry per (week, source) pair. statSourceId
-   0 is what actually happened, 1 is ESPN's projection. Both matter: the
-   difference between them is the whole "should I start him" question. */
-export const weekPoints = (player, week) => {
-  const stats = player?.stats || [];
-  const pick = (source) =>
-    stats.find((s) => s.scoringPeriodId === week && s.statSourceId === source);
-  const actual = pick(0);
-  const projected = pick(1);
-  return {
-    actual: typeof actual?.appliedTotal === "number" ? actual.appliedTotal : null,
-    projected: typeof projected?.appliedTotal === "number" ? projected.appliedTotal : null,
-  };
-};
-
-export const fullName = (player) =>
-  player?.fullName || [player?.firstName, player?.lastName].filter(Boolean).join(" ") || "Unknown";
 
 /* Translate the callable's failures into something the UI can branch on. The
    expired-cookie case is the one that actually happens, so it gets its own
@@ -130,6 +104,46 @@ export const fetchAvailable = ({ leagueId, season, week, slotIds, limit = 60, cr
         ...(slotIds && slotIds.length ? { filterSlotIds: { value: slotIds } } : {}),
         limit,
         sortPercOwned: { sortPriority: 1, sortAsc: false },
+      },
+    },
+  });
+
+/* Bye weeks, straight from ESPN's public pro-team schedule. Returns a map of
+   proTeamId -> bye week; teams with no bye listed are simply absent. */
+export const fetchByeWeeks = async (season) => {
+  let res;
+  try {
+    res = await fetch(`${PUBLIC_BASE}/${Number(season)}?view=proTeamSchedules_wl`);
+  } catch (e) {
+    throw new EspnError("other", "Couldn't reach ESPN for the NFL schedule.");
+  }
+  if (!res.ok) throw new EspnError("other", `ESPN returned ${res.status} for the NFL schedule.`);
+  const data = await res.json();
+  const teams = data?.settings?.proTeams || [];
+  const byTeam = {};
+  teams.forEach((t) => {
+    if (t && t.id !== undefined && t.byeWeek) byTeam[t.id] = t.byeWeek;
+  });
+  if (!Object.keys(byTeam).length) {
+    throw new EspnError("other", "ESPN's schedule came back without any bye weeks in it.");
+  }
+  return byTeam;
+};
+
+/* League transaction history: the adds, drops and waiver claims everyone has
+   made. Shape varies more than the other views, so callers parse defensively. */
+export const fetchTransactions = ({ leagueId, season, creds }) =>
+  fetchViews({
+    leagueId,
+    season,
+    views: ["mTransactions2"],
+    creds,
+    filter: {
+      transactions: {
+        filterType: { value: ["WAIVER", "FREEAGENT", "ROSTER"] },
+        limit: 100,
+        offset: 0,
+        sortDate: { sortPriority: 1, sortAsc: false },
       },
     },
   });
