@@ -114,6 +114,50 @@ const css = `
 .sd .howto .warn{margin-top:12px;padding:10px 11px;background:#2A1A17;border-left:3px solid var(--alert);
   border-radius:6px;font-size:12.5px;color:#F0C9C4;}
 .sd .orrule{text-align:center;font-size:11.5px;color:var(--muted);margin:14px 0 2px;letter-spacing:.04em;}
+/* ---- Claude sidebar ---- */
+.sd.withbar{padding-right:var(--sd-barw,0px);transition:padding-right .08s linear;}
+.sd .askfab{position:fixed;right:14px;bottom:14px;z-index:60;background:var(--signal);border:none;
+  color:#161007;font:inherit;font-size:13px;font-weight:800;padding:10px 15px;border-radius:999px;
+  cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4);}
+.sd .sdbar{position:fixed;top:0;right:0;bottom:0;z-index:70;background:var(--panel);
+  border-left:1px solid var(--line);display:flex;flex-direction:column;max-width:100vw;}
+.sd .sdbar .grip{position:absolute;left:-3px;top:0;bottom:0;width:7px;cursor:col-resize;z-index:2;}
+.sd .sdbar .grip:hover{background:var(--signal);opacity:.35;}
+.sd .sdbar-head{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:1px solid var(--line);}
+.sd .sdbar-head b{font-size:14px;flex:0 0 auto;}
+.sd .sdbar-head .spend{flex:1;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.sd .sdbar-head .x{background:none;border:none;color:var(--muted);font:inherit;font-size:15px;cursor:pointer;padding:0 2px;}
+.sd .sdbar-tools{display:flex;gap:6px;padding:9px 13px 4px;flex-wrap:wrap;align-items:center;}
+.sd .msel{background:#20372C;border:1px solid var(--line);color:var(--chalk);font:inherit;
+  font-size:12.5px;padding:5px 8px;border-radius:7px;}
+.sd .chip{background:var(--panel2);border:1px solid var(--line);color:var(--muted);font:inherit;
+  font-size:11.5px;font-weight:700;padding:5px 9px;border-radius:999px;cursor:pointer;}
+.sd .chip.on{background:var(--signal);border-color:var(--signal);color:#161007;}
+.sd .chip:disabled{opacity:.4;cursor:default;}
+.sd .modelnote{padding:0 13px 8px;font-size:11px;color:var(--muted);}
+.sd .sdbar-body{flex:1;overflow-y:auto;padding:4px 13px 10px;}
+.sd .turn{margin:10px 0;}
+.sd .turn .who{font-size:10px;font-weight:800;color:var(--muted);letter-spacing:.05em;
+  text-transform:uppercase;margin-bottom:3px;}
+.sd .turn .msg{font-size:13.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;}
+.sd .turn.user .msg{background:#20372C;border-radius:8px;padding:8px 10px;}
+.sd .turn.bad .msg{color:var(--alert);}
+.sd .turn .meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;}
+.sd .tagchip{font-size:10px;color:var(--muted);background:var(--panel2);border-radius:4px;padding:2px 6px;
+  font-variant-numeric:tabular-nums;}
+.sd .caret{display:inline-block;width:7px;height:13px;background:var(--signal);margin-left:2px;
+  vertical-align:-2px;animation:sdblink 1s steps(2) infinite;}
+@keyframes sdblink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+.sd .sdbar-err{padding:8px 13px;font-size:12px;color:var(--alert);border-top:1px solid var(--line);}
+.sd .sdbar-input{display:flex;gap:7px;padding:10px 13px;border-top:1px solid var(--line);align-items:flex-end;}
+.sd .sdbar-input textarea{flex:1;background:#20372C;border:1px solid var(--line);border-radius:8px;
+  color:var(--chalk);font:inherit;font-size:14px;padding:8px 10px;resize:none;}
+.sd .sdbar-input .btn{margin-top:0;flex:0 0 auto;padding:9px 13px;}
+.sd .sdbar-foot{padding:0 13px 10px;font-size:10.5px;color:var(--muted);}
+/* On a phone the panel takes the whole screen, so there is no page left to
+   make room for — drop the gutter or the content scrolls behind nothing. */
+@media (max-width:640px){ .sd .sdbar{width:100vw !important;} .sd.withbar{padding-right:0;} }
+
 .sd footer{padding:24px 0 8px;font-size:11.5px;color:var(--muted);}
 `;
 
