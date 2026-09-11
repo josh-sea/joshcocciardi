@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODELS, ClaudeError, DEFAULT_MODEL, formatCost, listModels, modelById, streamMessage } from "./claude";
-import { looksLikeKey, maskKey, readKey, writeKey } from "./apikey";
+import { cleanKey, looksLikeKey, maskKey, readKey, writeKey } from "./apikey";
 
 // ---------------------------------------------------------------------------
 // The Claude sidebar: a chat that can see whichever tab you are looking at.
@@ -252,14 +252,16 @@ export default function Sidebar({ open, onClose, context }) {
               />
             </label>
             {keyDraft && !looksLikeKey(keyDraft) && (
-              <div className="err">That doesn't look like an Anthropic key (they start sk-ant-).</div>
+              <div className="err">
+                Anthropic keys start <b>sk-ant-</b>. Paste the whole key, including that prefix.
+              </div>
             )}
             <button
               className="btn"
               type="button"
               disabled={!looksLikeKey(keyDraft)}
               onClick={() => {
-                const v = keyDraft.trim();
+                const v = cleanKey(keyDraft);
                 writeKey(v);
                 setApiKey(v);
                 setKeyDraft("");

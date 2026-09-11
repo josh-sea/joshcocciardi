@@ -14,7 +14,7 @@ import {
   modelById,
   streamMessage,
 } from "../src/tools/sunday-desk/claude.js";
-import { looksLikeKey, maskKey } from "../src/tools/sunday-desk/apikey.js";
+import { cleanKey, looksLikeKey, maskKey } from "../src/tools/sunday-desk/apikey.js";
 
 let pass = 0, fail = 0;
 const t = (label, cond, detail) => {
@@ -68,7 +68,38 @@ console.log("\nkey validation:");
 t("accepts a plausible key", looksLikeKey("sk-ant-api03-" + "a".repeat(40)));
 t("rejects an OpenAI-style key", !looksLikeKey("sk-proj-" + "a".repeat(40)));
 t("rejects empty", !looksLikeKey(""));
+t("rejects a bare prefix with nothing after it", !looksLikeKey("sk-ant-"));
 t("mask never shows the middle", !maskKey("sk-ant-api03-SECRETSECRET1234").includes("SECRETSECRET"));
+
+/* The previous version of this check asserted a character class for the body
+   of the key, and the test used "aaaa..." — which agreed with the regex
+   instead of testing it, so a real key that contained anything else was
+   rejected in production while the suite stayed green. These cases exist so
+   that cannot happen again: the body is not ours to police. */
+const BODY_CHARS = ["+", "/", "=", ".", "~", "*", "!", "$", "%", "@", "#", "(", ")", "|", ":", ";", "?"];
+for (const ch of BODY_CHARS) {
+  t(`accepts a key whose body contains ${JSON.stringify(ch)}`,
+    looksLikeKey("sk-ant-api03-" + "a".repeat(20) + ch + "b".repeat(20)));
+}
+t("accepts an admin key", looksLikeKey("sk-ant-admin01-" + "a".repeat(40)));
+t("accepts mixed case, digits, dashes and underscores together",
+  looksLikeKey("sk-ant-api03-aB3_x-Y9" + "z".repeat(30)));
+
+/* A key pasted out of a web page arrives with passengers. Every one of these
+   is invisible in a password input, and any single one of them would both
+   fail the check and, if stored, produce an invalid HTTP header. */
+t("survives a trailing newline", looksLikeKey("sk-ant-api03-" + "a".repeat(40) + "\n"));
+t("survives surrounding spaces", looksLikeKey("  sk-ant-api03-" + "a".repeat(40) + "  "));
+t("survives a non-breaking space in the middle",
+  looksLikeKey("sk-ant-api03-" + "a".repeat(20) + "\u00A0" + "b".repeat(20)));
+t("survives a zero-width space in the middle",
+  looksLikeKey("sk-ant-api03-" + "a".repeat(20) + "\u200B" + "b".repeat(20)));
+t("survives a byte-order mark", looksLikeKey("\uFEFFsk-ant-api03-" + "a".repeat(40)));
+t("cleaning removes the passengers rather than keeping them",
+  cleanKey(" sk-ant-api03-aaa\u200Bbbb\n") === "sk-ant-api03-aaabbb");
+t("cleaning a non-string is empty, not a crash", cleanKey(null) === "" && cleanKey(undefined) === "");
+t("a cleaned key is safe to put in a header",
+  /^[\x20-\x7E]+$/.test(cleanKey("sk-ant-api03-aaa\u200Bbbb\n")));
 
 console.log("\nSSE parsing (frames deliberately split mid-chunk):");
 const frames = [
