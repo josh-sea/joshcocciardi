@@ -35,6 +35,7 @@ import {
   parseTransactions,
   requiredStarters,
 } from "./strategy";
+import Sidebar from "./Sidebar";
 import css from "./styles";
 
 // ---------------------------------------------------------------------------
@@ -105,6 +106,7 @@ export default function SundayDesk() {
   const [drops, setDrops] = useState(null);
   const [running, setRunning] = useState(null); // which report is in flight
   const [reportError, setReportError] = useState(null);
+  const [askOpen, setAskOpen] = useState(false);
 
   useEffect(() => {
     const prev = document.body.style.backgroundColor;
@@ -343,6 +345,96 @@ export default function SundayDesk() {
       setBusy(false);
     }
   };
+
+  /* What the sidebar can attach. Deliberately built from state the open tab has
+     already loaded — opening the chat never triggers a fetch, and never sends
+     data from a tab the user isn't looking at. */
+  const sidebarContext = useMemo(() => {
+    const slim = (entries) =>
+      (entries || []).map((e) => ({
+        slot: e.slot,
+        bench: e.bench,
+        name: fullName(e.player),
+        pos: posName(e.player?.defaultPositionId),
+        team: teamAbbrev(e.player?.proTeamId),
+        injury: e.player?.injuryStatus || null,
+        points: weekPoints(e.player, activeWeek),
+      }));
+    if (tab === "matchup" && matchup) {
+      const meTeam = teams.find((t) => t.id === matchup.me?.teamId);
+      const themTeam = teams.find((t) => t.id === matchup.them?.teamId);
+      return {
+        label: "Matchup",
+        payload: {
+          week: activeWeek,
+          me: { team: meTeam?.name, points: matchup.me?.totalPoints, roster: slim(meTeam?.roster) },
+          them: { team: themTeam?.name, points: matchup.them?.totalPoints, roster: slim(themTeam?.roster) },
+        },
+      };
+    }
+    if (tab === "team" && myTeam) {
+      return {
+        label: "My Team",
+        payload: {
+          week: activeWeek,
+          team: myTeam.name,
+          record: `${myTeam.wins}-${myTeam.losses}`,
+          roster: slim(myTeam.roster),
+        },
+      };
+    }
+    if (tab === "wire" && wire) {
+      return {
+        label: "Waiver Wire",
+        payload: {
+          week: activeWeek,
+          available: wire.slice(0, 60).map((r) => {
+            const p = r.player || r;
+            return {
+              name: fullName(p),
+              pos: posName(p.defaultPositionId),
+              team: teamAbbrev(p.proTeamId),
+              owned: p.ownership?.percentOwned,
+              trend: p.ownership?.percentChange,
+              points: weekPoints(p, activeWeek),
+            };
+          }),
+        },
+      };
+    }
+    if (tab === "strategy" && (byes || injuries || drops)) {
+      return {
+        label: "Strategy",
+        payload: {
+          week: activeWeek,
+          byeWeeks: byes?.weeks?.map((w) => ({
+            week: w.week,
+            severity: w.severity,
+            shortfalls: w.shortfalls,
+            off: w.off.map((e) => fullName(e.player)),
+          })),
+          injuries: injuries?.map((r) => ({
+            player: fullName(r.player),
+            status: r.player.injuryStatus,
+            candidates: r.candidates.map(fullName),
+          })),
+          drops: drops?.rows?.map((d) => fullName(d.player)),
+        },
+      };
+    }
+    if (tab === "standings" && teams.length) {
+      return {
+        label: "Standings",
+        payload: teams.map((t) => ({
+          team: t.name,
+          record: `${t.wins}-${t.losses}`,
+          pointsFor: t.pointsFor,
+          pointsAgainst: t.pointsAgainst,
+        })),
+      };
+    }
+    return { label: tab === "setup" ? "Setup" : "this tab", payload: null };
+  }, [tab, teams, matchup, myTeam, wire, byes, injuries, drops, activeWeek]);
 
   // ---- rows --------------------------------------------------------------
   const PlayerRow = ({ entry, showSlot = true }) => {
@@ -866,8 +958,14 @@ export default function SundayDesk() {
   }
 
   return (
-    <div className="sd">
+    <div className={"sd" + (askOpen ? " withbar" : "")}>
       <style>{css}</style>
+      {!askOpen && (
+        <button className="askfab" type="button" onClick={() => setAskOpen(true)}>
+          Ask Claude
+        </button>
+      )}
+      <Sidebar open={askOpen} onClose={() => setAskOpen(false)} context={sidebarContext} />
       <div className="wrap">
         <header>
           <div>
