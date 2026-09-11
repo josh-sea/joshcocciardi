@@ -16,7 +16,9 @@ import {
   EspnError,
   currentWeek,
   fetchAvailable,
+  fetchByeWeeks,
   fetchLeagueSnapshot,
+  fetchTransactions,
   fullName,
   injuryLabel,
   posName,
@@ -26,6 +28,13 @@ import {
   testConnection,
   weekPoints,
 } from "./espn";
+import {
+  byeReport,
+  dropsWorthLooking,
+  injuryReport,
+  parseTransactions,
+  requiredStarters,
+} from "./strategy";
 import css from "./styles";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +52,7 @@ const TABS = [
   ["matchup", "Matchup"],
   ["team", "My Team"],
   ["wire", "Waiver Wire"],
+  ["strategy", "Strategy"],
   ["standings", "Standings"],
   ["setup", "Setup"],
 ];
@@ -86,6 +96,15 @@ export default function SundayDesk() {
   const [wire, setWire] = useState(null);
   const [wireSlot, setWireSlot] = useState(null);
   const [wireLoading, setWireLoading] = useState(false);
+
+  // Strategy reports. Each one runs only when its button is pressed, so
+  // opening the tab costs nothing and a stale cookie can't break the page.
+  const [pool, setPool] = useState(null); // shared free-agent pool
+  const [byes, setByes] = useState(null);
+  const [injuries, setInjuries] = useState(null);
+  const [drops, setDrops] = useState(null);
+  const [running, setRunning] = useState(null); // which report is in flight
+  const [reportError, setReportError] = useState(null);
 
   useEffect(() => {
     const prev = document.body.style.backgroundColor;
@@ -188,6 +207,78 @@ export default function SundayDesk() {
   useEffect(() => {
     if (tab === "wire" && ready && wire === null && !wireLoading) loadWire(wireSlot);
   }, [tab, ready, wire, wireLoading, wireSlot, loadWire]);
+
+  // ---- strategy reports --------------------------------------------------
+  // One shared free-agent pool: both the injury and the drop report need to
+  // know who is actually claimable, and that is the expensive call.
+  const ensurePool = useCallback(async () => {
+    if (pool) return pool;
+    const data = await fetchAvailable({
+      leagueId: connection.leagueId,
+      season: connection.season,
+      week: activeWeek,
+      limit: 200,
+      creds: inlineCreds,
+    });
+    const rows = data?.players || [];
+    setPool(rows);
+    return rows;
+  }, [pool, connection, activeWeek, inlineCreds]);
+
+  const runReport = useCallback(async (name, fn) => {
+    setRunning(name);
+    setReportError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setReportError(e instanceof EspnError ? e.message : String(e.message || e));
+    } finally {
+      setRunning(null);
+    }
+  }, []);
+
+  const runByes = () =>
+    runReport("byes", async () => {
+      const byTeam = await fetchByeWeeks(connection.season);
+      const required = requiredStarters(league, myTeam?.roster);
+      setByes({
+        required,
+        weeks: byeReport({
+          roster: myTeam?.roster || [],
+          byeByProTeam: byTeam,
+          required,
+          fromWeek: activeWeek,
+        }),
+      });
+    });
+
+  const runInjuries = () =>
+    runReport("injuries", async () => {
+      const rows = await ensurePool();
+      setInjuries(injuryReport({ roster: myTeam?.roster || [], available: rows, week: activeWeek }));
+    });
+
+  const runDrops = () =>
+    runReport("drops", async () => {
+      const rows = await ensurePool();
+      const rosteredIds = new Set();
+      teams.forEach((t) => t.roster.forEach((e) => e.player && rosteredIds.add(e.player.id)));
+      const playersById = {};
+      rows.forEach((r) => {
+        const p = r.player || r;
+        if (p && p.id !== undefined) playersById[p.id] = p;
+      });
+      const payload = await fetchTransactions({
+        leagueId: connection.leagueId,
+        season: connection.season,
+        creds: inlineCreds,
+      });
+      const parsed = parseTransactions(payload, { rosteredIds });
+      setDrops({
+        parsed,
+        rows: dropsWorthLooking({ parsed, playersById, available: rows }),
+      });
+    });
 
   // ---- setup actions -----------------------------------------------------
   const handleSaveLeague = async (payload) => {
@@ -478,6 +569,156 @@ export default function SundayDesk() {
     </section>
   );
 
+  const ReportButton = ({ name, onClick, label, ran }) => (
+    <button className="btn" type="button" disabled={Boolean(running)} onClick={onClick}>
+      {running === name ? "Working…" : ran ? `Re-run ${label.toLowerCase()}` : label}
+    </button>
+  );
+
+  const strategyTab = (
+    <section>
+      <p className="muted pad">
+        Nothing here runs until you ask it to. Each report reads the league once and works out the
+        part you would otherwise have to notice yourself.
+      </p>
+      {reportError && (
+        <div className="card bad">
+          <h3>That report didn't finish</h3>
+          <p className="muted">{reportError}</p>
+        </div>
+      )}
+
+      <div className="card">
+        <h3>Bye weeks ahead</h3>
+        <p className="muted">
+          Every week one of your players is off, and whether it leaves a slot you cannot legally
+          fill. Reads ESPN's public NFL schedule, so this one keeps working even if your cookies go
+          stale.
+        </p>
+        <ReportButton name="byes" onClick={runByes} label="Check my byes" ran={Boolean(byes)} />
+        {byes && byes.weeks.length === 0 && (
+          <p className="muted" style={{ marginTop: 10 }}>
+            Nobody on your roster has a bye between now and the end of the season.
+          </p>
+        )}
+        {byes &&
+          byes.weeks.map((w) => (
+            <div key={w.week} className={"weekcard " + w.severity}>
+              <div className="wkhead">
+                <b>Week {w.week}</b>
+                <span>
+                  {w.off.length} off{w.starters ? `, ${w.starters} of them starters` : ""}
+                </span>
+              </div>
+              {w.shortfalls.length > 0 && (
+                <div className="shortfall">
+                  Can't fill: {w.shortfalls.map((x) => `${x.pos} (need ${x.need}, have ${x.have})`).join(" · ")}
+                </div>
+              )}
+              <div className="offlist">
+                {w.off.map((e, i) => (
+                  <span key={i} className={e.bench ? "off bench" : "off"}>
+                    {fullName(e.player)} <em>{posName(e.player.defaultPositionId)}</em>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+      </div>
+
+      <div className="card">
+        <h3>Injuries and who could replace them</h3>
+        <p className="muted">
+          Anyone on your roster carrying a designation, plus claimable players on the same NFL team
+          at the same position. ESPN's fantasy API has no depth chart, so treat these as a shortlist
+          to check, not a verdict.
+        </p>
+        <ReportButton name="injuries" onClick={runInjuries} label="Scan my roster" ran={Boolean(injuries)} />
+        {injuries && injuries.length === 0 && (
+          <p className="muted" style={{ marginTop: 10 }}>
+            Nobody on your roster has an injury designation right now.
+          </p>
+        )}
+        {injuries &&
+          injuries.map((row) => (
+            <div key={row.player.id} className={"weekcard " + (row.severity === "out" ? "bad" : "warn")}>
+              <div className="wkhead">
+                <b>
+                  {fullName(row.player)}{" "}
+                  <em>
+                    {posName(row.player.defaultPositionId)} · {teamAbbrev(row.player.proTeamId)}
+                  </em>
+                </b>
+                <span className="inj">{injuryLabel(row.player.injuryStatus)}</span>
+              </div>
+              {row.candidates.length === 0 ? (
+                <div className="muted" style={{ fontSize: 12.5 }}>
+                  Nobody at that position on {teamAbbrev(row.player.proTeamId)} is available in your
+                  league.
+                </div>
+              ) : (
+                row.candidates.map((c) => (
+                  <div className="prow" key={c.id}>
+                    <div className="pinfo">
+                      <div className="pname">{fullName(c)}</div>
+                      <div className="pmeta">
+                        {posName(c.defaultPositionId)} · {teamAbbrev(c.proTeamId)}
+                        {typeof c.ownership?.percentOwned === "number" &&
+                          ` · ${c.ownership.percentOwned.toFixed(0)}% rostered`}
+                      </div>
+                    </div>
+                    <div className="pts">
+                      <div className="proj">proj {num(weekPoints(c, activeWeek).projected)}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ))}
+      </div>
+
+      <div className="card">
+        <h3>Dropped and still sitting there</h3>
+        <p className="muted">
+          Players somebody in the league gave up on who nobody has claimed since.
+        </p>
+        <ReportButton name="drops" onClick={runDrops} label="Scan recent drops" ran={Boolean(drops)} />
+        {drops && drops.rows.length === 0 && (
+          <p className="muted" style={{ marginTop: 10 }}>
+            {drops.parsed.items.length > 0
+              ? "Recent drops have all been picked back up."
+              : "No drops came back for this league."}
+          </p>
+        )}
+        {drops &&
+          drops.rows.map((d) => (
+            <div className="prow" key={`${d.playerId}-${d.date}`}>
+              <div className="pinfo">
+                <div className="pname">{fullName(d.player)}</div>
+                <div className="pmeta">
+                  {posName(d.player.defaultPositionId)} · {teamAbbrev(d.player.proTeamId)}
+                  {typeof d.player.ownership?.percentOwned === "number" &&
+                    ` · ${d.player.ownership.percentOwned.toFixed(0)}% rostered`}
+                  {d.date ? ` · dropped ${new Date(d.date).toLocaleDateString()}` : ""}
+                </div>
+              </div>
+              <div className="pts">
+                <div className="proj">proj {num(weekPoints(d.player, activeWeek).projected)}</div>
+              </div>
+            </div>
+          ))}
+        {/* ESPN moves this payload around. Say so plainly rather than showing an
+            empty list that looks like a quiet league. */}
+        {drops && drops.parsed.unparsed > 0 && (
+          <p className="muted" style={{ marginTop: 10 }}>
+            {drops.parsed.unparsed} transaction {drops.parsed.unparsed === 1 ? "record" : "records"}{" "}
+            came back in a shape this tool didn't recognise. Tell me and I'll fix the parser.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+
   const standingsTab = (
     <section>
       {[...teams]
@@ -681,6 +922,8 @@ export default function SundayDesk() {
           teamTab
         ) : tab === "wire" ? (
           wireTab
+        ) : tab === "strategy" ? (
+          strategyTab
         ) : (
           standingsTab
         )}

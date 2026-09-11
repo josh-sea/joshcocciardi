@@ -89,6 +89,25 @@ const css = `
   font:inherit;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:999px;cursor:pointer;}
 .sd .chips button[aria-pressed="true"]{background:var(--signal);border-color:var(--signal);color:#161007;}
 
+/* ---- strategy report cards ---- */
+.sd .weekcard{border-left:3px solid var(--line);background:#122019;border-radius:8px;
+  padding:10px 12px;margin-top:10px;}
+.sd .weekcard.ok{border-left-color:var(--go);}
+.sd .weekcard.warn{border-left-color:var(--signal);}
+.sd .weekcard.bad{border-left-color:var(--alert);}
+.sd .wkhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  font-size:13.5px;margin-bottom:6px;flex-wrap:wrap;}
+.sd .wkhead b{font-weight:700;}
+.sd .wkhead em{font-style:normal;font-size:11.5px;color:var(--muted);font-weight:500;}
+.sd .wkhead span{font-size:11.5px;color:var(--muted);}
+.sd .shortfall{font-size:12px;color:var(--alert);font-weight:700;margin-bottom:6px;}
+.sd .offlist{display:flex;flex-wrap:wrap;gap:5px;}
+.sd .offlist .off{font-size:12px;background:var(--panel2);border-radius:5px;padding:3px 7px;}
+.sd .offlist .off em{font-style:normal;color:var(--muted);font-size:10.5px;}
+.sd .offlist .off.bench{opacity:.55;}
+.sd .weekcard .prow{border-bottom-color:#1A2E24;}
+.sd .weekcard .prow:last-child{border-bottom:none;}
+
 .sd .howto h4{margin:0 0 6px;font-size:14px;}
 .sd .howto ol{margin:10px 0 0;padding-left:20px;}
 .sd .howto li{font-size:13px;color:#C9D6CD;margin-bottom:9px;line-height:1.5;}
