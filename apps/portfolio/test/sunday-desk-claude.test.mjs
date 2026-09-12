@@ -14,7 +14,7 @@ import {
   modelById,
   streamMessage,
 } from "../src/tools/sunday-desk/claude.js";
-import { cleanKey, looksLikeKey, maskKey } from "../src/tools/sunday-desk/apikey.js";
+import { cleanKey, describeKey, looksLikeKey, maskKey } from "../src/tools/sunday-desk/apikey.js";
 
 let pass = 0, fail = 0;
 const t = (label, cond, detail) => {
@@ -100,6 +100,23 @@ t("cleaning removes the passengers rather than keeping them",
 t("cleaning a non-string is empty, not a crash", cleanKey(null) === "" && cleanKey(undefined) === "");
 t("a cleaned key is safe to put in a header",
   /^[\x20-\x7E]+$/.test(cleanKey("sk-ant-api03-aaa\u200Bbbb\n")));
+
+/* describeKey exists so a refused key can be diagnosed from a phone, where the
+   field is a row of identical dots. It must say enough to tell the cases apart
+   and never enough to reconstruct the key. */
+const REAL = "sk-ant-api03-" + "x".repeat(90);
+t("describe reports the cleaned length", describeKey(REAL).length === REAL.length);
+t("describe reports the leading characters", describeKey(REAL).prefix === "sk-ant-");
+t("describe counts what it stripped", describeKey(" sk-ant-api03-aa\u200Bbb ").stripped === 3);
+t("describe reports nothing stripped when nothing was", describeKey(REAL).stripped === 0);
+t("describe never returns more than 7 characters of the key",
+  describeKey(REAL).prefix.length <= 7);
+t("describe cannot leak the body of the key",
+  !describeKey(REAL).prefix.includes("x") && !JSON.stringify(describeKey(REAL)).includes("xxxx"));
+t("describe shows a wrong prefix so it can be seen",
+  describeKey("hunter2hunter2hunter2").prefix === "hunter2");
+t("describe on empty input is zeroed, not a crash",
+  describeKey("").length === 0 && describeKey(null).length === 0 && describeKey(null).prefix === "");
 
 console.log("\nSSE parsing (frames deliberately split mid-chunk):");
 const frames = [
