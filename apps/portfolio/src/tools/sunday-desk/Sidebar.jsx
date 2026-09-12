@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MODELS, ClaudeError, DEFAULT_MODEL, formatCost, listModels, modelById, streamMessage } from "./claude";
-import { cleanKey, looksLikeKey, maskKey, readKey, writeKey } from "./apikey";
+import { cleanKey, describeKey, looksLikeKey, maskKey, readKey, writeKey } from "./apikey";
 
 // ---------------------------------------------------------------------------
 // The Claude sidebar: a chat that can see whichever tab you are looking at.
@@ -34,6 +34,7 @@ export default function Sidebar({ open, onClose, context }) {
   const [width, setWidth] = useState(readWidth);
   const [apiKey, setApiKey] = useState(readKey);
   const [keyDraft, setKeyDraft] = useState("");
+  const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [available, setAvailable] = useState(null); // null = not checked yet
   const [checking, setChecking] = useState(false);
@@ -48,6 +49,7 @@ export default function Sidebar({ open, onClose, context }) {
   const scrollRef = useRef(null);
 
   const sessionCost = useMemo(() => turns.reduce((n, t) => n + (t.cost || 0), 0), [turns]);
+  const keyStat = useMemo(() => describeKey(keyDraft), [keyDraft]);
 
   useEffect(() => {
     try {
@@ -242,29 +244,54 @@ export default function Sidebar({ open, onClose, context }) {
             </p>
             <label className="field">
               <span className="flabel">API key</span>
+              {/* autoComplete/name matter more than they look: Safari offers to
+                  fill a saved site password into any type=password field, which
+                  on a phone is indistinguishable from your own paste. */}
               <input
                 className="input mono"
-                type="password"
+                type={showKey ? "text" : "password"}
                 value={keyDraft}
                 placeholder="sk-ant-..."
                 spellCheck="false"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                name="anthropic-api-key"
                 onChange={(e) => setKeyDraft(e.target.value)}
               />
             </label>
-            {keyDraft && !looksLikeKey(keyDraft) && (
-              <div className="err">
-                Anthropic keys start <b>sk-ant-</b>. Paste the whole key, including that prefix.
+            <div className="keyrow">
+              <button type="button" className="linkish" onClick={() => setShowKey((v) => !v)}>
+                {showKey ? "Hide" : "Show"}
+              </button>
+              {keyDraft ? (
+                <button type="button" className="linkish" onClick={() => setKeyDraft("")}>
+                  Clear
+                </button>
+              ) : null}
+              {keyDraft ? (
+                <span className="keystat">
+                  {keyStat.length} chars, starts “{keyStat.prefix}”
+                  {keyStat.stripped > 0 ? `, ${keyStat.stripped} invisible removed` : ""}
+                </span>
+              ) : null}
+            </div>
+            {keyDraft && !looksLikeKey(keyDraft) ? (
+              <div className="hintline">
+                That doesn't match the usual <b>sk-ant-…</b> shape. Save it and try anyway —
+                Anthropic decides whether a key works, not this check.
               </div>
-            )}
+            ) : null}
             <button
               className="btn"
               type="button"
-              disabled={!looksLikeKey(keyDraft)}
+              disabled={!cleanKey(keyDraft)}
               onClick={() => {
                 const v = cleanKey(keyDraft);
                 writeKey(v);
                 setApiKey(v);
                 setKeyDraft("");
+                setShowKey(false);
                 setAvailable(null);
               }}
             >

@@ -37,15 +37,29 @@ const INVISIBLE = /[\s\u00A0\u200B-\u200D\u2060\uFEFF]/g;
 
 export const cleanKey = (v) => (typeof v === "string" ? v.replace(INVISIBLE, "") : "");
 
+/* Non-secret facts about whatever is sitting in the input box. On a phone the
+   field is a row of identical dots, so when a key is refused there is no way
+   to tell a paste that never landed from autofill getting there first from
+   something invisible riding along. Length, the leading characters and the
+   count of stripped characters separate those cases, and none of them give
+   away the key itself. */
+export const describeKey = (v) => {
+  const raw = typeof v === "string" ? v : "";
+  const clean = cleanKey(raw);
+  return { length: clean.length, prefix: clean.slice(0, 7), stripped: raw.length - clean.length };
+};
+
 /* What this checks, and deliberately does not.
  *
- * It asserts the `sk-ant-` prefix, which is documented and stable, and a
- * plausible length. It does NOT police which characters the rest of the key
- * may contain. An earlier version did, with a guessed character class, and it
- * rejected a real key — locking someone out of their own tool with no way
- * past the check. A local regex cannot know more about a key than the server
- * that issued it, so anything with the right prefix is allowed through and
- * Anthropic's 401 is the authority on whether it actually works. */
+ * This is a HINT, not a gate. Nothing in the UI may refuse to save a key
+ * because this returned false.
+ *
+ * Two earlier versions of this function each blocked saving on a guess about
+ * the key format — first a character class for the body, then the prefix —
+ * and each one rejected a real key with no way past it. A check that runs
+ * here cannot know more about a key than the server that issued it, so it has
+ * no business having a veto. Anthropic's 401 is the authority; this only
+ * decides whether to show a gentle "that looks unusual" note. */
 export const looksLikeKey = (v) => /^sk-ant-.{16,}$/.test(cleanKey(v));
 
 export const maskKey = (v) => {

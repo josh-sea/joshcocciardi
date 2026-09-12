@@ -115,6 +115,11 @@ const css = `
   border-radius:6px;font-size:12.5px;color:#F0C9C4;}
 .sd .orrule{text-align:center;font-size:11.5px;color:var(--muted);margin:14px 0 2px;letter-spacing:.04em;}
 /* ---- Claude sidebar ---- */
+.sd .keyrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:7px 0 2px;}
+.sd .linkish{background:none;border:none;padding:0;color:var(--signal);font:inherit;font-size:12px;
+  font-weight:700;cursor:pointer;text-decoration:underline;}
+.sd .keystat{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.sd .hintline{margin-top:7px;font-size:12px;color:var(--signal);line-height:1.45;}
 .sd.withbar{padding-right:var(--sd-barw,0px);transition:padding-right .08s linear;}
 .sd .askfab{position:fixed;right:14px;bottom:14px;z-index:60;background:var(--signal);border:none;
   color:#161007;font:inherit;font-size:13px;font-weight:800;padding:10px 15px;border-radius:999px;
