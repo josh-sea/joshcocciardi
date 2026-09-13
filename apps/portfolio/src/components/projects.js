@@ -105,6 +105,13 @@ const tools = [
 // ── Games, toys and experiments ──────────────────────────────────────────────
 const playthings = [
   {
+    title: "🎟️ Ticket Book: Disney Trivia",
+    description:
+      "A book of 140 Disney trivia tickets across seven rounds, from classic animation to the theme parks. Tap a ticket to flip it and see the answer, call yourself right or wrong, and tear through the book one question at a time.",
+    tech: ["JavaScript", "CSS 3D transforms", "HTML5"],
+    link: "/projects/disney-trivia",
+  },
+  {
     title: "💀 Dead Net",
     description:
       "Dead Internet Theory as a Grateful Dead fan forum: every thread, reply and reaction is posted by a bot, and you're the only human in the room.",
