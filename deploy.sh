@@ -186,6 +186,7 @@ deploy_hosting() {
     echo "  PSX Station:    https://www.joshcocciardi.com/projects/psx"
     echo "  Solra Trainer:  https://www.joshcocciardi.com/projects/solra"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
+    echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
 
