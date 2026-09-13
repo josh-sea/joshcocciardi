@@ -42,6 +42,30 @@
 
   /* ---- masthead ---- */
   header { margin-bottom: 16px; }
+  .masthead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .sound {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 40px; height: 40px;
+    margin-top: 2px;
+    padding: 0;
+    color: #CFC3E8;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .sound svg { width: 19px; height: 19px; display: block; }
+  .sound .off { display: none; }
+  .sound[aria-pressed="false"] { color: #8E80AE; }
+  .sound[aria-pressed="false"] .on { display: none; }
+  .sound[aria-pressed="false"] .off { display: block; }
   .mark {
     font-family: var(--display);
     font-size: clamp(28px, 8.5vw, 40px);
@@ -92,7 +116,8 @@
     background: #EDE7F7;
     border-color: #EDE7F7;
   }
-  .chip:focus-visible, .btn:focus-visible, .ticket:focus-visible, .verdict button:focus-visible {
+  .chip:focus-visible, .btn:focus-visible, .ticket:focus-visible,
+  .verdict button:focus-visible, .sound:focus-visible {
     outline: 3px solid var(--gold);
     outline-offset: 3px;
   }
@@ -335,7 +360,13 @@
 
 <div class="wrap">
   <header>
-    <h1 class="mark">Ticket book<span>Disney trivia</span></h1>
+    <div class="masthead">
+      <h1 class="mark">Ticket book<span>Disney trivia</span></h1>
+      <button class="sound" id="sound" aria-pressed="true" aria-label="Turn sound off">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/></svg>
+      </button>
+    </div>
     <p class="sub">Tap a ticket to reveal the answer. Every question comes up once, then the book is spent.</p>
   </header>
 
@@ -520,6 +551,128 @@ const Q = [
   ["mu","Which ride is famous for a song about a small world?","“it's a small world”"]
 ];
 
+/* ---- sound ----------------------------------------------------------------
+ * Every effect is synthesised from oscillators and filtered noise, so there
+ * are no audio files to ship, cache or license. Solra next door does the same
+ * thing for its tones. The context is not built until the first gesture,
+ * because browsers refuse to start one before that anyway.
+ */
+const SOUND_KEY = "disneyTrivia.sound";
+let audio = null;
+let master = null;
+let gestured = false;
+let sound = true;
+try { sound = localStorage.getItem(SOUND_KEY) !== "off"; } catch (e) { /* private mode */ }
+
+function ac() {
+  if (!audio) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audio = new AC();
+    master = audio.createGain();
+    master.gain.value = 0.5;
+    master.connect(audio.destination);
+  }
+  if (audio.state === "suspended") audio.resume();
+  return audio;
+}
+
+// One bell partial: blooms in a few milliseconds, then rings out.
+function tone(freq, at, dur, level, type) {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime + at;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  o.type = type || "sine";
+  o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(level, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+
+// A burst of noise swept through a bandpass: paper, air, anything textured.
+function noise(at, dur, level, from, to, q) {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime + at;
+  const n = Math.floor(c.sampleRate * dur);
+  const buf = c.createBuffer(1, n, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const f = c.createBiquadFilter();
+  f.type = "bandpass";
+  f.Q.value = q;
+  f.frequency.setValueAtTime(from, t);
+  f.frequency.exponentialRampToValueAtTime(to, t + dur);
+  const g = c.createGain();
+  g.gain.value = level;
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t);
+}
+
+const SFX = {
+  // Wand flick: high blips scattered up a C major arpeggio over a breath of
+  // air, detuned a little each time so repeats never sound identical. Timed to
+  // land with the sheen sweeping across the answer.
+  reveal() {
+    [2093, 2637, 3136, 3520, 4186].forEach((f, i) =>
+      tone(f * (0.98 + Math.random() * 0.04), 0.10 + 0.035 * i, 0.5 - 0.05 * i, 0.10));
+    noise(0.08, 0.45, 0.06, 900, 7000, 0.7);
+  },
+  // Got it: a bright major triad with a shimmer on top.
+  right() {
+    [1046.5, 1318.5, 1568].forEach((f, i) => tone(f, 0.055 * i, 0.55, 0.15));
+    tone(2093, 0.17, 0.6, 0.055);
+  },
+  // Missed it: two soft notes stepping down. A trivia book for kids does not
+  // need a buzzer.
+  wrong() {
+    tone(392, 0, 0.3, 0.12, "triangle");
+    tone(311.1, 0.105, 0.45, 0.10, "triangle");
+  },
+  // The perforation giving way as the ticket comes out of the book.
+  tear() { noise(0, 0.2, 0.24, 2600, 500, 1.1); },
+  // Book spent: a four-note climb with a sparkle tail.
+  spent() {
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.09 * i, 0.85, 0.14));
+    [1568, 2093, 2637].forEach((f, i) => tone(f, 0.42 + 0.07 * i, 0.7, 0.07));
+  },
+  // Riffling to a fresh round.
+  riffle() {
+    for (let i = 0; i < 4; i++) noise(0.045 * i, 0.07, 0.17, 3200, 1400, 1.6);
+  }
+};
+
+function play(name) {
+  if (!sound || !gestured) return;
+  // Audio is a garnish: a device that will not give us a context still gets
+  // to play the game.
+  try { SFX[name](); } catch (e) { /* no audio here */ }
+}
+
+// Build and resume the context inside the very first gesture, so the first
+// effect is not swallowed by the autoplay policy.
+const wake = () => { gestured = true; ac(); };
+document.addEventListener("pointerdown", wake, { once: true });
+document.addEventListener("keydown", wake, { once: true });
+
+const soundBtn = document.getElementById("sound");
+function drawSound() {
+  soundBtn.setAttribute("aria-pressed", String(sound));
+  soundBtn.setAttribute("aria-label", sound ? "Turn sound off" : "Turn sound on");
+}
+soundBtn.onclick = () => {
+  sound = !sound;
+  try { localStorage.setItem(SOUND_KEY, sound ? "on" : "off"); } catch (e) { /* private mode */ }
+  drawSound();
+  play("right"); // a confirmation you can hear, when you have just turned it on
+};
+drawSound();
+
 // ---- state ----
 let filter = "all";
 let pool = [];
@@ -547,8 +700,9 @@ function startBook(cat) {
   pool = shuffle(pick(cat));
   seen = 0; right = 0; wrong = 0;
   spent = false;
+  play("riffle");
   drawChips();
-  nextTicket();
+  nextTicket(true);
 }
 
 function drawChips() {
@@ -565,9 +719,10 @@ function drawChips() {
   });
 }
 
-function nextTicket() {
+function nextTicket(dealt) {
   ticket.classList.remove("flipped");
   marked = null;
+  if (!dealt) play("tear");
   const draw = () => {
     if (pool.length === 0) { renderDone(); return; }
     current = pool.pop();
@@ -613,6 +768,7 @@ function mark(v) {
   if (marked === "wrong") wrong--;
   marked = v;
   v === "right" ? right++ : wrong++;
+  play(v);
   ticket.querySelectorAll(".verdict button").forEach(b => {
     b.dataset.marked = (b.dataset.v === v);
   });
@@ -622,6 +778,7 @@ function mark(v) {
 function renderDone() {
   const total = pick(filter).length;
   spent = true;
+  play("spent");
   ticket.classList.remove("flipped");
   ticket.dataset.revealed = "0";
   ticket.innerHTML = '<div class="face front" style="--stock:#EDE7F7">' +
@@ -648,7 +805,9 @@ function esc(s) { return s.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", 
 function flip() {
   if (!ticket.querySelector(".back")) return;
   ticket.classList.toggle("flipped");
-  ticket.dataset.revealed = ticket.classList.contains("flipped") ? "1" : "0";
+  const revealed = ticket.classList.contains("flipped");
+  ticket.dataset.revealed = revealed ? "1" : "0";
+  if (revealed) play("reveal");
 }
 
 ticket.addEventListener("click", flip);
