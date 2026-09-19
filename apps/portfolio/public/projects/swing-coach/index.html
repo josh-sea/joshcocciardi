@@ -648,9 +648,31 @@ function findPhases(series) {
   let setupStart = setupEnd;
   while (setupStart > 0 && t[setupEnd] - t[setupStart] < 0.7) setupStart--;
 
-  const load = peakIndex(series.separation.map(Math.abs), setupStart, contact);
+  // How turned he already is before anything happens. Taken from the earliest
+  // readable frames rather than the stretch just before launch, because a load
+  // almost always lands inside that last second and would contaminate it.
+  let earlyEnd = 0;
+  while (earlyEnd < t.length - 1 && t[earlyEnd] - t[0] < 0.3) earlyEnd++;
+  const startSep = median(series.separation.slice(0, earlyEnd + 1));
 
-  return { setupStart, setupEnd, launch, load, contact, finish, peak };
+  // How much he winds up: the range the shoulders travel against the hips
+  // between the first frame we can read and the moment the hands go. A range
+  // rather than a difference from some "setup" value, so it does not matter
+  // when during the window he actually loads.
+  let coilMin = Infinity, coilMax = -Infinity;
+  let load = -1, loadDev = -Infinity;
+  for (let i = 0; i <= launch; i++) {
+    const v = series.separation[i];
+    if (!Number.isFinite(v)) continue;
+    if (v < coilMin) coilMin = v;
+    if (v > coilMax) coilMax = v;
+    const dev = Math.abs(v - startSep);
+    if (dev > loadDev) { loadDev = dev; load = i; }
+  }
+  const coilRange = coilMax >= coilMin ? coilMax - coilMin : NaN;
+  if (load < 0) load = setupEnd;
+
+  return { setupStart, setupEnd, launch, load, contact, finish, peak, startSep, coilRange };
 }
 
 /** A representative value for a metric across the setup window. */
@@ -806,15 +828,28 @@ const CHECKS = [
     label: "Coil",
     views: ["face", "line"],
     run(s, p, T) {
-      const atSetup = median(s.separation.slice(p.setupStart, p.setupEnd + 1));
-      const atLoad = s.separation[p.load];
-      if (!Number.isFinite(atSetup) || !Number.isFinite(atLoad)) return null;
-      const v = Math.abs(atLoad - atSetup);
-      const status = v >= T.separation ? "good" : v >= T.separation * 0.6 ? "fix" : "bad";
+      const wound = p.coilRange;
+      if (!Number.isFinite(wound)) return null;
+      const preset = Math.abs(p.startSep);
+      const status = wound >= T.separation ? "good" : wound >= T.separation * 0.6 ? "fix" : "bad";
+
+      // Two opposite faults both land on a low number, and they need opposite
+      // coaching. Somebody who sets up already turned has to start quieter,
+      // not turn more — telling him to turn more makes it worse.
+      const prewound = status !== "good" && Number.isFinite(preset) && preset >= T.separation * 0.6;
+
+      if (prewound) {
+        return {
+          status,
+          value: `${fmt(wound)}° added`,
+          detail: `Your shoulders only turned ${fmt(wound)}° further against your hips during the load, but they were already ${fmt(preset)}° round on your hips in the stance. The stretch only counts if it is fresh: hold it from the moment you step in and the spring has gone by the time you swing. Want at least ${T.separation}° of turn made during the load.`,
+          cue: "You are starting out already turned. Set up quieter, then make the turn as the pitch comes.",
+        };
+      }
       return {
         status,
-        value: `${fmt(v)}°`,
-        detail: `Your shoulders turned ${fmt(v)}° further than your hips before the swing started. Want at least ${T.separation}°. This is the stretch that makes the swing, not arm strength.`,
+        value: `${fmt(wound)}°`,
+        detail: `Your shoulders turned ${fmt(wound)}° against your hips between your stance and the start of the swing. Want at least ${T.separation}°. This is the stretch that makes the swing, not arm strength.`,
         cue: status === "good"
           ? "Good coil. Your shoulders turned against your hips."
           : "Turn your shoulders back while your hips stay quiet. You need to stretch against yourself before you swing.",

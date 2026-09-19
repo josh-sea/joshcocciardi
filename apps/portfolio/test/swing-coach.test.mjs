@@ -47,6 +47,7 @@ const DEFAULTS = {
   hipPeak: 1.500,   // hips reach top speed here
   shPeak: 1.555,    // shoulders 55 ms later, which is the order we want
   coil: -38,        // shoulder turn away from the target during the load
+  presetCoil: 0,    // shoulder turn already present in the stance
   lean: 14,         // forward hinge at the hips
   stance: 0.44,     // metres between the ankles, against 0.40 of shoulder
   handsUp: 0.05,
@@ -56,7 +57,7 @@ const DEFAULTS = {
 
 function bodyAt(t, o) {
   const hipYaw  = ramp(t, 1.00, 0.09, 0, -12) + ramp(t, o.hipPeak, 0.045, 0, 67);
-  const shYaw   = ramp(t, 1.00, 0.09, 0, o.coil) + ramp(t, o.shPeak, 0.050, 0, 78);
+  const shYaw   = o.presetCoil + ramp(t, 1.00, 0.09, 0, o.coil) + ramp(t, o.shPeak, 0.050, 0, 78);
   const handAng = ramp(t, 1.00, 0.09, 0, -50) + ramp(t, 1.600, 0.050, 0, 150);
   const frontOff = ramp(t, 1.52, 0.05, 0.14, o.frontStraight ? 0.005 : 0.13);
   const headDx  = ramp(t, 1.55, 0.08, 0, o.drift);
@@ -167,6 +168,35 @@ g = byId(report);
 check("no hinge is caught", g.posture.status === "fix", g.posture.value);
 check("the cue says to hinge", /hinge/i.test(g.posture.cue));
 
+console.log("\n── already wound up in the stance, adds almost nothing ──");
+// The fault the delta was always meant to catch, but it has to say the
+// opposite of what a hitter who never turns is told.
+({ report } = run(30, { presetCoil: 45, coil: -3 }));
+g = byId(report);
+console.log(`    [${g.separation.status}] ${g.separation.value} — ${g.separation.cue}`);
+check("a pre-wound stance still grades badly", g.separation.status !== "good", g.separation.value);
+check("but it is told to start quieter, not to turn more", /already turned|quieter/i.test(g.separation.cue));
+check("and is not told to turn more", !/Turn your shoulders back/i.test(g.separation.cue));
+check("the detail names how round the stance already was", /in the stance/.test(g.separation.detail));
+
+console.log("\n── sets up open, closes into the load ──");
+// The old code took the most-wound frame as the largest separation of any
+// sign, which for this hitter sits in his stance, so the coil read as zero.
+({ series, phases, report } = run(30, { presetCoil: 45, coil: -30 }));
+g = byId(report);
+console.log(`    coil ${g.separation.value}, load frame at ${series.t[phases.load].toFixed(2)}s, launch at ${series.t[phases.launch].toFixed(2)}s`);
+check("the wind-up is measured, not collapsed to zero", g.separation.status !== "bad", g.separation.value);
+// 24°, not the 18° of the load alone: by the launch frame the hips have
+// already begun to fire, and that transition is where coil genuinely peaks.
+check("it lands near the modelled 24°", Math.abs(phases.coilRange - 24) < 4, `${phases.coilRange.toFixed(1)}°`);
+check("the most-wound frame is not back inside the stance", phases.load > phases.setupStart);
+
+console.log("\n── a load that happens late, inside the old setup window ──");
+// A real load lands in the second before the swing, which is exactly where a
+// setup baseline would sit. Measuring a range instead makes that harmless.
+({ phases, report } = run(30, { coil: -38, shPeak: 1.555 }));
+check("a late load is still seen in full", byId(report).separation.status === "good", byId(report).separation.value);
+
 console.log("\n── camera down the line ──");
 cfg.view = "line";
 ({ report } = run(30));
@@ -182,8 +212,15 @@ g = byId(report);
 check("hand position and back elbow are switched off for golf", !g.hands && !g.backElbow);
 check("and are not reported as sitting out either", !report.skipped.includes("Hand position"));
 check("a 32° hinge is right for golf", g.posture.status === "good", g.posture.value);
-check("golf asks for more coil than baseball", g.separation.status !== "good", g.separation.value);
 cfg.sport = "baseball";
+// One swing, sitting between the two bars: baseball wants 22°, golf wants 30°.
+const bbCoil = run(30, { coil: -32 });
+cfg.sport = "golf";
+const gfCoil = run(30, { coil: -32, lean: 32 });
+cfg.sport = "baseball";
+check("the same coil clears baseball's bar but not golf's",
+  byId(bbCoil.report).separation.status === "good" && byId(gfCoil.report).separation.status !== "good",
+  `${byId(bbCoil.report).separation.value} baseball vs ${byId(gfCoil.report).separation.value} golf`);
 
 console.log("\n── a lefty ──");
 cfg.hand = "left";
