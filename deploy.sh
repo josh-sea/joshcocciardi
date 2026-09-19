@@ -161,6 +161,13 @@ build_solra() {
 }
 
 build_portfolio() {
+    # Swing Coach ships as a single static page inside public/, with its swing
+    # geometry inlined. The suite lifts that engine out of the page and runs
+    # synthetic swings through it. Dependency-free, so always run it.
+    log "Testing Swing Coach..."
+    cd "$PORTFOLIO_DIR"
+    node test/swing-coach.test.mjs || fail "Swing Coach tests failed"
+
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
     npm run build || fail "Portfolio build failed"
@@ -187,6 +194,7 @@ deploy_hosting() {
     echo "  Solra Trainer:  https://www.joshcocciardi.com/projects/solra"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
+    echo "  Swing Coach:    https://www.joshcocciardi.com/projects/swing-coach"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
 

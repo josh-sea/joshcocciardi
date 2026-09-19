@@ -105,6 +105,13 @@ const tools = [
 // ── Games, toys and experiments ──────────────────────────────────────────────
 const playthings = [
   {
+    title: "⚾ Swing Coach",
+    description:
+      "Point a camera at a swing and a pose model reads the body 30 times a second: stance width, knee bend, spine angle, how far the head travels, whether the hips start the swing before the shoulders, and whether you finish on balance. It talks you through the fixes out loud while you hit, or breaks down a clip you upload frame by frame. The model runs in the tab, so no video ever leaves the phone.",
+    tech: ["JavaScript", "MediaPipe BlazePose", "WebAssembly", "Canvas API", "Web Speech API", "getUserMedia"],
+    link: "/projects/swing-coach",
+  },
+  {
     title: "🎟️ Ticket Book: Disney Trivia",
     description:
       "A book of 140 Disney trivia tickets across seven rounds, from classic animation to the theme parks. Tap a ticket to flip it and see the answer, call yourself right or wrong, and tear through the book one question at a time.",

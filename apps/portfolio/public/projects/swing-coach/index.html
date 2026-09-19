@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Swing Coach</title>
+<meta name="description" content="A batting and golf swing coach that runs entirely in your browser. Point a camera at the swing, or upload a clip, and it reads your body position and talks you through the fixes.">
+<meta name="theme-color" content="#0E1A14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%BE%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  :root {
+    --night: #0E1A14;
+    --night-2: #0A120E;
+    --panel: #15241C;
+    --panel-2: #1B2E24;
+    --line: rgba(255,255,255,0.10);
+    --line-2: rgba(255,255,255,0.18);
+    --text: #E8F2EC;
+    --text-dim: #9DB3A7;
+    --chalk: #F4F7F5;
+    --good: #4ADE80;
+    --fix: #FBBF24;
+    --bad: #F87171;
+    --unknown: #7C8F85;
+    --accent: #FF6B3D;
+    --display: "Barlow Condensed", "Oswald", Impact, sans-serif;
+    --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  html { min-height: 100%; background: var(--night-2); }
+  body { min-height: 100%; }
+  body {
+    margin: 0;
+    padding: 16px 14px calc(40px + env(safe-area-inset-bottom));
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text);
+    background:
+      radial-gradient(900px 500px at 50% -15%, #1C3327 0%, rgba(28,51,39,0) 62%),
+      linear-gradient(180deg, var(--night) 0%, var(--night-2) 100%);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .wrap { max-width: 720px; margin: 0 auto; }
+
+  /* ---------- masthead ---------- */
+  header { margin-bottom: 18px; }
+  .masthead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(34px, 10vw, 54px);
+    line-height: 0.92;
+    letter-spacing: 0.005em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--chalk);
+  }
+  h1 em { font-style: normal; display: block; color: var(--accent); }
+  .tagline { margin: 10px 0 0; color: var(--text-dim); font-size: 14px; max-width: 46ch; }
+  .iconbtn {
+    flex: 0 0 auto; display: grid; place-items: center;
+    width: 44px; height: 44px; margin-top: 4px; padding: 0;
+    color: var(--text); background: rgba(255,255,255,0.06);
+    border: 1px solid var(--line); border-radius: 50%; cursor: pointer;
+  }
+  .iconbtn svg { width: 20px; height: 20px; display: block; }
+  .iconbtn[aria-pressed="false"] { color: #5F7368; }
+  .iconbtn .on { display: block; } .iconbtn .off { display: none; }
+  .iconbtn[aria-pressed="false"] .on { display: none; }
+  .iconbtn[aria-pressed="false"] .off { display: block; }
+
+  /* ---------- panels ---------- */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .panel h2 {
+    font-family: var(--display);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 15px;
+    margin: 0 0 10px;
+    color: var(--text-dim);
+  }
+
+  /* ---------- segmented controls ---------- */
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  .field > label {
+    display: block; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--text-dim); margin-bottom: 6px;
+  }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button {
+    flex: 1 1 auto; min-width: 0;
+    padding: 10px 8px;
+    font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--text-dim);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .seg button[aria-pressed="true"] {
+    color: #0E1A14; background: var(--chalk); border-color: var(--chalk);
+  }
+  .seg button small { display: block; font-weight: 500; font-size: 11px; opacity: 0.75; }
+
+  .hint { font-size: 12.5px; color: var(--text-dim); margin: 8px 0 0; }
+
+  /* ---------- stage ---------- */
+  .stage {
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #060B08;
+    border: 1px solid var(--line);
+    aspect-ratio: 3 / 4;
+    margin-bottom: 14px;
+  }
+  .stage.wide { aspect-ratio: 16 / 9; }
+  .stage video, .stage canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .stage video { opacity: 0; }          /* the canvas paints the frame */
+  .stage.mirror video, .stage.mirror canvas { transform: scaleX(-1); }
+
+  .stage-empty {
+    position: absolute; inset: 0;
+    display: grid; place-content: center; gap: 8px;
+    text-align: center; padding: 24px;
+    color: var(--text-dim); font-size: 14px;
+  }
+  .stage-empty strong { display: block; color: var(--text); font-size: 16px; }
+
+  .cue {
+    position: absolute; left: 10px; right: 10px; bottom: 10px;
+    background: rgba(6,11,8,0.82);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--line-2);
+    border-radius: 12px;
+    padding: 11px 13px;
+    font-size: 15px; font-weight: 600;
+    line-height: 1.35;
+    opacity: 0; transform: translateY(6px);
+    transition: opacity .18s, transform .18s;
+    pointer-events: none;
+  }
+  .cue.show { opacity: 1; transform: none; }
+  .cue span { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
+
+  .pill {
+    position: absolute; top: 10px; left: 10px;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(6,11,8,0.78);
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    padding: 6px 12px 6px 10px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--unknown); flex: 0 0 auto; }
+  .dot.live { background: var(--bad); animation: pulse 1.6s ease-in-out infinite; }
+  .dot.ready { background: var(--good); }
+  .dot.busy { background: var(--fix); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+  .fps {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(6,11,8,0.78);
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    padding: 6px 11px;
+    font-size: 11px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+  }
+
+  /* ---------- buttons ---------- */
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .btn {
+    flex: 1 1 160px;
+    padding: 14px 16px;
+    font: inherit; font-size: 15px; font-weight: 700;
+    letter-spacing: 0.01em;
+    border-radius: 12px;
+    border: 1px solid var(--line-2);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #180A05; }
+  .btn:disabled { opacity: 0.42; cursor: default; }
+  .btn.ghost { flex: 0 1 auto; background: transparent; }
+
+  .filewrap { position: relative; flex: 1 1 160px; }
+  .filewrap input[type=file] { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+  .filewrap .btn { width: 100%; pointer-events: none; }
+
+  /* ---------- progress ---------- */
+  .progress { height: 6px; border-radius: 999px; background: var(--panel-2); overflow: hidden; margin-bottom: 14px; display: none; }
+  .progress.show { display: block; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+
+  /* ---------- report ---------- */
+  .scoreline {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .stat {
+    flex: 1 1 calc(50% - 5px);
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 12px;
+  }
+  .stat b {
+    display: block;
+    font-family: var(--display);
+    font-size: 30px; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--chalk);
+  }
+  .stat span { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); margin-top: 5px; }
+
+  .cards { display: grid; gap: 10px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--unknown);
+    border-radius: 12px; padding: 12px 13px;
+  }
+  .card.good { border-left-color: var(--good); }
+  .card.fix  { border-left-color: var(--fix); }
+  .card.bad  { border-left-color: var(--bad); }
+  .card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .card h3 { margin: 0; font-size: 15px; font-weight: 700; }
+  .card .val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-dim); white-space: nowrap; }
+  .card.good .val { color: var(--good); }
+  .card.fix .val { color: var(--fix); }
+  .card.bad .val { color: var(--bad); }
+  .card p { margin: 6px 0 0; font-size: 13.5px; color: var(--text-dim); line-height: 1.45; }
+  .card p.cue { position: static; opacity: 1; transform: none; background: none; border: 0; padding: 0; color: var(--text); font-weight: 600; font-size: 14px; }
+
+  .empty-note { color: var(--text-dim); font-size: 14px; margin: 0; }
+
+  /* ---------- timeline ---------- */
+  .timeline { margin-top: 14px; display: none; }
+  .timeline.show { display: block; }
+  .timeline input[type=range] { width: 100%; accent-color: var(--accent); }
+  .phases { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .phases button {
+    padding: 7px 11px; font: inherit; font-size: 12.5px; font-weight: 600;
+    color: var(--text-dim); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+  }
+  .phases button[aria-pressed="true"] { color: #0E1A14; background: var(--chalk); border-color: var(--chalk); }
+
+  /* ---------- footer ---------- */
+  footer { margin-top: 26px; color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
+  footer a { color: var(--text); }
+  details summary { cursor: pointer; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px);
+    background: #F87171; color: #240707;
+    font-weight: 600; font-size: 14px;
+    padding: 11px 16px; border-radius: 12px;
+    max-width: min(90vw, 460px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 20;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="masthead">
+      <div>
+        <h1>Swing<em>Coach</em></h1>
+        <p class="tagline">Point a camera at a swing and it reads your body position, then tells you what to fix. Everything runs on this device. No video leaves your phone.</p>
+      </div>
+      <button class="iconbtn" id="voiceBtn" aria-pressed="true" title="Coach's voice" aria-label="Toggle the coach's voice">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m23 9-6 6"/><path d="m17 9 6 6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="panel" id="setupPanel">
+    <h2>Set it up</h2>
+
+    <div class="field">
+      <label for="modeSeg">How are we watching</label>
+      <div class="seg" id="modeSeg" role="group" aria-label="Mode">
+        <button data-mode="live" aria-pressed="true">Live coach<small>camera + voice</small></button>
+        <button data-mode="clip" aria-pressed="false">Analyze a clip<small>upload a video</small></button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="sportSeg">Which swing</label>
+      <div class="seg" id="sportSeg" role="group" aria-label="Sport">
+        <button data-sport="baseball" aria-pressed="true">Baseball</button>
+        <button data-sport="golf" aria-pressed="false">Golf</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="handSeg">Which side</label>
+      <div class="seg" id="handSeg" role="group" aria-label="Handedness">
+        <button data-hand="right" aria-pressed="true">Righty</button>
+        <button data-hand="left" aria-pressed="false">Lefty</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="viewSeg">Where the camera sits</label>
+      <div class="seg" id="viewSeg" role="group" aria-label="Camera angle">
+        <button data-view="face" aria-pressed="true">Face on<small>looking at the chest</small></button>
+        <button data-view="line" aria-pressed="false">Down the line<small>behind or in front</small></button>
+      </div>
+    </div>
+
+    <p class="hint" id="viewHint">Face on: the camera sees the front of the body, roughly where a pitcher stands. Stand back far enough that the whole body, head to feet, stays in frame through the finish.</p>
+  </section>
+
+  <div class="stage" id="stage">
+    <video id="video" playsinline muted preload="auto"></video>
+    <canvas id="canvas"></canvas>
+    <div class="stage-empty" id="stageEmpty">
+      <strong>Nothing to watch yet</strong>
+      <span id="stageEmptyText">Hit <b>Start camera</b> and stand back until your whole body fits in the frame.</span>
+    </div>
+    <div class="pill" id="pill" hidden><span class="dot" id="pillDot"></span><span id="pillText">Idle</span></div>
+    <div class="fps" id="fpsBadge" hidden>&ndash;&ndash; fps</div>
+    <div class="cue" id="cueBox"><span id="cueKicker">Coach</span><em id="cueText" style="font-style:normal"></em></div>
+  </div>
+
+  <div class="actions" id="liveActions">
+    <button class="btn primary" id="startBtn">Start camera</button>
+    <button class="btn" id="stopBtn" disabled>Stop</button>
+    <button class="btn ghost" id="flipBtn">Flip camera</button>
+  </div>
+
+  <div class="actions" id="clipActions" hidden>
+    <span class="filewrap">
+      <input type="file" id="fileInput" accept="video/*" aria-label="Choose a swing video">
+      <span class="btn primary">Choose a video</span>
+    </span>
+    <button class="btn" id="analyzeBtn" disabled>Analyze swing</button>
+  </div>
+
+  <div class="progress" id="progress"><i id="progressBar"></i></div>
+
+  <div class="timeline" id="timeline">
+    <input type="range" id="scrub" min="0" max="100" value="0" step="1" aria-label="Scrub through the swing">
+    <div class="phases" id="phases"></div>
+  </div>
+
+  <section class="panel">
+    <h2 id="reportTitle">The read</h2>
+    <div class="scoreline" id="scoreline" hidden></div>
+    <div class="cards" id="cards">
+      <p class="empty-note" id="emptyNote">Take a swing and the breakdown lands here: stance, knee bend, posture, how far the head travels, whether the hips lead the hands, and how you finish.</p>
+    </div>
+  </section>
+
+  <footer>
+    <details>
+      <summary>How this works, and what it can't do</summary>
+      <p>A pose model (Google's MediaPipe BlazePose) runs in this tab and finds 33 body landmarks in every frame. Everything after that is plain geometry: joint angles, how far the head travels, how fast the hands move, and when the hips and shoulders each reach their peak turn. The thresholds are coaching rules of thumb, not measurements from a lab, so treat this as a second set of eyes and not the last word.</p>
+      <p>It does not see the bat, the club, or the ball. It cannot tell you where the barrel was or what the exit velocity was. The timing numbers are only as fine as the frame rate: a normal 30 fps clip puts each frame 33 ms apart, which is coarse for a swing that takes 150 ms. A slow-motion clip from a phone gives you much better resolution, so for the sequencing read, record in slo-mo.</p>
+      <p>The model, about 6 MB, downloads once from Google's CDN and is then cached by the browser. Your video is never uploaded anywhere.</p>
+    </details>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script type="module">
+import {
+  FilesetResolver,
+  PoseLandmarker,
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
+
+/* ==================================================================
+   Swing Coach
+   ------------------------------------------------------------------
+   A pose model finds 33 body landmarks per frame. Everything below
+   that line is geometry: joint angles, how far the head travels, how
+   fast the hands move, and when the hips and shoulders each hit their
+   peak turn. No bat, no ball, no club — the model cannot see them.
+   ================================================================== */
+
+const WASM_BASE  = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
+const MODEL_BASE = "https://storage.googleapis.com/mediapipe-models/pose_landmarker";
+const MODELS = {
+  lite: `${MODEL_BASE}/pose_landmarker_lite/float16/1/pose_landmarker_lite.task`,
+  full: `${MODEL_BASE}/pose_landmarker_full/float16/1/pose_landmarker_full.task`,
+};
+
+// BlazePose landmark indices
+const L = {
+  NOSE: 0,
+  SH_L: 11, SH_R: 12, EL_L: 13, EL_R: 14, WR_L: 15, WR_R: 16,
+  HIP_L: 23, HIP_R: 24, KNEE_L: 25, KNEE_R: 26, ANK_L: 27, ANK_R: 28,
+  HEEL_L: 29, HEEL_R: 30, TOE_L: 31, TOE_R: 32,
+};
+const BONES = [
+  [11,12],[11,13],[13,15],[12,14],[14,16],
+  [11,23],[12,24],[23,24],
+  [23,25],[25,27],[24,26],[26,28],
+  [27,29],[29,31],[27,31],[28,30],[30,32],[28,32],
+];
+const JOINTS = [0,11,12,13,14,15,16,23,24,25,26,27,28];
+
+/* ---------------- small math ---------------- */
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const DEG = 180 / Math.PI;
+
+const sub3 = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const len3 = (v) => Math.hypot(v.x, v.y, v.z);
+const dot3 = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+
+/** Interior angle at b, in degrees. */
+function angle3(a, b, c) {
+  const u = sub3(a, b), v = sub3(c, b);
+  const d = len3(u) * len3(v);
+  if (d < 1e-6) return NaN;
+  return Math.acos(clamp(dot3(u, v) / d, -1, 1)) * DEG;
+}
+
+/** Rotation of a left→right body line about the vertical axis, in degrees.
+ *  0 means the line is square to the camera; it swings as the body turns. */
+function lineYaw(pL, pR) {
+  return Math.atan2(pR.z - pL.z, pR.x - pL.x) * DEG;
+}
+
+/** Undo the ±180° wrap so a turn reads as one continuous number. */
+function unwrap(series) {
+  const out = series.slice();
+  for (let i = 1; i < out.length; i++) {
+    if (!Number.isFinite(out[i]) || !Number.isFinite(out[i - 1])) continue;
+    let d = out[i] - out[i - 1];
+    while (d > 180) { out[i] -= 360; d -= 360; }
+    while (d < -180) { out[i] += 360; d += 360; }
+  }
+  return out;
+}
+
+/** Moving average that steps over gaps rather than poisoning them. */
+function smooth(series, half = 1) {
+  return series.map((_, i) => {
+    let sum = 0, n = 0;
+    for (let k = i - half; k <= i + half; k++) {
+      const v = series[k];
+      if (Number.isFinite(v)) { sum += v; n++; }
+    }
+    return n ? sum / n : NaN;
+  });
+}
+
+function median(values) {
+  const v = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!v.length) return NaN;
+  const m = v.length >> 1;
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+}
+
+const fmt = (v, d = 0) => (Number.isFinite(v) ? v.toFixed(d) : "--");
+
+/* ---------------- configuration ---------------- */
+
+const cfg = {
+  mode: "live",      // live | clip
+  sport: "baseball", // baseball | golf
+  hand: "right",     // which way they swing
+  view: "face",      // face | line
+  mirror: true,      // front camera shows a mirror image
+  voice: true,
+};
+
+/** Front side of the body. A righty hits and swings over a left front leg. */
+const frontIsLeft = () => cfg.hand === "right";
+
+/* ---------------- per-frame read ---------------- */
+
+/**
+ * Turn one set of landmarks into the handful of numbers the checks care about.
+ * `wl` is in metres with the hip centre at the origin, so lengths and angles
+ * mean the same thing whatever the camera distance. `lm` is in frame space and
+ * is what we use for anything measured against the picture, like head drift.
+ */
+function readFrame(lm, wl, t, videoW, videoH) {
+  const vis = (i) => (lm[i]?.visibility ?? 0);
+  const px = (i) => ({ x: lm[i].x * videoW, y: lm[i].y * videoH });
+
+  const core = [L.SH_L, L.SH_R, L.HIP_L, L.HIP_R];
+  const legs = [L.KNEE_L, L.KNEE_R, L.ANK_L, L.ANK_R];
+  const coreOk = core.every((i) => vis(i) > 0.5);
+  const legsOk = legs.every((i) => vis(i) > 0.4);
+  if (!coreOk) return { t, ok: false, legsOk: false };
+
+  const shMid = mid(wl[L.SH_L], wl[L.SH_R]);
+  const hipMid = mid(wl[L.HIP_L], wl[L.HIP_R]);
+  const wrMid = mid(wl[L.WR_L], wl[L.WR_R]);
+
+  const shoulderW = len3(sub3(wl[L.SH_L], wl[L.SH_R]));
+  const stanceW = legsOk
+    ? Math.hypot(wl[L.ANK_L].x - wl[L.ANK_R].x, wl[L.ANK_L].z - wl[L.ANK_R].z)
+    : NaN;
+
+  // Torso length in pixels: a body-sized ruler that survives any camera angle.
+  const shPx = { x: (lm[L.SH_L].x + lm[L.SH_R].x) / 2 * videoW, y: (lm[L.SH_L].y + lm[L.SH_R].y) / 2 * videoH };
+  const hipPx = { x: (lm[L.HIP_L].x + lm[L.HIP_R].x) / 2 * videoW, y: (lm[L.HIP_L].y + lm[L.HIP_R].y) / 2 * videoH };
+  const torsoPx = Math.hypot(shPx.x - hipPx.x, shPx.y - hipPx.y);
+
+  const front = frontIsLeft()
+    ? { hip: L.HIP_L, knee: L.KNEE_L, ank: L.ANK_L, el: L.EL_L, sh: L.SH_L, wr: L.WR_L }
+    : { hip: L.HIP_R, knee: L.KNEE_R, ank: L.ANK_R, el: L.EL_R, sh: L.SH_R, wr: L.WR_R };
+  const back = frontIsLeft()
+    ? { hip: L.HIP_R, knee: L.KNEE_R, ank: L.ANK_R, el: L.EL_R, sh: L.SH_R, wr: L.WR_R }
+    : { hip: L.HIP_L, knee: L.KNEE_L, ank: L.ANK_L, el: L.EL_L, sh: L.SH_L, wr: L.WR_L };
+
+  // Spine lean away from vertical. World y points down, so "up" is (0,-1,0).
+  const spine = sub3(shMid, hipMid);
+  const spineLen = len3(spine);
+  const spineTilt = spineLen > 1e-6
+    ? Math.acos(clamp(dot3(spine, { x: 0, y: -1, z: 0 }) / spineLen, -1, 1)) * DEG
+    : NaN;
+
+  return {
+    t,
+    ok: true,
+    legsOk,
+    shoulderW,
+    torsoPx,
+    stanceRatio: shoulderW > 1e-6 ? stanceW / shoulderW : NaN,
+    frontKnee: legsOk ? angle3(wl[front.hip], wl[front.knee], wl[front.ank]) : NaN,
+    backKnee: legsOk ? angle3(wl[back.hip], wl[back.knee], wl[back.ank]) : NaN,
+    backElbow: vis(back.el) > 0.4 ? angle3(wl[back.sh], wl[back.el], wl[back.wr]) : NaN,
+    spineTilt,
+    shoulderYaw: lineYaw(wl[L.SH_L], wl[L.SH_R]),
+    hipYaw: lineYaw(wl[L.HIP_L], wl[L.HIP_R]),
+    handsVsShoulders: shMid.y - wrMid.y, // metres; positive means hands are up
+    hands: { x: wrMid.x, y: wrMid.y, z: wrMid.z },
+    // Head measured against the back foot, so a shaky camera or a stride
+    // does not read as head movement.
+    headPx: vis(L.NOSE) > 0.4 && legsOk ? px(L.NOSE).x - px(back.ank).x : NaN,
+    balancePx: legsOk && vis(L.NOSE) > 0.4
+      ? px(L.NOSE).x - (px(L.ANK_L).x + px(L.ANK_R).x) / 2
+      : NaN,
+  };
+}
+
+/**
+ * Second pass over a run of frames: smooth the noisy per-frame numbers and
+ * work out how fast things are turning and moving.
+ */
+function buildSeries(frames) {
+  const good = frames.filter((f) => f.ok);
+  if (good.length < 6) return null;
+
+  const t = good.map((f) => f.t);
+  const shoulderYaw = smooth(unwrap(good.map((f) => f.shoulderYaw)), 1);
+  const hipYaw = smooth(unwrap(good.map((f) => f.hipYaw)), 1);
+  const separation = shoulderYaw.map((s, i) => s - hipYaw[i]);
+
+  // Hand speed relative to the hips, which is what a swing actually is.
+  const handSpeed = good.map((f, i) => {
+    if (i === 0) return 0;
+    const dt = t[i] - t[i - 1];
+    if (dt <= 0) return NaN;
+    return len3(sub3(f.hands, good[i - 1].hands)) / dt;
+  });
+  handSpeed[0] = handSpeed[1] ?? 0;
+
+  const rate = (series) => series.map((_, i) => {
+    if (i === 0 || i === series.length - 1) return NaN;
+    const dt = t[i + 1] - t[i - 1];
+    if (dt <= 0) return NaN;
+    return Math.abs(series[i + 1] - series[i - 1]) / dt; // deg/s
+  });
+
+  return {
+    frames: good,
+    t,
+    shoulderYaw,
+    hipYaw,
+    separation,
+    handSpeed: smooth(handSpeed, 1),
+    hipRate: smooth(rate(hipYaw), 1),
+    shoulderRate: smooth(rate(shoulderYaw), 1),
+  };
+}
+
+/** argmax that ignores gaps, restricted to [lo, hi]. */
+function peakIndex(series, lo = 0, hi = series.length - 1) {
+  let best = -1, bestV = -Infinity;
+  for (let i = Math.max(0, lo); i <= Math.min(series.length - 1, hi); i++) {
+    if (Number.isFinite(series[i]) && series[i] > bestV) { bestV = series[i]; best = i; }
+  }
+  return best;
+}
+
+/**
+ * Split a run of frames into setup, launch, contact and finish using hand
+ * speed alone. Contact is the fastest the hands ever move; launch is the last
+ * quiet moment before that; setup is the second or so before launch.
+ */
+function findPhases(series) {
+  const { handSpeed, t } = series;
+  const contact = peakIndex(handSpeed);
+  if (contact < 2) return null;
+  const peak = handSpeed[contact];
+  if (!Number.isFinite(peak) || peak < 1.2) return null; // nobody swung
+
+  const quiet = peak * 0.18;
+  let launch = contact;
+  while (launch > 0 && handSpeed[launch] > quiet) launch--;
+
+  let finish = contact;
+  while (finish < handSpeed.length - 1 && handSpeed[finish] > quiet) finish++;
+
+  // Setup: the calm stretch ending just before the hands get going.
+  const setupEnd = Math.max(0, launch - 1);
+  let setupStart = setupEnd;
+  while (setupStart > 0 && t[setupEnd] - t[setupStart] < 0.7) setupStart--;
+
+  const load = peakIndex(series.separation.map(Math.abs), setupStart, contact);
+
+  return { setupStart, setupEnd, launch, load, contact, finish, peak };
+}
+
+/** A representative value for a metric across the setup window. */
+function setupValue(series, phases, pick) {
+  const { setupStart, setupEnd } = phases;
+  const vals = [];
+  for (let i = setupStart; i <= setupEnd; i++) {
+    const v = pick(series.frames[i], i);
+    if (Number.isFinite(v)) vals.push(v);
+  }
+  return median(vals);
+}
+
+/* ==================================================================
+   The checks
+   ------------------------------------------------------------------
+   Each one returns a verdict, the number behind it, and a single line
+   the coach can say out loud. Targets are coaching rules of thumb,
+   not lab numbers, and several only mean anything from one camera
+   angle — that is what `views` is for.
+   ================================================================== */
+
+const TARGETS = {
+  baseball: {
+    stance: [1.0, 1.6],
+    knee: [140, 173],
+    spine: [4, 28],
+    hands: [-0.12, 0.14],
+    backElbow: [65, 145],
+    separation: 22,
+    headDrift: 0.28,
+    frontLegGain: 8,
+    balance: 0.40,
+  },
+  golf: {
+    stance: [1.05, 1.7],
+    knee: [148, 177],
+    spine: [22, 46],
+    hands: null,
+    backElbow: null,
+    separation: 30,
+    headDrift: 0.22,
+    frontLegGain: 6,
+    balance: 0.32,
+  },
+};
+
+const band = (v, [lo, hi]) => (!Number.isFinite(v) ? "unknown" : v < lo || v > hi ? "fix" : "good");
+
+const CHECKS = [
+  {
+    id: "stance",
+    label: "Stance width",
+    views: ["face"],
+    run(s, p, T) {
+      const v = setupValue(s, p, (f) => f.stanceRatio);
+      if (!Number.isFinite(v)) return null;
+      const status = band(v, T.stance);
+      const cue = v < T.stance[0]
+        ? "Widen your stance. Get your feet outside your shoulders so you have a base to turn against."
+        : "Bring your feet in a little. You are spread too wide to rotate cleanly.";
+      return {
+        status,
+        value: `${v.toFixed(2)}×`,
+        detail: `Your feet are ${v.toFixed(2)} times your shoulder width apart. Target is ${T.stance[0].toFixed(1)} to ${T.stance[1].toFixed(1)}.`,
+        cue: status === "good" ? "Base looks good." : cue,
+      };
+    },
+  },
+  {
+    id: "knees",
+    label: "Knee bend at setup",
+    views: ["face", "line"],
+    run(s, p, T) {
+      const f = setupValue(s, p, (x) => x.frontKnee);
+      const b = setupValue(s, p, (x) => x.backKnee);
+      const v = median([f, b]);
+      if (!Number.isFinite(v)) return null;
+      const status = band(v, T.knee);
+      const cue = v > T.knee[1]
+        ? "Bend your knees. Sit into your legs a little instead of standing straight up."
+        : "You are sitting a bit deep. Come up an inch so you can still move.";
+      return {
+        status,
+        value: `${fmt(v)}°`,
+        detail: `Average knee angle ${fmt(v)}°, where 180° is a locked-out leg. Target is ${T.knee[0]}° to ${T.knee[1]}°.`,
+        cue: status === "good" ? "Legs are loaded nicely." : cue,
+      };
+    },
+  },
+  {
+    id: "posture",
+    label: "Spine angle",
+    views: ["face", "line"],
+    run(s, p, T) {
+      const v = setupValue(s, p, (x) => x.spineTilt);
+      if (!Number.isFinite(v)) return null;
+      const status = band(v, T.spine);
+      const cue = v > T.spine[1]
+        ? "Stand taller. You are bent too far over, and that drops the shoulders through the turn."
+        : "Hinge forward from the hips a touch. You are standing too upright to rotate around anything.";
+      return {
+        status,
+        value: `${fmt(v)}°`,
+        detail: `Your spine leans ${fmt(v)}° off vertical. Target is ${T.spine[0]}° to ${T.spine[1]}° for this swing.`,
+        cue: status === "good" ? "Posture is right where it should be." : cue,
+      };
+    },
+  },
+  {
+    id: "hands",
+    label: "Hand position",
+    views: ["face", "line"],
+    run(s, p, T) {
+      if (!T.hands) return null;
+      const v = setupValue(s, p, (x) => x.handsVsShoulders);
+      if (!Number.isFinite(v)) return null;
+      const status = band(v, T.hands);
+      const cm = Math.round(Math.abs(v) * 100);
+      const cue = v < T.hands[0]
+        ? "Get your hands up near your back shoulder. They are hanging too low to start."
+        : "Drop your hands a little. They are up above your shoulder and that costs you the short path.";
+      return {
+        status,
+        value: `${v >= 0 ? "+" : "−"}${cm} cm`,
+        detail: `Your hands sit ${cm} cm ${v >= 0 ? "above" : "below"} your shoulder line. Want them within a hand's width of it.`,
+        cue: status === "good" ? "Hands are set in a good spot." : cue,
+      };
+    },
+  },
+  {
+    id: "backElbow",
+    label: "Back elbow",
+    views: ["face"],
+    run(s, p, T) {
+      if (!T.backElbow) return null;
+      const v = setupValue(s, p, (x) => x.backElbow);
+      if (!Number.isFinite(v)) return null;
+      const status = band(v, T.backElbow);
+      const cue = v > T.backElbow[1]
+        ? "Keep a bend in your back arm. Straightening it early pushes the hands away from you."
+        : "Your back arm is folded up tight. Give it a little room.";
+      return {
+        status,
+        value: `${fmt(v)}°`,
+        detail: `Back elbow at ${fmt(v)}°. Somewhere between ${T.backElbow[0]}° and ${T.backElbow[1]}° keeps the hands inside the ball.`,
+        cue: status === "good" ? "Back arm has a good angle." : cue,
+      };
+    },
+  },
+  {
+    id: "separation",
+    label: "Coil",
+    views: ["face", "line"],
+    run(s, p, T) {
+      const atSetup = median(s.separation.slice(p.setupStart, p.setupEnd + 1));
+      const atLoad = s.separation[p.load];
+      if (!Number.isFinite(atSetup) || !Number.isFinite(atLoad)) return null;
+      const v = Math.abs(atLoad - atSetup);
+      const status = v >= T.separation ? "good" : v >= T.separation * 0.6 ? "fix" : "bad";
+      return {
+        status,
+        value: `${fmt(v)}°`,
+        detail: `Your shoulders turned ${fmt(v)}° further than your hips before the swing started. Want at least ${T.separation}°. This is the stretch that makes the swing, not arm strength.`,
+        cue: status === "good"
+          ? "Good coil. Your shoulders turned against your hips."
+          : "Turn your shoulders back while your hips stay quiet. You need to stretch against yourself before you swing.",
+      };
+    },
+  },
+  {
+    id: "sequence",
+    label: "Hips before hands",
+    views: ["face", "line"],
+    run(s, p) {
+      const lo = Math.max(0, p.launch - 2);
+      const hi = Math.min(s.t.length - 1, p.contact + 2);
+      const hipPeak = peakIndex(s.hipRate, lo, hi);
+      const shPeak = peakIndex(s.shoulderRate, lo, hi);
+      if (hipPeak < 0 || shPeak < 0) return null;
+
+      const hipFirst = s.t[hipPeak] <= s.t[shPeak];
+      const gapMs = Math.round(Math.abs(s.t[shPeak] - s.t[hipPeak]) * 1000);
+      const handGapMs = Math.round((s.t[p.contact] - s.t[hipPeak]) * 1000);
+      const frameMs = Math.round(((s.t[s.t.length - 1] - s.t[0]) / (s.t.length - 1)) * 1000);
+
+      const status = hipFirst ? (gapMs >= frameMs ? "good" : "unknown") : "fix";
+      return {
+        status,
+        value: hipFirst ? `hips +${gapMs} ms` : `shoulders first`,
+        detail: hipFirst
+          ? `Hips peaked ${gapMs} ms before the shoulders, and the hands topped out ${handGapMs} ms after the hips. That is the order you want. Your frames are ${frameMs} ms apart, so treat anything under that as a tie — shoot in slow motion if you want this number to mean something.`
+          : `Your shoulders reached top speed ${gapMs} ms before your hips did. The swing is being pulled by the upper body instead of pushed from the ground.`,
+        cue: hipFirst
+          ? "Good order. Hips led, shoulders followed."
+          : "Start the swing with your hips. Let the back foot turn first and the hands come last.",
+      };
+    },
+  },
+  {
+    id: "head",
+    label: "Head movement",
+    views: ["face"],
+    run(s, p, T) {
+      const base = median(
+        s.frames.slice(p.setupStart, p.setupEnd + 1).map((f) => f.headPx / f.torsoPx)
+      );
+      if (!Number.isFinite(base)) return null;
+      let worst = 0;
+      for (let i = p.launch; i <= p.contact; i++) {
+        const f = s.frames[i];
+        const d = Math.abs(f.headPx / f.torsoPx - base);
+        if (Number.isFinite(d) && d > worst) worst = d;
+      }
+      const status = worst <= T.headDrift ? "good" : worst <= T.headDrift * 1.6 ? "fix" : "bad";
+      const inches = Math.round(worst * 20); // a torso is roughly 20 inches
+      return {
+        status,
+        value: `${worst.toFixed(2)} torso`,
+        detail: `Your head moved about ${inches} inches from where it started before contact. Under ${T.headDrift.toFixed(2)} of a torso length keeps your eyes on the ball.`,
+        cue: status === "good"
+          ? "Head stayed quiet. That is why you saw it."
+          : "Keep your head still. You are drifting out front and your eyes go with it.",
+      };
+    },
+  },
+  {
+    id: "frontLeg",
+    label: "Front leg through contact",
+    views: ["face", "line"],
+    run(s, p, T) {
+      const atLaunch = s.frames[p.launch]?.frontKnee;
+      const atContact = s.frames[p.contact]?.frontKnee;
+      if (!Number.isFinite(atLaunch) || !Number.isFinite(atContact)) return null;
+      const gain = atContact - atLaunch;
+      const status = gain >= T.frontLegGain ? "good" : gain >= 0 ? "fix" : "bad";
+      return {
+        status,
+        value: `${gain >= 0 ? "+" : ""}${fmt(gain)}°`,
+        detail: `Your front knee went from ${fmt(atLaunch)}° to ${fmt(atContact)}° between the start of the swing and contact. It should straighten by at least ${T.frontLegGain}° as you post up and turn against it.`,
+        cue: status === "good"
+          ? "Front leg posted up well."
+          : "Push into your front leg. Let it straighten as you turn so you have something to rotate around.",
+      };
+    },
+  },
+  {
+    id: "balance",
+    label: "Finish",
+    views: ["face"],
+    run(s, p, T) {
+      const base = median(
+        s.frames.slice(p.setupStart, p.setupEnd + 1).map((f) => f.balancePx / f.torsoPx)
+      );
+      const endFrames = s.frames.slice(p.finish, p.finish + 6);
+      const end = median(endFrames.map((f) => f.balancePx / f.torsoPx));
+      if (!Number.isFinite(base) || !Number.isFinite(end)) return null;
+      const shift = Math.abs(end - base);
+      const status = shift <= T.balance ? "good" : shift <= T.balance * 1.7 ? "fix" : "bad";
+      return {
+        status,
+        value: `${shift.toFixed(2)} torso`,
+        detail: `After the swing your weight ended ${shift.toFixed(2)} torso lengths off where you started. Staying inside ${T.balance.toFixed(2)} means you turned rather than fell.`,
+        cue: status === "good"
+          ? "Balanced finish. Hold that."
+          : "Finish on balance. Try holding your pose for a beat after contact.",
+      };
+    },
+  },
+];
+
+/** Checks a sport can switch off entirely, keyed to their target. */
+const SPORT_GATED = { hands: "hands", backElbow: "backElbow" };
+
+/** Run every check that this camera angle can honestly answer. */
+function buildReport(series, phases) {
+  const T = TARGETS[cfg.sport];
+  const cards = [];
+  const skipped = [];
+  for (const check of CHECKS) {
+    if (!check.views.includes(cfg.view)) {
+      // Skip quietly if the sport turned this check off anyway.
+      const gate = SPORT_GATED[check.id];
+      if (!gate || T[gate] !== null) skipped.push(check.label);
+      continue;
+    }
+    let out = null;
+    try { out = check.run(series, phases, T); } catch { out = null; }
+    if (out) cards.push({ ...out, id: check.id, label: check.label });
+  }
+  return { cards, skipped };
+}
+
+/* ==================================================================
+   Page wiring
+   ================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const el = {
+  stage: $("stage"), video: $("video"), canvas: $("canvas"),
+  stageEmpty: $("stageEmpty"), stageEmptyText: $("stageEmptyText"),
+  pill: $("pill"), pillDot: $("pillDot"), pillText: $("pillText"), fps: $("fpsBadge"),
+  cueBox: $("cueBox"), cueText: $("cueText"), cueKicker: $("cueKicker"),
+  liveActions: $("liveActions"), clipActions: $("clipActions"),
+  startBtn: $("startBtn"), stopBtn: $("stopBtn"), flipBtn: $("flipBtn"),
+  fileInput: $("fileInput"), analyzeBtn: $("analyzeBtn"),
+  progress: $("progress"), progressBar: $("progressBar"),
+  timeline: $("timeline"), scrub: $("scrub"), phases: $("phases"),
+  scoreline: $("scoreline"), cards: $("cards"), emptyNote: $("emptyNote"),
+  reportTitle: $("reportTitle"), viewHint: $("viewHint"),
+  voiceBtn: $("voiceBtn"), toast: $("toast"),
+};
+const ctx = el.canvas.getContext("2d");
+
+let toastTimer = 0;
+function toast(msg) {
+  el.toast.textContent = msg;
+  el.toast.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.toast.classList.remove("show"), 5200);
+}
+
+function setPill(text, kind) {
+  el.pill.hidden = false;
+  el.pillText.textContent = text;
+  el.pillDot.className = `dot ${kind || ""}`;
+}
+
+let cueTimer = 0;
+function showCue(text, kicker = "Coach") {
+  el.cueKicker.textContent = kicker;
+  el.cueText.textContent = text;
+  el.cueBox.classList.add("show");
+  clearTimeout(cueTimer);
+  cueTimer = setTimeout(() => el.cueBox.classList.remove("show"), 6000);
+}
+
+/* ---------------- the voice ---------------- */
+
+const speech = {
+  last: 0,
+  saidAt: new Map(),
+  voice: null,
+  pick() {
+    if (this.voice || !window.speechSynthesis) return;
+    const voices = speechSynthesis.getVoices();
+    this.voice =
+      voices.find((v) => /en[-_]US/i.test(v.lang) && /Samantha|Google US|Aria|Jenny/i.test(v.name)) ||
+      voices.find((v) => /^en/i.test(v.lang)) ||
+      voices[0] || null;
+  },
+};
+if (window.speechSynthesis) {
+  speechSynthesis.addEventListener?.("voiceschanged", () => speech.pick());
+  speech.pick();
+}
+
+function say(text, { force = false } = {}) {
+  showCue(text);
+  if (!cfg.voice || !window.speechSynthesis) return;
+  if (force) speechSynthesis.cancel();
+  speech.pick();
+  const u = new SpeechSynthesisUtterance(text);
+  if (speech.voice) u.voice = speech.voice;
+  u.rate = 1.02;
+  u.pitch = 1;
+  try { speechSynthesis.speak(u); } catch { /* some browsers refuse before a gesture */ }
+}
+
+/**
+ * The coach does not chatter. One cue at a time, a few seconds apart, and
+ * never the same note twice inside half a minute.
+ */
+function coachSay(id, text, { gap = 4500, repeat = 30000 } = {}) {
+  const now = performance.now();
+  if (now - speech.last < gap) return false;
+  if (now - (speech.saidAt.get(id) ?? -Infinity) < repeat) return false;
+  speech.last = now;
+  speech.saidAt.set(id, now);
+  say(text);
+  return true;
+}
+
+/* ---------------- report rendering ---------------- */
+
+function renderReport(report, series, phases) {
+  const { cards, skipped } = report;
+  el.emptyNote?.remove();
+  el.cards.innerHTML = "";
+
+  const peak = phases ? series.handSpeed[phases.contact] : NaN;
+  const swingMs = phases ? Math.round((series.t[phases.contact] - series.t[phases.launch]) * 1000) : NaN;
+  const frameMs = series ? Math.round(((series.t[series.t.length - 1] - series.t[0]) / (series.t.length - 1)) * 1000) : NaN;
+  const graded = cards.filter((c) => c.status === "good" || c.status === "fix" || c.status === "bad");
+  const clean = graded.filter((c) => c.status === "good").length;
+
+  el.scoreline.hidden = false;
+  el.scoreline.innerHTML = `
+    <div class="stat"><b>${clean}<span style="font-size:16px;color:var(--text-dim)">/${graded.length}</span></b><span>Checks clean</span></div>
+    <div class="stat"><b>${fmt(peak, 1)}</b><span>Peak hand speed m/s</span></div>
+    <div class="stat"><b>${fmt(swingMs)}</b><span>Swing time ms</span></div>
+    <div class="stat"><b>${fmt(frameMs)}</b><span>Frame gap ms</span></div>
+  `;
+
+  const order = { bad: 0, fix: 1, unknown: 2, good: 3 };
+  for (const c of [...cards].sort((a, b) => order[a.status] - order[b.status])) {
+    const node = document.createElement("div");
+    node.className = `card ${c.status}`;
+    node.innerHTML = `
+      <div class="card-top"><h3></h3><span class="val"></span></div>
+      <p class="cue"></p>
+      <p class="detail"></p>
+    `;
+    node.querySelector("h3").textContent = c.label;
+    node.querySelector(".val").textContent = c.value;
+    node.querySelector(".cue").textContent = c.cue;
+    node.querySelector(".detail").textContent = c.detail;
+    el.cards.appendChild(node);
+  }
+
+  if (skipped.length) {
+    const note = document.createElement("p");
+    note.className = "empty-note";
+    const other = cfg.view === "face" ? "from down the line" : "from face on";
+    note.textContent = `Sat out this time because they need a camera ${other}: ${skipped.join(", ")}.`;
+    el.cards.appendChild(note);
+  }
+  return cards;
+}
+
+/** The one or two things worth saying out loud after a swing. */
+function speakVerdict(cards) {
+  const problems = cards
+    .filter((c) => c.status === "bad" || c.status === "fix")
+    .sort((a, b) => (a.status === "bad" ? -1 : 1) - (b.status === "bad" ? -1 : 1));
+  if (!problems.length) {
+    say("That one was clean. Nothing to fix. Do it again.", { force: true });
+    return;
+  }
+  const lines = problems.slice(0, 2).map((p) => p.cue);
+  say(lines.join(" "), { force: true });
+}
+
+/* ==================================================================
+   The model
+   ================================================================== */
+
+let fileset = null;
+let landmarker = null;
+let landmarkerKind = ""; // "<model>:<runningMode>"
+
+async function getLandmarker(model, runningMode) {
+  const kind = `${model}:${runningMode}`;
+  if (landmarker && landmarkerKind === kind) return landmarker;
+
+  setPill("Loading the pose model…", "busy");
+  if (!fileset) fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
+  if (landmarker) { try { landmarker.close(); } catch {} landmarker = null; }
+
+  const options = {
+    baseOptions: { modelAssetPath: MODELS[model], delegate: "GPU" },
+    runningMode,
+    numPoses: 1,
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+    outputSegmentationMasks: false,
+  };
+  try {
+    landmarker = await PoseLandmarker.createFromOptions(fileset, options);
+  } catch {
+    // Plenty of phones and locked-down browsers have no usable WebGL here.
+    options.baseOptions.delegate = "CPU";
+    landmarker = await PoseLandmarker.createFromOptions(fileset, options);
+  }
+  landmarkerKind = kind;
+  return landmarker;
+}
+
+/* ==================================================================
+   Drawing
+   ================================================================== */
+
+let handTrace = [];
+
+function sizeCanvas(w, h) {
+  const scale = Math.min(1, 960 / Math.max(w, h));
+  el.canvas.width = Math.round(w * scale);
+  el.canvas.height = Math.round(h * scale);
+  el.stage.style.aspectRatio = `${w} / ${h}`;
+}
+
+function paint(lm, { headRefX = null, hot = false } = {}) {
+  const W = el.canvas.width, H = el.canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  try { ctx.drawImage(el.video, 0, 0, W, H); } catch { /* frame not ready */ }
+  if (!lm) return;
+
+  const P = (i) => ({ x: lm[i].x * W, y: lm[i].y * H });
+
+  if (headRefX != null) {
+    ctx.save();
+    ctx.setLineDash([6, 7]);
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(headRefX * W, 0);
+    ctx.lineTo(headRefX * W, H);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (handTrace.length > 1) {
+    ctx.save();
+    ctx.lineCap = "round";
+    for (let i = 1; i < handTrace.length; i++) {
+      const a = handTrace[i - 1], b = handTrace[i];
+      ctx.strokeStyle = `rgba(255,107,61,${(i / handTrace.length) * 0.85})`;
+      ctx.lineWidth = 2 + (i / handTrace.length) * 5;
+      ctx.beginPath();
+      ctx.moveTo(a.x * W, a.y * H);
+      ctx.lineTo(b.x * W, b.y * H);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  ctx.lineCap = "round";
+  ctx.lineWidth = Math.max(2.5, W / 260);
+  ctx.strokeStyle = hot ? "rgba(255,107,61,0.95)" : "rgba(244,247,245,0.85)";
+  for (const [a, b] of BONES) {
+    if ((lm[a]?.visibility ?? 0) < 0.35 || (lm[b]?.visibility ?? 0) < 0.35) continue;
+    const p = P(a), q = P(b);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(q.x, q.y);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = hot ? "#FFD8C8" : "#4ADE80";
+  const r = Math.max(3, W / 210);
+  for (const i of JOINTS) {
+    if ((lm[i]?.visibility ?? 0) < 0.35) continue;
+    const p = P(i);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* ==================================================================
+   Live coaching
+   ================================================================== */
+
+const live = {
+  stream: null,
+  facing: "environment",
+  running: false,
+  buffer: [],
+  state: "idle",      // idle | set | swinging
+  stillSince: 0,
+  swingStart: 0,
+  quietSince: 0,
+  setupHeadX: null,
+  lastVideoTime: -1,
+  frames: 0,
+  fpsAt: 0,
+  fps: 0,
+};
+
+const SWING_ON = 3.2;   // m/s of hand speed that counts as a swing starting
+const SWING_OFF = 1.1;  // and the speed it has to fall back under to end
+const STILL = 0.7;      // below this the body is considered set
+
+function liveHandSpeed() {
+  const b = live.buffer;
+  if (b.length < 3) return 0;
+  const [a, c] = [b[b.length - 3], b[b.length - 1]];
+  const dt = c.t - a.t;
+  if (dt <= 0) return 0;
+  return len3(sub3(c.hands, a.hands)) / dt;
+}
+
+function runSetupCoaching() {
+  const recent = live.buffer.filter((f) => f.t >= live.buffer[live.buffer.length - 1].t - 0.8);
+  const series = buildSeries(recent);
+  if (!series) return;
+  const fakePhases = { setupStart: 0, setupEnd: series.frames.length - 1 };
+  const T = TARGETS[cfg.sport];
+
+  // Setup checks only: the ones that read a still body.
+  const ids = ["stance", "knees", "posture", "hands", "backElbow"];
+  const problems = [];
+  for (const check of CHECKS) {
+    if (!ids.includes(check.id)) continue;
+    if (!check.views.includes(cfg.view)) continue;
+    let out = null;
+    try { out = check.run(series, fakePhases, T); } catch { out = null; }
+    if (out && (out.status === "fix" || out.status === "bad")) problems.push({ ...out, id: check.id });
+  }
+  if (!problems.length) {
+    coachSay("set", "You are set. Take your swing.", { repeat: 45000 });
+    return;
+  }
+  const worst = problems[0];
+  coachSay(worst.id, worst.cue);
+}
+
+function finishLiveSwing() {
+  const end = live.buffer[live.buffer.length - 1].t;
+  const window = live.buffer.filter((f) => f.t >= live.swingStart - 1.4 && f.t <= end);
+  const series = buildSeries(window);
+  const phases = series && findPhases(series);
+  if (!series || !phases) {
+    setPill("Missed that one", "");
+    return;
+  }
+  const report = buildReport(series, phases);
+  const cards = renderReport(report, series, phases);
+  el.reportTitle.textContent = "The read · last swing";
+  speakVerdict(cards);
+}
+
+function updateLiveState(frame) {
+  const speed = liveHandSpeed();
+  const now = frame.t;
+
+  if (live.state !== "swinging") {
+    if (speed > SWING_ON) {
+      live.state = "swinging";
+      live.swingStart = now;
+      live.quietSince = 0;
+      handTrace = [];
+      setPill("Swing", "live");
+      return speed;
+    }
+    if (speed < STILL) {
+      if (!live.stillSince) live.stillSince = now;
+      if (now - live.stillSince > 0.9 && live.state !== "set") {
+        live.state = "set";
+        live.setupHeadX = live.lastNoseX;
+        setPill("Set", "ready");
+      }
+      if (live.state === "set") runSetupCoaching();
+    } else {
+      live.stillSince = 0;
+      if (live.state === "set") { live.state = "idle"; setPill("Moving", ""); }
+    }
+    return speed;
+  }
+
+  // Mid-swing: wait for the hands to settle, then read the whole thing back.
+  if (speed < SWING_OFF) {
+    if (!live.quietSince) live.quietSince = now;
+    if (now - live.quietSince > 0.45) {
+      live.state = "idle";
+      live.stillSince = 0;
+      live.quietSince = 0;
+      setPill("Reading the swing…", "busy");
+      finishLiveSwing();
+      setPill("Ready", "ready");
+    }
+  } else {
+    live.quietSince = 0;
+  }
+  return speed;
+}
+
+function liveLoop() {
+  if (!live.running) return;
+  const v = el.video;
+  if (v.readyState >= 2 && v.currentTime !== live.lastVideoTime) {
+    live.lastVideoTime = v.currentTime;
+    let result = null;
+    try { result = landmarker.detectForVideo(v, performance.now()); } catch { result = null; }
+
+    const lm = result?.landmarks?.[0];
+    const wl = result?.worldLandmarks?.[0];
+    let speed = 0;
+
+    if (lm && wl) {
+      live.lastNoseX = lm[L.NOSE].x;
+      const frame = readFrame(lm, wl, performance.now() / 1000, v.videoWidth, v.videoHeight);
+      if (frame.ok) {
+        live.buffer.push(frame);
+        const cutoff = frame.t - 6;
+        while (live.buffer.length && live.buffer[0].t < cutoff) live.buffer.shift();
+        speed = updateLiveState(frame);
+      }
+      const wrist = { x: (lm[L.WR_L].x + lm[L.WR_R].x) / 2, y: (lm[L.WR_L].y + lm[L.WR_R].y) / 2 };
+      handTrace.push(wrist);
+      if (handTrace.length > 26) handTrace.shift();
+    } else {
+      handTrace = [];
+    }
+
+    paint(lm, {
+      headRefX: live.state === "set" || live.state === "swinging" ? live.setupHeadX : null,
+      hot: live.state === "swinging",
+    });
+
+    live.frames++;
+    const now = performance.now();
+    if (now - live.fpsAt > 500) {
+      live.fps = Math.round((live.frames * 1000) / (now - live.fpsAt));
+      live.frames = 0;
+      live.fpsAt = now;
+    }
+    el.fps.textContent = `${live.fps} fps · hands ${speed.toFixed(1)} m/s`;
+  }
+  requestAnimationFrame(liveLoop);
+}
+
+async function startCamera() {
+  if (live.running) return;
+  el.startBtn.disabled = true;
+  try {
+    // Touching the speech engine inside the tap is what unlocks it on iOS.
+    if (cfg.voice && window.speechSynthesis) {
+      try { speechSynthesis.speak(new SpeechSynthesisUtterance(" ")); } catch {}
+    }
+    setPill("Asking for the camera…", "busy");
+    live.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: live.facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+    cfg.mirror = live.facing === "user";
+    el.stage.classList.toggle("mirror", cfg.mirror);
+
+    // Clear any clip still attached, or the element may keep playing that
+    // instead of the live stream.
+    el.video.removeAttribute("src");
+    el.video.load();
+    el.video.srcObject = live.stream;
+    el.video.muted = true;
+    await el.video.play();
+    await new Promise((res) => {
+      if (el.video.videoWidth) return res();
+      el.video.addEventListener("loadedmetadata", res, { once: true });
+    });
+    sizeCanvas(el.video.videoWidth, el.video.videoHeight);
+    el.stageEmpty.hidden = true;
+    el.fps.hidden = false;
+
+    await getLandmarker("lite", "VIDEO");
+    live.running = true;
+    live.state = "idle";
+    live.buffer = [];
+    live.lastVideoTime = -1;
+    live.fpsAt = performance.now();
+    setPill("Ready", "ready");
+    el.stopBtn.disabled = false;
+    say("Camera is on. Get in your stance and hold still for a second.");
+    liveLoop();
+  } catch (err) {
+    el.startBtn.disabled = false;
+    setPill("Camera blocked", "");
+    toast(
+      err?.name === "NotAllowedError"
+        ? "The browser blocked the camera. Allow camera access for this site and try again."
+        : `Could not start the camera: ${err?.message || err}`
+    );
+  }
+}
+
+function stopCamera() {
+  live.running = false;
+  live.stream?.getTracks().forEach((t) => t.stop());
+  live.stream = null;
+  el.video.srcObject = null;
+  el.startBtn.disabled = false;
+  el.stopBtn.disabled = true;
+  el.fps.hidden = true;
+  handTrace = [];
+  ctx.clearRect(0, 0, el.canvas.width, el.canvas.height);
+  el.stageEmpty.hidden = false;
+  setPill("Stopped", "");
+  window.speechSynthesis?.cancel();
+}
+
+/* ==================================================================
+   Clip analysis
+   ================================================================== */
+
+const clip = {
+  url: null,
+  frames: [],   // { t, lm, metrics }
+  series: null,
+  phases: null,
+};
+
+function seekTo(v, time) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; v.removeEventListener("seeked", finish); resolve(); } };
+    v.addEventListener("seeked", finish);
+    // Safari occasionally swallows the event on a frame it considers a no-op.
+    setTimeout(finish, 400);
+    v.currentTime = time;
+  });
+}
+
+async function loadClip(file) {
+  stopCamera();
+  if (clip.url) URL.revokeObjectURL(clip.url);
+  clip.url = URL.createObjectURL(file);
+  clip.frames = [];
+  clip.series = null;
+  clip.phases = null;
+  el.timeline.classList.remove("show");
+
+  const v = el.video;
+  v.srcObject = null;
+  v.src = clip.url;
+  v.muted = true;
+  await new Promise((resolve, reject) => {
+    v.addEventListener("loadedmetadata", resolve, { once: true });
+    v.addEventListener("error", () => reject(new Error("that file would not open")), { once: true });
+  });
+
+  sizeCanvas(v.videoWidth, v.videoHeight);
+  await seekTo(v, Math.min(0.05, v.duration / 2));
+  paint(null);
+  el.stageEmpty.hidden = true;
+  el.analyzeBtn.disabled = false;
+  setPill(`${v.duration.toFixed(1)}s clip loaded`, "ready");
+}
+
+async function analyzeClip() {
+  const v = el.video;
+  if (!clip.url || !v.duration) return;
+  el.analyzeBtn.disabled = true;
+  el.progress.classList.add("show");
+  el.fps.hidden = true;
+  setPill("Reading the clip…", "busy");
+
+  try {
+    const model = await getLandmarker("full", "VIDEO");
+    const duration = Math.min(v.duration, 12);
+    const steps = clamp(Math.round(duration * 60), 24, 420);
+    const dt = duration / steps;
+
+    clip.frames = [];
+    let stamp = 0;
+    for (let i = 0; i <= steps; i++) {
+      const time = i * dt;
+      await seekTo(v, Math.min(time, v.duration - 0.001));
+      stamp = Math.max(stamp + 1, Math.round(v.currentTime * 1000));
+      let result = null;
+      try { result = model.detectForVideo(v, stamp); } catch { result = null; }
+      const lm = result?.landmarks?.[0];
+      const wl = result?.worldLandmarks?.[0];
+      if (lm && wl) {
+        const metrics = readFrame(lm, wl, v.currentTime, v.videoWidth, v.videoHeight);
+        if (metrics.ok) clip.frames.push({ t: v.currentTime, lm, metrics });
+      }
+      el.progressBar.style.width = `${Math.round((i / steps) * 100)}%`;
+      if (i % 4 === 0) await new Promise((r) => requestAnimationFrame(r));
+    }
+
+    if (clip.frames.length < 12) {
+      setPill("Could not find a body", "");
+      toast("The model could not find a body in enough of that clip. Try better light, and make sure the whole body stays in frame.");
+      return;
+    }
+
+    clip.series = buildSeries(clip.frames.map((f) => f.metrics));
+    clip.phases = clip.series && findPhases(clip.series);
+    if (!clip.series || !clip.phases) {
+      setPill("No swing found", "");
+      toast("No swing found in that clip. Trim it down so it starts in your stance and ends after the follow-through.");
+      return;
+    }
+
+    const report = buildReport(clip.series, clip.phases);
+    const cards = renderReport(report, clip.series, clip.phases);
+    el.reportTitle.textContent = "The read · uploaded clip";
+    buildTimeline();
+    speakVerdict(cards);
+    setPill(`${clip.frames.length} frames read`, "ready");
+  } catch (err) {
+    setPill("Analysis failed", "");
+    toast(`Something broke while reading that clip: ${err?.message || err}`);
+  } finally {
+    el.progress.classList.remove("show");
+    el.progressBar.style.width = "0%";
+    el.analyzeBtn.disabled = false;
+  }
+}
+
+/* ---------------- scrubbing the result ---------------- */
+
+/** Frame indices in clip.frames, not in the trimmed series. */
+function seriesIndexToClipIndex(i) {
+  const t = clip.series.t[i];
+  let best = 0, bestD = Infinity;
+  clip.frames.forEach((f, k) => {
+    const d = Math.abs(f.t - t);
+    if (d < bestD) { bestD = d; best = k; }
+  });
+  return best;
+}
+
+async function showClipFrame(index) {
+  const frame = clip.frames[clamp(index, 0, clip.frames.length - 1)];
+  if (!frame) return;
+  await seekTo(el.video, frame.t);
+  const k = clamp(index, 0, clip.frames.length - 1);
+  handTrace = clip.frames
+    .slice(Math.max(0, k - 24), k + 1)
+    .map((f) => ({ x: (f.lm[L.WR_L].x + f.lm[L.WR_R].x) / 2, y: (f.lm[L.WR_L].y + f.lm[L.WR_R].y) / 2 }));
+  const contactIdx = seriesIndexToClipIndex(clip.phases.contact);
+  paint(frame.lm, { hot: Math.abs(k - contactIdx) <= 2 });
+}
+
+function buildTimeline() {
+  el.timeline.classList.add("show");
+  el.scrub.max = String(clip.frames.length - 1);
+  el.scrub.value = String(seriesIndexToClipIndex(clip.phases.contact));
+
+  const marks = [
+    ["Setup", clip.phases.setupEnd],
+    ["Coil", clip.phases.load],
+    ["Launch", clip.phases.launch],
+    ["Contact", clip.phases.contact],
+    ["Finish", clip.phases.finish],
+  ];
+  el.phases.innerHTML = "";
+  marks.forEach(([name, seriesIdx]) => {
+    const b = document.createElement("button");
+    b.textContent = name;
+    b.setAttribute("aria-pressed", name === "Contact" ? "true" : "false");
+    b.addEventListener("click", () => {
+      const idx = seriesIndexToClipIndex(seriesIdx);
+      el.scrub.value = String(idx);
+      [...el.phases.children].forEach((c) => c.setAttribute("aria-pressed", String(c === b)));
+      showClipFrame(idx);
+    });
+    el.phases.appendChild(b);
+  });
+  showClipFrame(Number(el.scrub.value));
+}
+
+el.scrub.addEventListener("input", () => {
+  [...el.phases.children].forEach((c) => c.setAttribute("aria-pressed", "false"));
+  showClipFrame(Number(el.scrub.value));
+});
+
+/* ==================================================================
+   Controls
+   ================================================================== */
+
+function wireSegment(id, key, after) {
+  const group = $(id);
+  group.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    [...group.children].forEach((c) => c.setAttribute("aria-pressed", String(c === btn)));
+    cfg[key] = btn.dataset[key];
+    after?.();
+  });
+}
+
+const VIEW_HINTS = {
+  face: "Face on: the camera sees the front of the body, roughly where a pitcher stands. Stand back far enough that the whole body, head to feet, stays in frame through the finish.",
+  line: "Down the line: the camera looks along the line of the swing, from behind or in front. Posture and coil read well from here. Stance width, head drift and the finish need a face-on camera instead.",
+};
+
+wireSegment("sportSeg", "sport");
+wireSegment("handSeg", "hand");
+wireSegment("viewSeg", "view", () => { el.viewHint.textContent = VIEW_HINTS[cfg.view]; });
+wireSegment("modeSeg", "mode", () => {
+  const liveMode = cfg.mode === "live";
+  el.liveActions.hidden = !liveMode;
+  el.clipActions.hidden = liveMode;
+  el.stageEmptyText.innerHTML = liveMode
+    ? "Hit <b>Start camera</b> and stand back until your whole body fits in the frame."
+    : "Pick a video of one swing. A few seconds is plenty, and slow motion reads best.";
+  if (liveMode) {
+    el.timeline.classList.remove("show");
+  } else {
+    stopCamera();
+  }
+  el.stageEmpty.hidden = false;
+  el.pill.hidden = true;
+  el.fps.hidden = true;
+  ctx.clearRect(0, 0, el.canvas.width, el.canvas.height);
+});
+
+el.voiceBtn.addEventListener("click", () => {
+  cfg.voice = !cfg.voice;
+  el.voiceBtn.setAttribute("aria-pressed", String(cfg.voice));
+  if (!cfg.voice) window.speechSynthesis?.cancel();
+});
+
+el.startBtn.addEventListener("click", startCamera);
+el.stopBtn.addEventListener("click", stopCamera);
+el.flipBtn.addEventListener("click", async () => {
+  live.facing = live.facing === "user" ? "environment" : "user";
+  if (live.running) { stopCamera(); await startCamera(); }
+  else toast(`Next start will use the ${live.facing === "user" ? "front" : "back"} camera.`);
+});
+
+el.fileInput.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try { await loadClip(file); }
+  catch (err) { toast(`Could not open that video: ${err?.message || err}`); }
+});
+el.analyzeBtn.addEventListener("click", analyzeClip);
+
+window.addEventListener("pagehide", stopCamera);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) window.speechSynthesis?.cancel();
+});
+
+if (!navigator.mediaDevices?.getUserMedia) {
+  el.startBtn.disabled = true;
+  toast("This browser will not hand over a camera. Upload a clip instead.");
+}
+</script>
+</body>
+</html>

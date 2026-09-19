@@ -55,6 +55,13 @@ jobs:
         working-directory: apps/solra
         run: node test/roundtrip.mjs
 
+      # Swing Coach's geometry engine is inlined in its static page; the suite
+      # lifts it out of the shipped HTML and runs synthetic swings through it.
+      # No install needed.
+      - name: Test Swing Coach
+        working-directory: apps/portfolio
+        run: node test/swing-coach.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
           for app in playball canitwo recipebox psx solra; do
