@@ -114,7 +114,7 @@ const playthings = [
   {
     title: "🎟️ Ticket Book: Disney Trivia",
     description:
-      "A book of 140 Disney trivia tickets across seven rounds, from classic animation to the theme parks. Tap a ticket to flip it and see the answer, call yourself right or wrong, and tear through the book one question at a time.",
+      "A book of 248 Disney trivia tickets on two shelves: films and characters, and a deep Walt Disney World section covering rides, shows, food and park lore. Deal the park questions by what they are about or by which park they live in. Tap a ticket to flip it, call yourself right or wrong, and tear through the book one at a time, with sound effects synthesised in the browser.",
     tech: ["JavaScript", "CSS 3D transforms", "HTML5"],
     link: "/projects/disney-trivia",
   },
