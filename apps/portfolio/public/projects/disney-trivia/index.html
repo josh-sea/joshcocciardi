@@ -87,11 +87,22 @@
     display: flex;
     gap: 7px;
     overflow-x: auto;
-    padding: 14px 0 12px;
+    padding: 14px 0 7px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
   .cats::-webkit-scrollbar { display: none; }
+  .subcats { padding: 0 0 12px; }
+  /* `display: flex` above would otherwise beat the hidden attribute outright. */
+  .cats[hidden] { display: none; }
+  /* Divides "what kind of thing" from "where in the resort". */
+  .sep {
+    flex: 0 0 auto;
+    width: 1px;
+    align-self: stretch;
+    margin: 3px 5px;
+    background: rgba(255,255,255,0.18);
+  }
   .chip {
     flex: 0 0 auto;
     font: inherit;
@@ -201,7 +212,14 @@
     letter-spacing: .04em;
     text-align: right;
     color: var(--ink-soft);
-    max-width: 14ch;
+    max-width: 16ch;
+    line-height: 1.25;
+  }
+  .catname i {
+    display: block;
+    font-style: normal;
+    font-weight: 600;
+    opacity: .68;
   }
 
   .prompt {
@@ -370,7 +388,8 @@
     <p class="sub">Tap a ticket to reveal the answer. Every question comes up once, then the book is spent.</p>
   </header>
 
-  <div class="cats" id="cats" role="group" aria-label="Choose a round"></div>
+  <div class="cats" id="cats" role="group" aria-label="Choose a shelf"></div>
+  <div class="cats subcats" id="subcats" role="group" aria-label="Narrow the round" hidden></div>
 
   <div class="book">
     <div class="stage">
@@ -392,14 +411,37 @@
 </div>
 
 <script>
+/* Two shelves of tickets. A film question carries one category; a park
+ * question carries both a type and a park, so the same pile can be dealt by
+ * what the question is about or by where in the resort it lives. The park
+ * colours are the ticket stock; the type colours only ever show up as a chip
+ * dot, which is why some of them are louder than a background could be. */
 const CATS = {
-  cl: { name: "Classic animation", stock: "#F2D88F" },
-  pr: { name: "Princesses",        stock: "#F3C4CC" },
-  px: { name: "Pixar",             stock: "#A9DCD9" },
-  vi: { name: "Villains",          stock: "#C8B9E4" },
-  tp: { name: "Theme parks",       stock: "#B7DFA8" },
-  md: { name: "Marvel & modern",   stock: "#F5B99A" },
-  mu: { name: "Music & lore",      stock: "#AFCDE8" }
+  cl:   { name: "Classic animation", stock: "#F2D88F" },
+  pr:   { name: "Princesses",        stock: "#F3C4CC" },
+  px:   { name: "Pixar",             stock: "#A9DCD9" },
+  vi:   { name: "Villains",          stock: "#C8B9E4" },
+  md:   { name: "Marvel & modern",   stock: "#F5B99A" },
+  mu:   { name: "Music & lore",      stock: "#AFCDE8" },
+  ride: { name: "Rides",             stock: "#E8B33C" },
+  show: { name: "Shows",             stock: "#E88CB0" },
+  food: { name: "Food & drink",      stock: "#8FD3B0" },
+  lore: { name: "Park lore",         stock: "#A9BEE8" }
+};
+
+const PARKS = {
+  mk: { name: "Magic Kingdom",     stock: "#F6CFE0" },
+  ep: { name: "EPCOT",             stock: "#AFCDE8" },
+  hs: { name: "Hollywood Studios", stock: "#F5C9A0" },
+  ak: { name: "Animal Kingdom",    stock: "#B7DFA8" },
+  rs: { name: "Resorts & more",    stock: "#D9CDEA" },
+  bf: { name: "Beyond Florida",    stock: "#CFE3DE" }
+};
+
+const GROUPS = {
+  film: { name: "Films & characters", all: "All films", subs: ["cl","pr","px","vi","md","mu"] },
+  park: { name: "Walt Disney World",  all: "All parks", subs: ["ride","show","food","lore"],
+          parks: ["mk","ep","hs","ak","rs","bf"] }
 };
 
 const Q = [
@@ -493,26 +535,6 @@ const Q = [
   ["vi","What human alter ego does Ursula take on?","Vanessa"],
   ["vi","Who turns out to be the villain in Frozen?","Prince Hans"],
 
-  ["tp","In what year did Disneyland open?","1955"],
-  ["tp","What street do you walk down when you first enter Disneyland?","Main Street, U.S.A."],
-  ["tp","How many Disney theme park resorts are there worldwide?","Six: Anaheim, Orlando, Tokyo, Paris, Hong Kong and Shanghai"],
-  ["tp","Which mountain-themed coaster appears in multiple Disney parks?","Space Mountain"],
-  ["tp","What are the “999 happy haunts” associated with?","The Haunted Mansion"],
-  ["tp","What is the current nighttime fireworks show at Magic Kingdom?","Happily Ever After"],
-  ["tp","Which resort is known as “The Most Magical Place on Earth”?","Walt Disney World"],
-  ["tp","Which land features Pirates of the Caribbean and Jungle Cruise?","Adventureland"],
-  ["tp","What is the tallest structure at Walt Disney World?","Expedition Everest, at 199 feet"],
-  ["tp","What animals can you see on Kilimanjaro Safaris?","Many, including giraffes, elephants, lions and hippos"],
-  ["tp","What year did EPCOT open?","1982"],
-  ["tp","What does EPCOT stand for?","Experimental Prototype Community of Tomorrow"],
-  ["tp","Which Disney park castle draws on several European castles?","Disneyland Paris, Le Château de la Belle au Bois Dormant"],
-  ["tp","What is the monorail at Walt Disney World called?","The Walt Disney World Monorail System"],
-  ["tp","Which Disneyland land opened in 2019 around Star Wars?","Star Wars: Galaxy's Edge"],
-  ["tp","What is the castle at Magic Kingdom called?","Cinderella Castle"],
-  ["tp","Which Walt Disney World park opened in 1998?","Disney's Animal Kingdom"],
-  ["tp","Name the four theme parks at Walt Disney World.","Magic Kingdom, EPCOT, Hollywood Studios and Animal Kingdom"],
-  ["tp","What was Disney's Hollywood Studios originally called?","Disney-MGM Studios"],
-  ["tp","Which attraction begins in a “stretching room”?","The Haunted Mansion"],
 
   ["md","What is Baby Yoda's actual name in The Mandalorian?","Grogu"],
   ["md","In Frozen, what is Kristoff's reindeer called?","Sven"],
@@ -549,6 +571,158 @@ const Q = [
   ["mu","Which Aladdin song won the Oscar for Best Original Song?","“A Whole New World”"],
   ["mu","Who composed the music for The Little Mermaid?","Alan Menken, with lyrics by Howard Ashman"],
   ["mu","Which ride is famous for a song about a small world?","“it's a small world”"]
+];
+
+/* Park tickets: [type, park, question, answer].
+ *
+ * Weighted towards things that stay true. Opening dates, heights, who built
+ * what and what used to stand where do not change; what is playing tonight
+ * does. Where a current fact earned its place it is pinned to a date, so the
+ * ticket stays honest even after the parks move on.
+ */
+const PQ = [
+  // ---- rides ----
+  ["ride","mk","What replaced Splash Mountain at Magic Kingdom in 2024?","Tiana's Bayou Adventure"],
+  ["ride","mk","Which Fantasyland dark ride replaced Mr. Toad's Wild Ride in 1998?","The Many Adventures of Winnie the Pooh"],
+  ["ride","mk","Seven Dwarfs Mine Train was built on the site of which attraction that closed in 1994?","20,000 Leagues Under the Sea"],
+  ["ride","mk","What do the Seven Dwarfs Mine Train cars do that most coaster cars cannot?","They swing side to side as the train rounds a bend"],
+  ["ride","mk","Which Magic Kingdom attraction came to Florida from the 1964 New York World's Fair?","Walt Disney's Carousel of Progress"],
+  ["ride","mk","What is the theme song of Carousel of Progress?","\u201cThere's a Great Big Beautiful Tomorrow,\u201d by the Sherman Brothers"],
+  ["ride","mk","Which Magic Kingdom mountain opened first?","Space Mountain in 1975. Big Thunder followed in 1980, Splash Mountain in 1992."],
+  ["ride","mk","How many happy haunts does the Haunted Mansion claim?","999, and there is always room for one more"],
+  ["ride","mk","Which room do you enter first at the Haunted Mansion?","The stretching room"],
+  ["ride","mk","Which land holds both Pirates of the Caribbean and the Jungle Cruise?","Adventureland"],
+  ["ride","mk","What is the full name of Tomorrowland's elevated tour ride?","The Tomorrowland Transit Authority PeopleMover"],
+  ["ride","mk","What moves the PeopleMover, which has no engine on board?","Linear induction motors built into the track"],
+  ["ride","mk","What is the Jungle Cruise skipper's most groan-worthy gag at Schweitzer Falls?","The backside of water"],
+  ["ride","mk","Which villain are you blasting in Buzz Lightyear's Space Ranger Spin?","Emperor Zurg"],
+  ["ride","mk","Which Magic Kingdom show descends from the attraction that introduced Audio-Animatronics in 1963?","The Enchanted Tiki Room"],
+  ["ride","ep","How tall is Spaceship Earth?","180 feet"],
+  ["ride","ep","Which Oscar-winning actress has narrated Spaceship Earth since 2007?","Dame Judi Dench"],
+  ["ride","ep","Which ride took over the site of Horizons in 2003?","Mission: SPACE"],
+  ["ride","ep","Where does Mission: SPACE hide a tribute to Horizons?","The Horizons logo sits at the centre of the gravity wheel in the queue"],
+  ["ride","ep","Who is the small purple dragon of the Imagination pavilion?","Figment"],
+  ["ride","ep","Who was Figment's original companion?","The Dreamfinder"],
+  ["ride","ep","What happens to the crops grown in the Living with the Land greenhouses?","They are served in EPCOT restaurants"],
+  ["ride","ep","Which ride did Frozen Ever After replace in the Norway pavilion?","Maelstrom"],
+  ["ride","ep","How many country pavilions ring the World Showcase Lagoon?","Eleven"],
+  ["ride","ep","How far is a lap of the World Showcase promenade?","About 1.2 miles"],
+  ["ride","ep","Which carmaker sponsors Test Track?","Chevrolet"],
+  ["ride","ep","Which extinct EPCOT ride about the history of transportation became Test Track?","World of Motion"],
+  ["ride","ep","What did Soarin' at EPCOT change to in May 2026?","Soarin' Across America, a new film of United States landscapes"],
+  ["ride","hs","What is the name of the haunted hotel in The Twilight Zone Tower of Terror?","The Hollywood Tower Hotel"],
+  ["ride","hs","How tall is the Tower of Terror?","199 feet, six inches shorter than Expedition Everest"],
+  ["ride","hs","Which band starred in Rock 'n' Roller Coaster from 1999 until 2026?","Aerosmith. The Muppets took the ride over in May 2026."],
+  ["ride","hs","How hard does Rock 'n' Roller Coaster launch?","0 to 57 miles an hour in under three seconds"],
+  ["ride","hs","Which planet is Star Wars: Galaxy's Edge set on?","Batuu"],
+  ["ride","hs","What is the settlement in Galaxy's Edge called?","Black Spire Outpost"],
+  ["ride","hs","What are the three crew jobs in Millennium Falcon: Smugglers Run?","Pilot, gunner and flight engineer"],
+  ["ride","hs","Which Toy Story Land coaster is towed by a spring-loaded dog?","Slinky Dog Dash"],
+  ["ride","hs","Mickey & Minnie's Runaway Railway replaced which opening-day attraction?","The Great Movie Ride, which closed in 2017"],
+  ["ride","hs","Whose back garden is Toy Story Land set in?","Andy's, with you shrunk to the size of a toy"],
+  ["ride","ak","How tall is Expedition Everest, and why exactly that height?","199.5 feet. At 200 feet it would need a flashing aviation beacon on top."],
+  ["ride","ak","What do fans call the Expedition Everest yeti, which has not moved in years?","The Disco Yeti, stuck in B-mode under a strobe light"],
+  ["ride","ak","Which Imagineer led the design of Animal Kingdom?","Joe Rohde"],
+  ["ride","ak","How tall is the Tree of Life?","145 feet"],
+  ["ride","ak","Roughly how many animals are carved into the Tree of Life?","Around 325"],
+  ["ride","ak","Which film is the land of Pandora based on?","Avatar. It opened in 2017."],
+  ["ride","ak","What do you fly on in Avatar Flight of Passage?","A mountain banshee"],
+  ["ride","ak","What was DINOSAUR called when it opened in 1998?","Countdown to Extinction"],
+  ["ride","ak","Which dinosaur chases you down at the end of DINOSAUR?","A Carnotaurus"],
+  ["ride","ak","Which Animal Kingdom ride is guaranteed to soak you?","Kali River Rapids"],
+  ["ride","ak","What might you see from Kilimanjaro Safaris?","Giraffes, elephants, lions, rhinos and hippos, among many others"],
+  ["ride","bf","Which mountain-themed coaster turns up at Disney parks around the world?","Space Mountain"],
+
+  // ---- shows ----
+  ["show","mk","What is the nighttime fireworks show at Magic Kingdom?","Happily Ever After"],
+  ["show","mk","Which Magic Kingdom show stars a troupe of singing animatronic bears?","The Country Bear Jamboree, rebuilt in 2024 as the Country Bear Musical Jamboree"],
+  ["show","mk","What song do the birds sing in the Enchanted Tiki Room?","\u201cThe Tiki Tiki Tiki Room\u201d"],
+  ["show","mk","Which Magic Kingdom 3D show drops Donald Duck into Disney's songbook?","Mickey's PhilharMagic"],
+  ["show","ep","What is EPCOT's nighttime spectacular called?","Luminous: The Symphony of Us"],
+  ["show","ep","Which World Showcase pavilion stages an Audio-Animatronic Mark Twain and Ben Franklin?","The American Adventure"],
+  ["show","ep","Which a cappella group sings in the American Adventure rotunda?","The Voices of Liberty"],
+  ["show","ep","Which EPCOT show lets children talk to a sea turtle in real time?","Turtle Talk with Crush"],
+  ["show","hs","Which nighttime show fills the Hollywood Hills Amphitheater with water, fire and projections?","Fantasmic!"],
+  ["show","hs","Whose imagination does Fantasmic! take place inside?","Mickey's"],
+  ["show","hs","Which long-running Hollywood Studios show restages a boulder chase and a Cairo street fight?","The Indiana Jones Epic Stunt Spectacular!"],
+  ["show","hs","Which 3D show starring Kermit and friends closed in 2025 after 34 years?","Muppet*Vision 3D"],
+  ["show","ak","Which Animal Kingdom show is staged in the round with floats, acrobats and a Tumble Monkey?","Festival of the Lion King"],
+  ["show","ak","Which Pixar fish story became an Animal Kingdom stage musical?","Finding Nemo, as Finding Nemo: The Big Blue and Beyond"],
+  ["show","ak","Which show replaced It's Tough to Be a Bug inside the Tree of Life in 2025?","Zootopia: Better Zoogether!"],
+  ["show","ak","What are the Tree of Life Awakenings?","Projections that bring the trunk carvings to life after dark"],
+
+  // ---- food and drink ----
+  ["food","mk","Where do you queue for a Dole Whip at Magic Kingdom?","Aloha Isle, in Adventureland"],
+  ["food","mk","What flavour is the classic Dole Whip?","Pineapple"],
+  ["food","mk","What is \u201cthe grey stuff,\u201d and where do you try it?","A cookies-and-cream dessert at Be Our Guest. It is delicious."],
+  ["food","mk","What is served at Gaston's Tavern in place of beer?","LeFou's Brew, frozen apple juice with a marshmallow top"],
+  ["food","mk","What is the Citrus Swirl?","Frozen orange and vanilla soft serve from Sunshine Tree Terrace"],
+  ["food","mk","Which Main Street counter sells hot dogs beside a ragtime piano?","Casey's Corner"],
+  ["food","mk","Which three snacks are famously shaped like Mickey's head?","The ice cream bar, the pretzel and the waffle"],
+  ["food","mk","Which Frontierland snack is a turkey the size of your forearm?","The smoked turkey leg"],
+  ["food","ep","What is School Bread, and which pavilion sells it?","A cardamom bun with vanilla custard and coconut, from Norway"],
+  ["food","ep","Which EPCOT festival fills the World Showcase with tasting booths each autumn?","The EPCOT International Food & Wine Festival"],
+  ["food","ep","Which Canada pavilion restaurant is famous for its cheddar cheese soup?","Le Cellier Steakhouse"],
+  ["food","ep","Which EPCOT restaurant seats you in a space station 220 miles above Florida?","Space 220"],
+  ["food","hs","Which Hollywood Studios restaurant seats you in a car at a drive-in?","Sci-Fi Dine-In Theater"],
+  ["food","hs","At which restaurant will the waitress tell you off for elbows on the table?","50's Prime Time Caf\u00e9"],
+  ["food","hs","Which salad is the signature dish at The Hollywood Brown Derby?","The Cobb salad"],
+  ["food","hs","What is a Ronto Wrap, and where do you buy one?","Sausage and slaw in pita, from Ronto Roasters in Galaxy's Edge"],
+  ["food","hs","What two colours of milk does the Galaxy's Edge Milk Stand sell?","Blue and green"],
+  ["food","ak","What are Zebra Domes?","Amarula mousse domes, served at Boma in Animal Kingdom Lodge"],
+  ["food","ak","Which Pandora counter serves build-your-own bowls?","Satu'li Canteen"],
+  ["food","rs","What is Tonga Toast?","Banana-stuffed sourdough, deep fried and rolled in cinnamon sugar, at the Polynesian"],
+  ["food","rs","Which Grand Floridian restaurant is the resort's fine-dining flagship?","Victoria & Albert's"],
+  ["food","rs","What is the Kitchen Sink at Beaches & Cream?","An eight-scoop sundae that arrives with a whole can of whipped cream"],
+
+  // ---- park lore ----
+  ["lore","mk","On what date did Magic Kingdom open?","1 October 1971"],
+  ["lore","mk","What is the castle at Magic Kingdom called?","Cinderella Castle"],
+  ["lore","mk","How tall is Cinderella Castle, and why not taller?","189 feet. At 200 feet it would need a flashing aviation beacon."],
+  ["lore","mk","What trick makes Cinderella Castle look far taller than it is?","Forced perspective: the stonework shrinks as it rises"],
+  ["lore","mk","Is Cinderella Castle built from stone?","No. It is fibreglass over a steel frame, with no bricks at all."],
+  ["lore","mk","What are the Utilidors?","Nine acres of tunnels beneath Magic Kingdom where cast members move unseen"],
+  ["lore","mk","Why is Magic Kingdom effectively built on its second storey?","The Utilidors take up the ground floor"],
+  ["lore","mk","Whose names appear on the second-floor windows along Main Street?","The people who built the park, as a credits roll"],
+  ["lore","mk","Which statue of Walt and Mickey stands before Cinderella Castle?","Partners"],
+  ["lore","mk","Which Town Square statue shows Roy O. Disney on a bench with Minnie?","Sharing the Magic"],
+  ["lore","mk","Whose faces are the cherubs on the ceiling at Be Our Guest?","Imagineers and their children, painted from baby photos"],
+  ["lore","mk","In the castle mosaic, what colours are Anastasia and Drizella's faces?","Red for rage and green for envy"],
+  ["lore","mk","How does rubbish leave Magic Kingdom?","Sucked through vacuum tubes at around 60 miles an hour to a central plant"],
+  ["lore","mk","Which land is themed to colonial America?","Liberty Square"],
+  ["lore","mk","How many lanterns hang on the Liberty Tree, and why?","Thirteen, one for each original colony"],
+  ["lore","mk","Which 1998 Fantasyland closure provoked fan sit-ins?","Mr. Toad's Wild Ride"],
+  ["lore","ep","What does EPCOT stand for?","Experimental Prototype Community of Tomorrow"],
+  ["lore","ep","On what date did EPCOT open?","1 October 1982"],
+  ["lore","ep","What did Walt actually intend EPCOT to be?","A real working city of the future, not a theme park"],
+  ["lore","ep","Which much-mourned EPCOT ride about the future closed in 1999?","Horizons"],
+  ["lore","hs","What was Disney's Hollywood Studios called when it opened in 1989?","Disney-MGM Studios"],
+  ["lore","ak","On what date did Animal Kingdom open, and why is it fitting?","22 April 1998, which was Earth Day"],
+  ["lore","rs","On what date did Walt Disney World open?","1 October 1971"],
+  ["lore","rs","Roughly how large is Walt Disney World?","About 25,000 acres, near 43 square miles, roughly the size of San Francisco"],
+  ["lore","rs","Name the four theme parks at Walt Disney World.","Magic Kingdom, EPCOT, Hollywood Studios and Animal Kingdom"],
+  ["lore","rs","Which resort bills itself as The Most Magical Place on Earth?","Walt Disney World"],
+  ["lore","rs","What is the monorail system officially called?","The Walt Disney World Monorail System"],
+  ["lore","rs","What is the monorail's top speed?","About 40 miles an hour"],
+  ["lore","rs","Which resort does the monorail run straight through the middle of?","Disney's Contemporary Resort"],
+  ["lore","rs","Which water park is themed to a ski resort that melted?","Blizzard Beach"],
+  ["lore","rs","Which Walt Disney World water park was abandoned in 2001?","River Country"],
+  ["lore","rs","What was Disney Springs called before 2015?","Downtown Disney"],
+  ["lore","rs","Which Pleasure Island club, beloved by improv fans, closed in 2008?","The Adventurers Club"],
+  ["lore","rs","What do cast members call the areas guests can see?","Onstage. Everywhere else is backstage."],
+  ["lore","rs","What three-circle shape do Imagineers hide all over the resort?","A Hidden Mickey"],
+  ["lore","bf","In what year did Disneyland open?","1955"],
+  ["lore","bf","What street do you walk down on entering Disneyland?","Main Street, U.S.A."],
+  ["lore","bf","How many Disney theme park resorts are there worldwide?","Six: Anaheim, Orlando, Tokyo, Paris, Hong Kong and Shanghai"],
+  ["lore","bf","Which Disney castle draws on several European castles at once?","Le Ch\u00e2teau de la Belle au Bois Dormant, at Disneyland Paris"],
+  ["lore","bf","Which Disneyland land opened in 2019 around Star Wars?","Star Wars: Galaxy's Edge"]
+];
+
+/* One flat pile the game actually deals from. Film rows and park rows arrive
+ * in different shapes; everything downstream sees the same object. */
+const ALL = [
+  ...Q.map(r => ({ g: "film", cat: r[0], park: null, q: r[1], a: r[2] })),
+  ...PQ.map(r => ({ g: "park", cat: r[0], park: r[1], q: r[2], a: r[3] }))
 ];
 
 /* ---- sound ----------------------------------------------------------------
@@ -674,6 +848,10 @@ soundBtn.onclick = () => {
 drawSound();
 
 // ---- state ----
+// `group` is the shelf (all / film / park), `filter` the round being dealt.
+// They move independently: picking a shelf opens its sub-chips without
+// committing you to one of them.
+let group = "all";
 let filter = "all";
 let pool = [];
 let current = null;
@@ -685,7 +863,27 @@ let spent = false;
 const ticket = document.getElementById("ticket");
 const nextBtn = document.getElementById("next");
 
-function pick(cat) { return cat === "all" ? Q.slice() : Q.filter(q => q[0] === cat); }
+/* Filters read as "all", a shelf ("film" / "park"), "cat:<key>" for a
+ * category or type, or "park:<key>" for somewhere in the resort. Slicing the
+ * park pile by type and by park is the whole point of the two-tag rows. */
+function pick(f) {
+  if (f === "all") return ALL.slice();
+  if (GROUPS[f]) return ALL.filter(x => x.g === f);
+  const cut = f.indexOf(":");
+  const kind = f.slice(0, cut), key = f.slice(cut + 1);
+  if (kind === "cat") return ALL.filter(x => x.cat === key);
+  if (kind === "park") return ALL.filter(x => x.park === key);
+  return ALL.slice();
+}
+
+// A park ticket is printed on its park's stock and labelled with both tags,
+// so you always know where you are as well as what you are being asked.
+function stockOf(x) { return x.g === "park" ? PARKS[x.park].stock : CATS[x.cat].stock; }
+function labelOf(x) {
+  return x.g === "park"
+    ? PARKS[x.park].name + "<i>" + CATS[x.cat].name + "</i>"
+    : CATS[x.cat].name;
+}
 
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
@@ -705,19 +903,41 @@ function startBook(cat) {
   nextTicket(true);
 }
 
-function drawChips() {
-  const box = document.getElementById("cats");
-  box.innerHTML = "";
-  const all = { key: "all", name: "Everything", stock: "#EDE7F7" };
-  [all, ...Object.entries(CATS).map(([k, v]) => ({ key: k, ...v }))].forEach(c => {
-    const b = document.createElement("button");
-    b.className = "chip";
-    b.setAttribute("aria-pressed", filter === c.key);
-    b.innerHTML = '<span class="dot" style="background:' + c.stock + '"></span>' + c.name;
-    b.onclick = () => startBook(c.key);
-    box.appendChild(b);
-  });
+function chip(box, name, stock, on, fn) {
+  const b = document.createElement("button");
+  b.className = "chip";
+  b.setAttribute("aria-pressed", String(on));
+  b.innerHTML = '<span class="dot" style="background:' + stock + '"></span>' + name;
+  b.onclick = fn;
+  box.appendChild(b);
 }
+
+function drawChips() {
+  const shelf = document.getElementById("cats");
+  shelf.innerHTML = "";
+  chip(shelf, "Everything", "#EDE7F7", group === "all", () => openShelf("all"));
+  Object.entries(GROUPS).forEach(([k, g]) =>
+    chip(shelf, g.name, k === "film" ? "#F2D88F" : "#B7DFA8", group === k, () => openShelf(k)));
+
+  // The second row only exists once a shelf is open, and the park shelf gets
+  // a divider between "what kind of thing" and "where in the resort".
+  const sub = document.getElementById("subcats");
+  sub.innerHTML = "";
+  sub.hidden = group === "all";
+  if (sub.hidden) return;
+
+  const g = GROUPS[group];
+  chip(sub, g.all, "#EDE7F7", filter === group, () => startBook(group));
+  g.subs.forEach(k =>
+    chip(sub, CATS[k].name, CATS[k].stock, filter === "cat:" + k, () => startBook("cat:" + k)));
+  if (g.parks) {
+    sub.appendChild(Object.assign(document.createElement("span"), { className: "sep" }));
+    g.parks.forEach(k =>
+      chip(sub, PARKS[k].name, PARKS[k].stock, filter === "park:" + k, () => startBook("park:" + k)));
+  }
+}
+
+function openShelf(g) { group = g; startBook(g === "all" ? "all" : g); }
 
 function nextTicket(dealt) {
   ticket.classList.remove("flipped");
@@ -736,16 +956,13 @@ function nextTicket(dealt) {
 }
 
 function render() {
-  const [cat, q, a] = current;
-  const total = pick(filter).length;
-  const stock = CATS[cat].stock;
   ticket.innerHTML =
-    face("front", stock, cat, total,
-      '<div class="prompt"><p>' + esc(q) + '</p></div>' +
+    face("front", current,
+      '<div class="prompt"><p>' + esc(current.q) + '</p></div>' +
       '<div class="hint">Tap to reveal</div>') +
-    face("back", stock, cat, total,
+    face("back", current,
       '<div class="sheen"></div>' +
-      '<div class="prompt"><div><p class="asked">' + esc(q) + '</p><p>' + esc(a) + '</p></div></div>' +
+      '<div class="prompt"><div><p class="asked">' + esc(current.q) + '</p><p>' + esc(current.a) + '</p></div></div>' +
       '<div class="verdict">' +
         '<button data-v="right">Got it</button>' +
         '<button data-v="wrong">Missed it</button>' +
@@ -756,10 +973,10 @@ function render() {
   nextBtn.textContent = "Next ticket";
 }
 
-function face(side, stock, cat, total, inner) {
-  return '<div class="face ' + side + '" style="--stock:' + stock + '">' +
+function face(side, item, inner) {
+  return '<div class="face ' + side + '" style="--stock:' + stockOf(item) + '">' +
     '<div class="stub"><span class="serial"><small>No.</small>' + pad(seen) + '</span>' +
-    '<span class="catname">' + CATS[cat].name + '</span></div>' + inner + '</div>';
+    '<span class="catname">' + labelOf(item) + '</span></div>' + inner + '</div>';
 }
 
 function mark(v) {
@@ -792,7 +1009,7 @@ function renderDone() {
 }
 
 function updateMeter() {
-  const total = pick(filter).length;
+  const total = pick(filter).length || 1;
   const used = Math.min(seen, total);
   document.getElementById("bar").style.width = (used / total * 100) + "%";
   document.getElementById("count").textContent = used + " of " + total + " tickets";
