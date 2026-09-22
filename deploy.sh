@@ -168,6 +168,9 @@ build_portfolio() {
     cd "$PORTFOLIO_DIR"
     node test/swing-coach.test.mjs || fail "Swing Coach tests failed"
 
+    log "Testing Meal Planner helpers..."
+    node test/meal-planner.test.mjs || fail "Meal Planner tests failed"
+
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
     npm run build || fail "Portfolio build failed"
@@ -195,6 +198,7 @@ deploy_hosting() {
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Swing Coach:    https://www.joshcocciardi.com/projects/swing-coach"
+    echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
 

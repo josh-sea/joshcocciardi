@@ -295,6 +295,61 @@ service cloud.firestore {
       }
     }
 
+    // ── Family Meal Planner (apps/portfolio/src/tools/meal-planner) ─────
+    // A household owns everything: recipes, the day-by-day plan, and the
+    // inventory. Membership is a list of lowercased emails, so one parent can
+    // add the other before that person has ever signed in. That only holds up
+    // if the email is proven, so every rule below requires a verified address
+    // (Google sign-in). An unverified email-and-password account claiming
+    // someone's address gets nothing.
+    function mpSignedIn() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+    function mpEmail() {
+      return request.auth.token.email.lower();
+    }
+    function mpIsMember(hid) {
+      return mpSignedIn()
+        && exists(/databases/$(database)/documents/mealplan_households/$(hid))
+        && mpEmail() in get(/databases/$(database)/documents/mealplan_households/$(hid)).data.memberEmails;
+    }
+    function mpValidMembers(data) {
+      return data.memberEmails is list
+        && data.memberEmails.size() >= 1
+        && data.memberEmails.size() <= 12;
+    }
+
+    match /mealplan_households/{hid} {
+      // `resource == null` lets a get() on a missing household read as "not
+      // found" instead of a permissions error.
+      allow read: if mpSignedIn()
+        && (resource == null || mpEmail() in resource.data.memberEmails);
+      allow create: if mpSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && mpValidMembers(request.resource.data)
+        && mpEmail() in request.resource.data.memberEmails;
+      // Any member can add or remove others, but never themselves (so nobody
+      // locks themselves out by accident), and the founder never changes.
+      allow update: if mpSignedIn()
+        && mpEmail() in resource.data.memberEmails
+        && mpEmail() in request.resource.data.memberEmails
+        && mpValidMembers(request.resource.data)
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if mpSignedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /recipes/{recipeId} {
+        allow read, write: if mpIsMember(hid);
+      }
+      match /days/{dateKey} {
+        allow read, write: if mpIsMember(hid);
+      }
+      match /inventory/{itemId} {
+        allow read, write: if mpIsMember(hid);
+      }
+    }
+
     // ── Draft Night: fantasy draft boards ────────────────────────────────
     // One document per league, holding both the league configuration (teams,
     // draft slot, roster shape, scoring) and that draft's live state (`gone`
@@ -557,7 +612,7 @@ service cloud.firestore {
     }
 
     // Default authenticated access for other collections.
-    // CanITwo, Recipe Box, Mise, /work and the per-user `users` tree are excluded —
+    // CanITwo, Recipe Box, Mise, the Meal Planner, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
     // rules above (in Firestore, any matching `allow` wins), and every
     // signed-in user could read and write everyone else's documents.
@@ -573,6 +628,7 @@ service cloud.firestore {
         && !collection.matches('recipebox_.*')
         && !collection.matches('mise_.*')
         && !collection.matches('draftnight_.*')
+        && !collection.matches('mealplan_.*')
         && !collection.matches('gatekeeper_.*')
         && !collection.matches('collector_.*')
         && !collection.matches('workbook_.*')
