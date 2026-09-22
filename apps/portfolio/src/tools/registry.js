@@ -68,6 +68,15 @@ const tools = [
     tech: ["React", "Cloud Functions", "ESPN Fantasy API"],
     component: lazy(() => import("./sunday-desk")),
   },
+  {
+    slug: "meal-planner",
+    title: "Family Meal Planner",
+    description:
+      "Recipes with a thumbs rating from each of the four of us, a Monday to Sunday plan (per-person breakfast and lunch, snacks, dinner, dessert), and a kitchen inventory you can dictate into. Shared across the household.",
+    added: "2026-09-22",
+    tech: ["React", "Firebase Auth", "Firestore"],
+    component: lazy(() => import("./meal-planner")),
+  },
 ];
 
 export default tools;
