@@ -14,37 +14,53 @@ turning it off clears it; "Made it again today" re-stamps), and a thumbs
 up / neutral / down from each of Josh, Ashley, Cam, and Bodhi. Tapping a
 chosen thumb again clears it, so "hasn't rated" stays distinct from neutral.
 
-**Plan.** Monday through Sunday, one day at a time, with a strip
-showing how many of each day's 12 slots are settled.
+**Plan.** Monday through Sunday, one day at a time, with a strip showing
+how many of each day's 14 slots are settled.
 
 | Section | Shape | Draws from |
 |---|---|---|
-| Breakfast | per person: undecided / a meal / not needed | recipes, inventory, or typed in |
-| Lunch | same as breakfast | same as breakfast |
-| Snacks | two slots, shared | inventory |
-| Dinner | one shared pick, plus free-text **dinner mods** | recipes |
-| Dessert | one shared pick | recipes or inventory |
+| Breakfast | per person | recipes, inventory, or typed in |
+| Lunch | per person | recipes, inventory, or typed in |
+| Snacks | per person | inventory |
+| Dinner | shared, plus free-text **dinner mods** | recipes or inventory |
+| Dessert | shared | recipes or inventory |
 
-Buttons at the right end of each row cover the common calls without opening
-the picker: **Skip** on an undecided breakfast or lunch marks it not needed
-(tap again to undo), and **Ate** on any filled slot records that it's what
-you actually had. Turning Ate on also:
+Every slot holds a list, so a snack can be goldfish *and* a meat stick and
+dinner can be pizza *and* sausage. Each item is a chip whose look says what
+it is, with no label needed: **recipes are solid green**, **inventory is a
+tint of the same green** (recipes are made from inventory), and **typed-in
+meals are outlined**. The difference is in the fill as well as the hue, so
+it reads without color too, and a small legend sits under the day's name.
+Text on every chip meets 4.5:1 contrast.
 
-- **recipe**: marks it made, with a last made date of that plan day (never
-  moving the date backwards), then asks for thumbs from whoever had it. A
-  breakfast or lunch slot asks only that person, and one tap rates and
-  closes. Dinner and dessert ask all four.
-- **inventory item**: asks "Finish the …?" with *Used it up, add to shopping
-  list*, *Used it up*, or *Still have some*. It doesn't ask when the item is
-  already struck through (Cam and Bodhi split the frozen pizza).
-- **typed in**: nothing to update, so no prompt.
+Quick edits happen right in the row, no picker needed:
 
-Turning Ate off only clears the flag. It doesn't undo ratings or used-up
-marks.
+- **✕** on a chip takes it off.
+- **Skip** on an undecided breakfast, lunch, or snack marks it not needed
+  (tap again to undo).
+- **Ate** on any filled slot records that it's what was actually eaten.
 
-Every chooser offers to add what you typed to Recipes or Inventory on the
-spot when it isn't there yet, and inventory choices only offer what's in
-stock. A slot keeps a copy of the name it was filled with, so it still reads correctly after the recipe is renamed or the
+The **+** (or tapping the empty part of a row) opens the picker, which
+stays open for several picks: tap to add, tap again to remove, and each tap
+saves. Typing "goldfish, cheese stick" is two things: known ones are
+selected, and anything new can be added to Inventory or Recipes on the spot.
+Inventory choices only offer what's in stock.
+
+Turning Ate on opens one follow-up covering every item in the slot:
+
+- **recipe**: marked made, with a last made date of that plan day (never
+  moving the date backwards), and a thumb asked of whoever had it. That's
+  one person for breakfast, lunch, or a snack, and all four for dinner or
+  dessert.
+- **inventory item**: *Used up + list*, *Used up*, or *Some left*. Items
+  already struck through (Cam and Bodhi split the frozen pizza) aren't asked
+  about again.
+- **typed in**: nothing to update.
+
+The follow-up closes itself once everything in it has an answer, so one
+person and one recipe is a single tap. Turning Ate off only clears the
+flag. It doesn't undo ratings or used-up marks. A slot keeps a copy of each
+item's name, so it still reads correctly after a recipe is renamed or an
 inventory row is deleted.
 
 **Inventory.** A running table, A to Z by default. Tap the **Item** or
@@ -93,16 +109,20 @@ A member can add or remove anyone except themselves; the founder
 ```
 mealplan_households/{hid}                 name, ownerUid, memberEmails[]
 mealplan_households/{hid}/recipes/{id}    name, link, ingredients, made, lastMade, ratings{person}
-mealplan_households/{hid}/days/{date}     date, breakfast{person}, lunch{person}, snacks[2],
-                                          dinner, dinnerMod, dessert
+mealplan_households/{hid}/days/{date}     date, breakfast{person}, lunch{person}, snack{person},
+                                          dinner, dessert, dinnerMod
 mealplan_households/{hid}/inventory/{id}  name, addedAt, usedAt, onList, inCart, createdAt
 ```
 
 Dates (`days/{date}`, `lastMade`) are local `YYYY-MM-DD` strings rather
-than timestamps, so Tuesday's plan is Tuesday wherever it's read. A
-per-person entry is `{ pick }` or `{ none: true }`; undecided is the entry
-being absent. A pick is `{ kind: "recipe" | "inventory" | "text", id, name }`, plus
-`eaten: true` once someone taps Ate.
+than timestamps, so Tuesday's plan is Tuesday wherever it's read. A slot is
+`{ items: [pick, ...], eaten? }`, `{ none: true }`, or absent (undecided).
+A pick is `{ kind: "recipe" | "inventory" | "text", id, name }`.
+
+Older days still read correctly (`readDay` in `plan.js`): a single `{ pick }`
+or bare pick becomes a one-item list, and the old two-slot `snacks` array
+maps to Cam (first) and Bodhi (second). The first snack edit on such a day
+saves the per-person `snack` map and deletes the array in the same write.
 
 An inventory row's state comes from its fields: in stock (`addedAt` set,
 `usedAt` null), used (`usedAt` set), or list-only (`addedAt` null, never
@@ -111,7 +131,8 @@ which is read as their added date.
 
 Each plan edit writes a single field path with `setDoc(..., { mergeFields })`,
 which creates the day on first touch and replaces the slot whole, so moving
-someone from a meal to "not needed" can't leave the old meal behind.
+someone from a meal to "not needed" can't leave the old meal behind, and two
+phones editing different people's slots don't overwrite each other.
 
 Every query filters on one field (`memberEmails array-contains`, a `date`
 range), so no composite indexes are needed. Rules are in the repo root
@@ -120,7 +141,8 @@ range), so no composite indexes are needed. Rules are in the repo root
 ## Tests
 
 - `apps/portfolio/test/meal-planner.test.mjs`: week math, the inventory
-  splitter, slot states, the inventory lifecycle and sorting. No dependencies; CI and `deploy.sh` run it.
+  splitter, slots and the old shapes they read from, the inventory lifecycle
+  and sorting. No dependencies; CI and `deploy.sh` run it.
 - `apps/portfolio/test/mealplan-rules.test.mjs`: security rules against
   the Firestore emulator. See `apps/portfolio/test/README.md`.
 

@@ -1,6 +1,7 @@
 // Pure-helper tests for the Family Meal Planner: the week math (Monday
-// through Sunday, local calendar days), the inventory splitter, and the
-// per-person slot states. No dependencies and no emulator:
+// through Sunday, local calendar days), the inventory splitter, slots (item
+// lists, old single-pick shapes, old two-slot snacks), and the inventory
+// lifecycle. No dependencies and no emulator:
 //
 //   cd apps/portfolio
 //   node test/meal-planner.test.mjs
@@ -18,10 +19,14 @@ import {
   mondayOf,
   normalizeLink,
   ratingSummary,
+  readDay,
+  readSlot,
+  samePick,
   slotState,
   sortItems,
   splitItems,
   weekDays,
+  writeSlot,
 } from "../src/tools/meal-planner/plan.js";
 
 let pass = 0;
@@ -72,22 +77,42 @@ eq("inner whitespace is tidied", splitItems("  greek   yogurt  "), ["greek yogur
 eq("empty input is no items", splitItems(""), []);
 
 console.log("\nslots:");
-eq("absent entry is undecided", slotState(undefined), "undecided");
-eq("a pick is a meal", slotState({ pick: { kind: "text", id: null, name: "Cereal" } }), "meal");
-eq("none wins over a stale pick", slotState({ none: true, pick: { kind: "text", name: "x" } }), "none");
-eq("an empty pick name is still undecided", slotState({ pick: { kind: "text", name: "" } }), "undecided");
-
 const pick = { kind: "recipe", id: "r1", name: "Pesto pasta" };
+const fish = { kind: "inventory", id: "i1", name: "goldfish" };
+const stick = { kind: "inventory", id: "i2", name: "meat stick" };
+eq("absent entry is undecided", slotState(undefined), "undecided");
+eq("a list with something in it is a meal", slotState({ items: [fish, stick] }), "meal");
+eq("not needed", slotState({ none: true }), "none");
+eq("an empty-named pick doesn't count", slotState({ items: [{ kind: "text", name: "" }] }), "undecided");
+eq("old per-person { pick } reads as a one-item list", readSlot({ pick }).items, [pick]);
+eq("old bare dinner pick reads as a one-item list", readSlot(pick).items, [pick]);
+eq("old eaten flag on the pick carries over", readSlot({ pick: { ...pick, eaten: true } }).eaten, true);
+eq("items win over a stale none", readSlot({ none: true, items: [fish] }), { items: [fish], none: false, eaten: false });
+eq("writing items keeps eaten", writeSlot({ items: [fish, stick], eaten: true }), { items: [fish, stick], eaten: true });
+eq("writing strips extra fields off picks", writeSlot({ items: [{ ...fish, eaten: true, junk: 1 }] }), { items: [fish] });
+eq("writing none", writeSlot({ items: [], none: true }), { none: true });
+eq("writing nothing deletes the slot", writeSlot({ items: [] }), null);
+eq("text picks match by name, others by id", [samePick(pick, { ...pick, name: "renamed" }), samePick({ kind: "text", name: "Toast" }, { kind: "text", name: "toast" })], [true, true]);
+
+console.log("\nold snacks:");
+const legacy = readDay({ snacks: [fish, stick] });
+eq("old Snack 1 lands on Cam", legacy.snack.cam.items, [fish]);
+eq("old Snack 2 lands on Bodhi", legacy.snack.bodhi.items, [stick]);
+eq("Josh and Ashley start undecided", [slotState(legacy.snack.josh), slotState(legacy.snack.ashley)], ["undecided", "undecided"]);
+eq("once snacks are per person the old array is ignored", readDay({ snack: { josh: { items: [fish] } }, snacks: [stick] }).snack.cam.items, []);
+
+console.log("\nprogress:");
+const all = (v) => Object.fromEntries(PEOPLE.map((p) => [p.key, v]));
 const fullDay = {
-  breakfast: Object.fromEntries(PEOPLE.map((p) => [p.key, { none: true }])),
-  lunch: Object.fromEntries(PEOPLE.map((p) => [p.key, { pick }])),
-  snacks: [pick, pick],
-  dinner: pick,
+  breakfast: all({ none: true }),
+  lunch: all({ items: [pick] }),
+  snack: all({ items: [fish, stick] }),
+  dinner: { items: [pick, fish] },
   dessert: pick,
 };
-eq("an untouched day is 0 of 12", dayProgress(undefined), { done: 0, total: 12 });
-eq("a fully settled day is 12 of 12", dayProgress(fullDay), { done: 12, total: 12 });
-eq("one snack of two counts once", dayProgress({ snacks: [pick, null] }), { done: 1, total: 12 });
+eq("an untouched day is 0 of 14", dayProgress(undefined), { done: 0, total: 14 });
+eq("a fully settled day is 14 of 14, old and new shapes mixed", dayProgress(fullDay), { done: 14, total: 14 });
+eq("old two-slot snacks count toward Cam and Bodhi", dayProgress({ snacks: [fish, null] }), { done: 1, total: 14 });
 
 console.log("\nrecipes:");
 eq("bare domains become links", normalizeLink("example.com/pesto"), "https://example.com/pesto");
