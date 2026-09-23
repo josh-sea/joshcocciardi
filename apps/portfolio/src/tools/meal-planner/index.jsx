@@ -86,6 +86,18 @@ export default function MealPlanner() {
     };
   }, []);
 
+  // iOS Safari zooms the page when a text field gets focus and never zooms
+  // back, which left the picker half off screen. maximum-scale stops that
+  // auto-zoom; iOS still allows pinch zoom regardless, so nobody loses the
+  // ability to enlarge the page. Only while this tool is on screen.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return undefined;
+    const before = meta.getAttribute("content");
+    meta.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
+    return () => meta.setAttribute("content", before);
+  }, []);
+
   const onError = useCallback((e) => {
     console.error("[meal-planner]", e);
     setError(explain(e));
@@ -148,12 +160,9 @@ export default function MealPlanner() {
   };
 
   const quickRecipe = useCallback((name) => addRecipe(hid, user.uid, { name, link: "", ingredients: "" }), [hid, user]);
-  // Adding from the plan's picker puts the item in stock (reviving a used-up
-  // row of the same name) and returns its id for the slot.
-  const quickItem = useCallback(
-    async (name) => (await stockItems(hid, user.uid, [name], inventory))[0],
-    [hid, user, inventory]
-  );
+  // Adding from the plan's picker puts the items in stock (reviving used-up
+  // rows of the same names) and returns their ids for the slot.
+  const quickItems = useCallback((names) => stockItems(hid, user.uid, names, inventory), [hid, user, inventory]);
   const stock = useMemo(() => inventory.filter(inStock), [inventory]);
   const listCount = inventory.filter((i) => i.onList).length;
 
@@ -197,7 +206,7 @@ export default function MealPlanner() {
         inventory={inventory}
         stock={stock}
         onAddRecipe={quickRecipe}
-        onAddInventory={quickItem}
+        onAddInventory={quickItems}
         onError={onError}
       />
     );

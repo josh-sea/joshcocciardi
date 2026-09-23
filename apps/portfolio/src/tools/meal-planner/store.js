@@ -7,8 +7,9 @@
 /*    name, link, ingredients, made, lastMade, ratings{person: r},     */
 /*    createdBy, createdAt, updatedAt                                  */
 /*  mealplan_households/{hid}/days/{YYYY-MM-DD}                        */
-/*    date, breakfast{person: entry}, lunch{person: entry},            */
-/*    snacks[2], dinner, dinnerMod, dessert, updatedAt                 */
+/*    date, breakfast{person: slot}, lunch{person: slot},              */
+/*    snack{person: slot}, dinner: slot, dessert: slot, dinnerMod      */
+/*    (a slot is { items[], eaten } or { none }; see plan.js)          */
 /*  mealplan_households/{hid}/inventory/{id}                           */
 /*    name, addedAt, usedAt, onList, inCart, createdAt, createdBy      */
 /*                                                                     */
@@ -36,7 +37,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { addDays, isPick, matchNames } from "./plan";
+import { addDays, matchNames } from "./plan";
 
 const COL = "mealplan_households";
 const hhCol = () => collection(db, COL);
@@ -186,8 +187,21 @@ export const saveSlot = (hid, dateKey, path, value) => {
   return setDoc(doc(sub(hid, "days"), dateKey), data, { mergeFields: ["date", "updatedAt", path] });
 };
 
-export const cleanPick = (p) =>
-  isPick(p) ? { kind: p.kind, id: p.id || null, name: p.name, ...(p.eaten ? { eaten: true } : {}) } : null;
+// Snacks are saved as the whole per-person map at once, and the same write
+// deletes the old two-slot `snacks` array. Writing one person at a time
+// would leave that array behind, and clearing Cam's snack would then bring
+// the old one back.
+export const saveSnacks = (hid, dateKey, byPerson) => {
+  const snack = {};
+  Object.entries(byPerson).forEach(([who, v]) => {
+    if (v) snack[who] = v;
+  });
+  return setDoc(
+    doc(sub(hid, "days"), dateKey),
+    { date: dateKey, updatedAt: serverTimestamp(), snack, snacks: deleteField() },
+    { mergeFields: ["date", "updatedAt", "snack", "snacks"] }
+  );
+};
 
 /* ----------------------------- inventory --------------------------- */
 

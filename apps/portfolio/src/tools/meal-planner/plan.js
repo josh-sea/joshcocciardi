@@ -101,7 +101,7 @@ export const splitItems = (text) => {
 
 /* ------------------------------ picks ------------------------------ */
 
-// A pick is what fills a slot on the plan: { kind, id, name }.
+// A pick is one thing in a slot on the plan: { kind, id, name }.
 //   kind "recipe"    → id is a recipe doc id
 //   kind "inventory" → id is an inventory doc id
 //   kind "text"      → typed in, no id
@@ -109,38 +109,99 @@ export const splitItems = (text) => {
 // recipe is renamed or the inventory row is eaten and deleted.
 export const makePick = (kind, id, name) => ({ kind, id: id || null, name: String(name || "").trim() });
 
-// A pick can also carry `eaten: true` once someone taps Ate, which is how
-// the plan records what the family actually had.
 export const isPick = (p) =>
   !!p && typeof p === "object" && ["recipe", "inventory", "text"].includes(p.kind) && !!p.name;
 
-// Per-person breakfast and lunch slots have three states. Undecided is the
-// absence of an entry; the other two are stored.
-export const slotState = (entry) => {
-  if (entry && entry.none === true) return "none";
-  if (entry && isPick(entry.pick)) return "meal";
-  return "undecided";
+export const cleanPick = (p) => (isPick(p) ? { kind: p.kind, id: p.id || null, name: p.name } : null);
+
+export const samePick = (a, b) =>
+  !!a && !!b && a.kind === b.kind && (a.kind === "text" ? a.name.toLowerCase() === b.name.toLowerCase() : a.id === b.id);
+
+/* ------------------------------ slots ------------------------------ */
+
+// The plan's sections, in order. Breakfast, lunch, and snacks are one slot
+// per person; dinner and dessert are one shared slot. `sources` says what a
+// slot can hold, and `text` whether anything typed in is fine too.
+export const SECTIONS = [
+  { key: "breakfast", label: "Breakfast", perPerson: true, sources: ["recipe", "inventory"], text: true },
+  { key: "lunch", label: "Lunch", perPerson: true, sources: ["recipe", "inventory"], text: true },
+  { key: "snack", label: "Snacks", perPerson: true, sources: ["inventory"], text: false },
+  { key: "dinner", label: "Dinner", perPerson: false, sources: ["recipe", "inventory"], text: false },
+  { key: "dessert", label: "Dessert", perPerson: false, sources: ["recipe", "inventory"], text: false },
+];
+
+// A slot holds a list of picks, so a lunch can be goldfish and a meat stick
+// and a dinner can be pizza and sausage. Stored as
+//   { items: [pick, ...], eaten?: true }   something planned
+//   { none: true }                          not needed
+//   (absent)                                undecided
+// Days saved before lists existed stored a single pick, either bare
+// (dinner, dessert) or as { pick } (breakfast, lunch); both read as a
+// one-item list.
+export const readSlot = (v) => {
+  const raw = v && typeof v === "object" ? v : {};
+  let items = [];
+  if (Array.isArray(raw.items)) items = raw.items.filter(isPick);
+  else if (isPick(raw.pick)) items = [raw.pick];
+  else if (isPick(raw)) items = [raw];
+  const eaten = raw.eaten === true || raw.pick?.eaten === true;
+  return { items, none: raw.none === true && !items.length, eaten: eaten && items.length > 0 };
 };
 
-// How much of a day is settled, for the dots on the week strip. A slot
-// counts as settled when it holds a meal or is marked as not needed.
-export const dayProgress = (day) => {
+export const slotState = (v) => {
+  const s = v && Array.isArray(v.items) && "none" in v ? v : readSlot(v);
+  if (s.none) return "none";
+  return s.items.length ? "meal" : "undecided";
+};
+
+// The stored shape for a slot, or null for undecided (which deletes it).
+export const writeSlot = ({ items = [], none = false, eaten = false }) => {
+  const clean = items.map(cleanPick).filter(Boolean);
+  if (clean.length) return { items: clean, ...(eaten ? { eaten: true } : {}) };
+  return none ? { none: true } : null;
+};
+
+// Snacks used to be two shared slots in a `snacks` array. In practice the
+// first was Cam's and the second Bodhi's, so that's where they land. Once a
+// day's snacks are saved per person the old array is deleted, so this only
+// ever reads days nobody has touched since.
+const LEGACY_SNACK_OWNERS = ["cam", "bodhi"];
+
+// A whole day, normalized: every section and person present, legacy shapes
+// folded in.
+export const readDay = (day) => {
   const d = day || {};
-  let done = 0;
-  let total = 0;
-  ["breakfast", "lunch"].forEach((meal) => {
+  const out = { dinnerMod: typeof d.dinnerMod === "string" ? d.dinnerMod : "" };
+  SECTIONS.forEach((sec) => {
+    if (!sec.perPerson) {
+      out[sec.key] = readSlot(d[sec.key]);
+      return;
+    }
+    out[sec.key] = {};
     PEOPLE.forEach((p) => {
-      total += 1;
-      if (slotState(d[meal]?.[p.key]) !== "undecided") done += 1;
+      out[sec.key][p.key] = readSlot(d[sec.key]?.[p.key]);
     });
   });
-  [0, 1].forEach((i) => {
-    total += 1;
-    if (isPick(d.snacks?.[i])) done += 1;
-  });
-  ["dinner", "dessert"].forEach((k) => {
-    total += 1;
-    if (isPick(d[k])) done += 1;
+  if (!d.snack && Array.isArray(d.snacks)) {
+    LEGACY_SNACK_OWNERS.forEach((who, i) => {
+      if (isPick(d.snacks[i])) out.snack[who] = readSlot(d.snacks[i]);
+    });
+  }
+  return out;
+};
+
+// How much of a day is settled, for the counts on the week strip. A slot
+// counts once it holds something or is marked not needed.
+export const dayProgress = (day) => {
+  const d = readDay(day);
+  let done = 0;
+  let total = 0;
+  SECTIONS.forEach((sec) => {
+    const slots = sec.perPerson ? PEOPLE.map((p) => d[sec.key][p.key]) : [d[sec.key]];
+    slots.forEach((s) => {
+      total += 1;
+      if (slotState(s) !== "undecided") done += 1;
+    });
   });
   return { done, total };
 };

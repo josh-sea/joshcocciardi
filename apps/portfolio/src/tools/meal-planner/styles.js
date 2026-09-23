@@ -100,23 +100,22 @@ textarea.input{resize:vertical;}
 .dayhead .muted{font-family:'DM Sans',sans-serif;font-size:15px;font-weight:400;}
 
 .sechead{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);margin:0 0 6px;}
-.slot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);min-height:48px;}
+.slot{display:flex;align-items:flex-start;gap:8px;border-top:1px solid var(--line);padding:8px 0;min-height:52px;}
+.slot > .who{width:62px;flex-shrink:0;font-weight:700;font-size:14px;background:none;border:none;padding:7px 0;text-align:left;}
+.slotchips{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:34px;cursor:pointer;}
+.slotchips .placeholder,.slotchips .none{background:none;border:none;padding:6px 0;font-size:15px;text-align:left;}
+.slotchips .placeholder{color:#76695F;}
+.slotchips .none{color:var(--soft);text-decoration:line-through;}
+.addchip{width:32px;height:32px;border-radius:50%;border:1.5px dashed #BDAFA4;background:none;color:var(--soft);
+  font-size:18px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0;}
+.pill{margin-top:1px;}
 .sechead + .slot{border-top:none;}
-.slotmain{flex:1;min-width:0;display:flex;align-items:center;gap:12px;text-align:left;background:none;border:none;padding:11px 2px;}
-.slot .who{width:70px;flex-shrink:0;font-weight:700;font-size:14px;}
-.slot .placeholder{color:#B3A79D;}
-.slot .none{color:var(--soft);text-decoration:line-through;}
-.slot.eaten .picked{color:var(--basil);}
 .pill{flex-shrink:0;background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 12px;min-width:58px;
   font-size:13px;font-weight:700;color:var(--soft);}
 .pill.skip.on{background:var(--ink);border-color:var(--ink);color:#fff;}
 .pill.ate{border-color:#CFE3D4;color:var(--basil);}
 .pill.ate.on{background:var(--basil);border-color:var(--basil);color:#fff;}
-.slot.meal .picked{font-weight:500;}
-.picked{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .tag{display:inline-block;white-space:nowrap;text-decoration:none;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:4px;padding:1px 6px;}
-.tag.recipe{background:var(--tomato-soft);color:var(--tomato);}
-.tag.inventory{background:var(--basil-soft);color:var(--basil);}
 .tag.list{background:var(--butter-soft);color:#8A6A12;margin-left:8px;}
 .tag.new{background:var(--butter-soft);color:#8A6A12;margin-left:8px;}
 
@@ -130,8 +129,15 @@ textarea.input{resize:vertical;}
 .opt{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;
   background:none;border:none;border-bottom:1px solid var(--line);padding:11px 12px;font-size:15px;}
 .opt:last-child{border-bottom:none;}
-.opt.on{background:var(--butter-soft);font-weight:700;}
 .sheetacts,.sheetfoot{display:flex;gap:8px;flex-wrap:wrap;}
+.sheetx .chipbtn{white-space:normal;text-align:left;}
+.sheetx{min-width:0;overflow:hidden;}
+.optname{display:inline-flex;align-items:center;min-width:0;}
+.optcheck{color:var(--basil);font-weight:700;width:16px;flex-shrink:0;}
+.opt.on{background:var(--basil-soft);font-weight:700;}
+.followlist{display:flex;flex-direction:column;gap:14px;overflow-y:auto;}
+.followblock{display:flex;flex-direction:column;gap:8px;}
+.usedrow{display:flex;gap:6px;flex-wrap:wrap;}
 
 /* ------------------------------ recipes ------------------------------ */
 
@@ -158,7 +164,6 @@ textarea.input{resize:vertical;}
 /* ----------------------------- inventory ----------------------------- */
 
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
-.chip{background:var(--basil-soft);color:var(--basil);border-radius:999px;padding:4px 10px;font-size:13px;font-weight:500;}
 .list{padding:0 14px;}
 .table{padding:4px 12px;}
 .thead,.trow{display:flex;align-items:center;gap:10px;}
@@ -184,6 +189,31 @@ textarea.input{resize:vertical;}
 .item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
 .item:last-child{border-bottom:none;}
 .iname{font-weight:500;}
+
+/* ------------------------------- chips ------------------------------- */
+/* Kind is carried by fill as well as hue, so it reads without color too:
+   recipe = solid, inventory = tint of the same green (recipes are made from
+   inventory), typed in = outline. Text contrast is 4.5:1 or better on each.
+   A new kind needs a .chip.<kind> and .dot.<kind> rule here, plus an entry
+   in KINDS in Chip.jsx. */
+.chip{display:inline-flex;align-items:center;gap:2px;max-width:100%;border-radius:999px;padding:5px 11px;
+  font-size:14px;font-weight:500;line-height:1.25;border:1.5px solid transparent;overflow-wrap:anywhere;}
+.chip.recipe{background:#2F6B41;border-color:#2F6B41;color:#fff;}
+.chip.inventory{background:#E3F0E5;border-color:#9CC5A7;color:#1E4D2B;}
+.chip.text{background:#fff;border-color:#BDAFA4;color:var(--ink);}
+.chipx{background:none;border:none;color:inherit !important;opacity:.75;font-size:12px;padding:2px 0 2px 7px;margin-right:-4px;line-height:1;}
+.chipx:hover{opacity:1;}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;border:1.5px solid transparent;flex-shrink:0;margin-right:8px;}
+.dot.recipe{background:#2F6B41;border-color:#2F6B41;}
+.dot.inventory{background:#E3F0E5;border-color:#5E9870;}
+.dot.text{background:#fff;border-color:#9C8E84;}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--soft);}
+.legenditem{display:inline-flex;align-items:center;}
+.legend .dot{width:10px;height:10px;margin-right:5px;}
+.dayline{display:flex;justify-content:space-between;align-items:baseline;gap:8px 14px;flex-wrap:wrap;margin:4px 0 10px;}
+.dayline .dayhead{margin:0;}
+.chipline{display:flex;flex-wrap:wrap;gap:6px;}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
 `;
 
 export default CSS;

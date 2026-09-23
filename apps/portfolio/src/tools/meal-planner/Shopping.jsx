@@ -73,7 +73,7 @@ export default function Shopping({ hid, user, inventory, onError }) {
         {preview.length > 0 && (
           <div className="chips">
             {preview.map((p) => (
-              <span key={p} className="chip">
+              <span key={p} className="chip text">
                 {p}
               </span>
             ))}
