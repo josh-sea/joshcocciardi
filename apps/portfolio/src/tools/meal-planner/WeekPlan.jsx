@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Chip, { Legend } from "./Chip";
 import FollowUp from "./FollowUp";
 import PickSheet from "./PickSheet";
-import { saveMod, saveSlot, saveSnacks, setRating, setUsed, updateRecipe, watchWeek } from "./store";
+import { saveMod, saveSlot, saveSnacks, setListed, setRating, setUsed, updateRecipe, watchWeek } from "./store";
 import {
   addDays,
   dayProgress,
+  followUpFor,
   isLegacyShared,
-  itemState,
   laterKey,
   mondayOf,
   readDay,
@@ -189,44 +189,36 @@ export default function WeekPlan({ hid, config, recipes, inventory, stock, onAdd
   };
 
   // Ate flags the whole slot as eaten. Turning it on also keeps the other
-  // pages in step, one block per item in a single follow-up: each recipe is
-  // marked made (dated to this plan day, never earlier than it already was)
-  // and asks for thumbs from whoever had it (that person, or everyone for a
-  // shared row), and each inventory item still in stock asks whether it's
-  // finished. Turning it off only clears the flag; undoing a rating or a
-  // used-up mark by surprise would be worse.
+  // pages in step: each recipe in the slot is marked made (dated to this plan
+  // day, never earlier than it already was), and one follow-up asks for
+  // thumbs on those recipes and shows a Used up / + List row for every
+  // inventory item touched, picked directly or linked to a recipe. Turning
+  // it off only clears the flag; undoing a rating or a used-up mark by
+  // surprise would be worse.
   const ate = (sec, person) => {
     const slot = slotOf(sec, person);
     const eaten = !slot.eaten;
     write(sec, person, { ...slot, eaten });
     if (!eaten) return;
-    const people = person ? [person] : config.active;
-    const blocks = [];
-    slot.items.forEach((p) => {
-      if (blocks.some((b) => b.kind === p.kind && b.id === p.id)) return;
-      if (p.kind === "recipe") {
-        const r = recipes.find((x) => x.id === p.id);
-        if (!r) return;
-        updateRecipe(hid, r.id, {
-          made: true,
-          lastMade: laterKey(r.lastMade, dayKey),
-        }).catch(onError);
-        blocks.push({ kind: "recipe", id: r.id, name: r.name, people });
-      } else if (p.kind === "inventory") {
-        const item = inventory.find((i) => i.id === p.id);
-        // Already struck through (two kids split the frozen pizza), or
-        // deleted since: nothing to ask.
-        if (item && itemState(item) === "stock") blocks.push({ kind: "inventory", id: item.id, name: item.name });
-      }
+    const { recipes: ateRecipes, stock: touched } = followUpFor(slot.items, {
+      recipes,
+      inventory,
+      people: person ? [person] : config.active,
     });
-    if (!blocks.length) return;
+    ateRecipes.forEach((r) => {
+      const current = recipes.find((x) => x.id === r.id);
+      updateRecipe(hid, r.id, { made: true, lastMade: laterKey(current?.lastMade, dayKey) }).catch(onError);
+    });
+    if (!ateRecipes.length && !touched.length) return;
     const meal = sec.key === "snack" ? "snack" : sec.label.toLowerCase();
     setFollowUp({
       title: person ? `After ${person.name}'s ${meal}` : `After ${meal}`,
-      sub: blocks.some((b) => b.kind === "recipe") ? `Marked made ${when}.` : when,
-      blocks,
+      sub: ateRecipes.length ? `Marked made ${when}.` : when,
+      recipes: ateRecipes,
+      stock: touched,
     });
   };
+
 
   const ratingsFor = (id) => recipes.find((r) => r.id === id)?.ratings || {};
 
@@ -313,9 +305,11 @@ export default function WeekPlan({ hid, config, recipes, inventory, stock, onAdd
       {followUp && (
         <FollowUp
           {...followUp}
+          inventory={inventory}
           ratingsFor={ratingsFor}
           onRate={(id, person, value) => setRating(hid, id, person, value).catch(onError)}
-          onUsedUp={(id, toList) => setUsed(hid, id, true, { toList }).catch(onError)}
+          onToggleUsed={(id, used) => setUsed(hid, id, used).catch(onError)}
+          onToggleList={(id, listed) => setListed(hid, id, listed).catch(onError)}
           onClose={closeFollowUp}
         />
       )}

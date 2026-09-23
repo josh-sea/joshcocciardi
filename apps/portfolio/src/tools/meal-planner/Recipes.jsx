@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
+import Chip from "./Chip";
+import InventoryLink from "./InventoryLink";
 import { addRecipe, deleteRecipe, setRating, updateRecipe } from "./store";
-import { normalizeLink, ratingSummary, shortDate, sourceLabel, todayKey } from "./plan";
+import { makePick, normalizeLink, ratingSummary, shortDate, sourceLabel, todayKey } from "./plan";
 
 const THUMBS = [
   { value: "up", icon: "👍", label: "thumbs up" },
@@ -14,13 +16,15 @@ const SORTS = [
   ["liked", "Most liked"],
 ];
 
-/* Name, where it came from, and the ingredients. That's the whole add form:
-   ratings and "made it" happen later, whenever someone gets to them. */
-function RecipeForm({ initial, onSave, onCancel, saveLabel }) {
+/* Name, where it came from, and the ingredients, plus (optionally) the
+   inventory items it uses. That's the whole add form: ratings and "made it"
+   happen later, whenever someone gets to them. */
+function RecipeForm({ initial, onSave, onCancel, saveLabel, inventory, onAddInventory }) {
   const [name, setName] = useState(initial?.name || "");
   const [mode, setMode] = useState(initial && !initial.link ? "typed" : "link");
   const [link, setLink] = useState(initial?.link || "");
   const [ingredients, setIngredients] = useState(initial?.ingredients || "");
+  const [uses, setUses] = useState(initial?.uses || []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -33,11 +37,12 @@ function RecipeForm({ initial, onSave, onCancel, saveLabel }) {
     setBusy(true);
     setError(null);
     try {
-      await onSave({ name: name.trim(), link: cleanLink, ingredients });
+      await onSave({ name: name.trim(), link: cleanLink, ingredients, uses });
       if (!initial) {
         setName("");
         setLink("");
         setIngredients("");
+        setUses([]);
       }
     } catch (err) {
       setError(err.message);
@@ -88,6 +93,14 @@ function RecipeForm({ initial, onSave, onCancel, saveLabel }) {
         />
       </label>
 
+      <div className="field">
+        <span className="flabel">From inventory (optional)</span>
+        <InventoryLink value={uses} onChange={setUses} inventory={inventory} onAddInventory={onAddInventory} />
+        <div className="muted small" style={{ marginTop: 6 }}>
+          Linked items come up when someone marks this recipe as eaten, so inventory stays current.
+        </div>
+      </div>
+
       {error && <div className="err">{error}</div>}
       <div className="row gap">
         <button className="btn" type="submit" disabled={busy}>
@@ -103,7 +116,7 @@ function RecipeForm({ initial, onSave, onCancel, saveLabel }) {
   );
 }
 
-function RecipeCard({ hid, people, recipe, onError }) {
+function RecipeCard({ hid, people, recipe, inventory, onAddInventory, onError }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const { up, down, rated } = ratingSummary(recipe.ratings, people);
@@ -129,6 +142,8 @@ function RecipeCard({ hid, people, recipe, onError }) {
       <RecipeForm
         initial={recipe}
         saveLabel="Save changes"
+        inventory={inventory}
+        onAddInventory={onAddInventory}
         onCancel={() => setEditing(false)}
         onSave={async (data) => {
           await updateRecipe(hid, recipe.id, data);
@@ -191,6 +206,13 @@ function RecipeCard({ hid, people, recipe, onError }) {
       {open && (
         <div className="rbody">
           {recipe.ingredients ? <p className="ingredients">{recipe.ingredients}</p> : <p className="muted small">No ingredients yet.</p>}
+          {recipe.uses.length > 0 && (
+            <div className="chipline" style={{ marginBottom: 10 }} aria-label="Uses from inventory">
+              {recipe.uses.map((u) => (
+                <Chip key={u.id} pick={makePick("inventory", u.id, u.name)} />
+              ))}
+            </div>
+          )}
           <div className="row gap">
             {recipe.made && (
               <button
@@ -215,7 +237,7 @@ function RecipeCard({ hid, people, recipe, onError }) {
   );
 }
 
-export default function Recipes({ hid, user, people, recipes, onError }) {
+export default function Recipes({ hid, user, people, recipes, inventory, onAddInventory, onError }) {
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("name");
@@ -246,7 +268,13 @@ export default function Recipes({ hid, user, people, recipes, onError }) {
       </div>
 
       {adding && (
-        <RecipeForm saveLabel="Save recipe" onSave={(data) => addRecipe(hid, user.uid, data)} onCancel={() => setAdding(false)} />
+        <RecipeForm
+          saveLabel="Save recipe"
+          inventory={inventory}
+          onAddInventory={onAddInventory}
+          onSave={(data) => addRecipe(hid, user.uid, data)}
+          onCancel={() => setAdding(false)}
+        />
       )}
 
       {recipes.length > 0 && (
@@ -269,7 +297,15 @@ export default function Recipes({ hid, user, people, recipes, onError }) {
       )}
 
       {rows.map((r) => (
-        <RecipeCard key={r.id} hid={hid} people={people} recipe={r} onError={onError} />
+        <RecipeCard
+          key={r.id}
+          hid={hid}
+          people={people}
+          recipe={r}
+          inventory={inventory}
+          onAddInventory={onAddInventory}
+          onError={onError}
+        />
       ))}
       {recipes.length > 0 && rows.length === 0 && <div className="muted small pad">Nothing matches “{q}”.</div>}
     </div>

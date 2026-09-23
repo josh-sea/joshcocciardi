@@ -208,7 +208,17 @@ export default function MealPlanner() {
       />
     );
   } else if (tab === "recipes") {
-    body = <Recipes hid={hid} user={user} people={config.active} recipes={recipes} onError={onError} />;
+    body = (
+      <Recipes
+        hid={hid}
+        user={user}
+        people={config.active}
+        recipes={recipes}
+        inventory={inventory}
+        onAddInventory={quickItems}
+        onError={onError}
+      />
+    );
   } else if (tab === "inventory") {
     body = <Inventory hid={hid} user={user} inventory={inventory} onError={onError} />;
   } else if (tab === "shopping") {

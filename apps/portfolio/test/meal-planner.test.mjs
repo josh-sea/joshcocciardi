@@ -11,6 +11,7 @@ import {
   ageLabel,
   dayProgress,
   findByName,
+  followUpFor,
   inStock,
   isLegacyShared,
   itemState,
@@ -24,6 +25,7 @@ import {
   ratingSummary,
   readDay,
   readSlot,
+  recipeUses,
   samePick,
   sectionSlots,
   shownSections,
@@ -210,6 +212,29 @@ console.log("\nmade dates:");
 eq("a later plan day moves last made forward", laterKey("2026-09-20", "2026-09-23"), "2026-09-23");
 eq("an older plan day never moves it back", laterKey("2026-09-23", "2026-09-20"), "2026-09-23");
 eq("first time made", laterKey(null, "2026-09-23"), "2026-09-23");
+
+console.log("\nafter eating:");
+const pantry = [
+  { id: "pasta", name: "pasta", addedAt: d(20), usedAt: null },
+  { id: "pesto", name: "pesto", addedAt: d(20), usedAt: d(22) },
+  { id: "coffee", name: "coffee", addedAt: null, usedAt: null, onList: true },
+  { id: "fish", name: "goldfish", addedAt: d(20), usedAt: null },
+];
+const book = [
+  { id: "r1", name: "Pesto pasta", uses: [{ id: "pasta", name: "pasta" }, { id: "pesto", name: "pesto" }, { id: "coffee", name: "coffee" }, { id: "gone", name: "old row" }] },
+  { id: "r2", name: "Pasta salad", uses: [{ id: "pasta", name: "pasta" }] },
+];
+const kid = [{ key: "cam", name: "Cam" }];
+const fu = followUpFor(
+  [{ kind: "recipe", id: "r1", name: "Pesto pasta" }, { kind: "recipe", id: "r2", name: "Pasta salad" }, { kind: "inventory", id: "fish", name: "goldfish" }, { kind: "text", name: "Toast" }],
+  { recipes: book, inventory: pantry, people: kid }
+);
+eq("each recipe eaten is rated by whoever had it", fu.recipes.map((r) => [r.name, r.people.map((p) => p.name)]), [["Pesto pasta", ["Cam"]], ["Pasta salad", ["Cam"]]]);
+eq("linked and picked inventory both get a row, each once", fu.stock.map((x) => x.name), ["pasta", "pesto", "goldfish"]);
+eq("used-up items still get a row (to relist); never-bought and deleted ones don't", fu.stock.some((x) => x.id === "coffee" || x.id === "gone"), false);
+eq("typed-in meals ask nothing", followUpFor([{ kind: "text", name: "Toast" }], { recipes: book, inventory: pantry, people: kid }), { recipes: [], stock: [] });
+eq("a deleted recipe asks nothing", followUpFor([{ kind: "recipe", id: "nope", name: "x" }], { recipes: book, inventory: pantry, people: kid }), { recipes: [], stock: [] });
+eq("recipeUses drops malformed links", recipeUses({ uses: [{ id: "a", name: "A" }, { id: 3, name: "B" }, { id: "c" }, null] }), [{ id: "a", name: "A" }]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

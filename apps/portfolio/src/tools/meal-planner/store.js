@@ -5,7 +5,8 @@
 /*    name, ownerUid, memberEmails[], people[{key, name, active}],     */
 /*    sections{section: {mode, people[]}}, createdAt, updatedAt        */
 /*  mealplan_households/{hid}/recipes/{id}                             */
-/*    name, link, ingredients, made, lastMade, ratings{person: r},     */
+/*    name, link, ingredients, uses[{id, name}], made, lastMade,       */
+/*    ratings{person: r},                                              */
 /*    createdBy, createdAt, updatedAt                                  */
 /*  mealplan_households/{hid}/days/{YYYY-MM-DD}                        */
 /*    date, breakfast{person: slot}, lunch{person: slot},              */
@@ -40,7 +41,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { addDays, matchNames } from "./plan";
+import { addDays, matchNames, recipeUses } from "./plan";
 
 const COL = "mealplan_households";
 const hhCol = () => collection(db, COL);
@@ -122,6 +123,7 @@ const shapeRecipe = (snap) => {
     made: d.made === true,
     lastMade: typeof d.lastMade === "string" ? d.lastMade : null,
     ratings: d.ratings && typeof d.ratings === "object" ? d.ratings : {},
+    uses: recipeUses(d),
     createdAt: when(d.createdAt),
   };
 };
@@ -137,11 +139,12 @@ export const watchRecipes = (hid, cb, onError) =>
     onError
   );
 
-export const addRecipe = async (hid, uid, { name, link, ingredients }) => {
+export const addRecipe = async (hid, uid, { name, link, ingredients, uses }) => {
   const ref = await addDoc(sub(hid, "recipes"), {
     name: String(name || "").trim(),
     link: link || "",
     ingredients: String(ingredients || "").trim(),
+    uses: recipeUses({ uses }),
     made: false,
     lastMade: null,
     ratings: {},
@@ -309,6 +312,10 @@ export const setUsed = (hid, id, used, { toList = false } = {}) =>
 // be, so its row goes too.
 export const unlistItem = (hid, item) =>
   item.addedAt ? updateDoc(itemRef(hid, item.id), { onList: false, inCart: false }) : deleteDoc(itemRef(hid, item.id));
+
+// On or off the shopping list, for an item that has been in the house.
+export const setListed = (hid, id, onList) =>
+  updateDoc(itemRef(hid, id), onList ? { onList: true } : { onList: false, inCart: false });
 
 export const setInCart = (hid, id, inCart) => updateDoc(itemRef(hid, id), { inCart });
 

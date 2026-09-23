@@ -7,8 +7,10 @@ tapping **Ate** on the plan feeds back into both.
 
 ## Pages
 
-**Recipes.** Name, source (a pasted link, or "typed in"), and free-text
-ingredients. That's the whole add form. Afterwards, whenever someone gets to
+**Recipes.** Name, source (a pasted link, or "typed in"), free-text
+ingredients, and optionally **From inventory**: the inventory items the
+recipe uses (search and tap, or type a new one to add it to inventory on the
+spot). Linked items come up in the follow-up when the recipe is eaten. Afterwards, whenever someone gets to
 it: a **Made it** toggle (turning it on stamps today as the last made date,
 turning it off clears it; "Made it again today" re-stamps), and a thumbs
 up / neutral / down from each person in the kitchen. Tapping a
@@ -56,13 +58,18 @@ Turning Ate on opens one follow-up covering every item in the slot:
 - **recipe**: marked made, with a last made date of that plan day (never
   moving the date backwards), and a thumb asked of whoever had it: that
   person for a per-person row, and everyone for a shared one.
-- **inventory item**: *Used up + list*, *Used up*, or *Some left*. Items
-  already struck through (Cam and Bodhi split the frozen pizza) aren't asked
-  about again.
+- **inventory**: one row per item, with two independent toggles,
+  **Used up** and **+ List**. Tap either, both, or neither; neither means
+  there's some left, so no tap is needed. The rows cover items picked
+  directly *and* items linked to a recipe that was eaten, each listed once.
+  They show the item's live state (already on the list reads "✓ List") and
+  each tap saves, so tapping again undoes it.
 - **typed in**: nothing to update.
 
-The follow-up closes itself once everything in it has an answer, so one
-person and one recipe is a single tap. Turning Ate off only clears the
+With only ratings to give, the follow-up closes itself once everyone has
+one, so one person and one recipe is a single tap. With inventory rows it
+waits for Done, since leaving a row alone is a valid answer.
+Turning Ate off only clears the
 flag. It doesn't undo ratings or used-up marks. A slot keeps a copy of each
 item's name, so it still reads correctly after a recipe is renamed or an
 inventory row is deleted.
@@ -132,7 +139,7 @@ A member can add or remove anyone except themselves; the founder
 
 ```
 mealplan_households/{hid}                 name, ownerUid, memberEmails[], people[], sections{}
-mealplan_households/{hid}/recipes/{id}    name, link, ingredients, made, lastMade, ratings{person}
+mealplan_households/{hid}/recipes/{id}    name, link, ingredients, uses[{id, name}], made, lastMade, ratings{person}
 mealplan_households/{hid}/days/{date}     date, {section}{personKey | all}, mods{section}
 mealplan_households/{hid}/inventory/{id}  name, addedAt, usedAt, onList, inCart, createdAt
 ```
@@ -174,7 +181,8 @@ range), so no composite indexes are needed. Rules are in the repo root
 
 - `apps/portfolio/test/meal-planner.test.mjs`: week math, the inventory
   splitter, kitchen config (people, section modes, defaults), slots in both
-  modes and the old shapes they read from, the inventory lifecycle, sorting. No dependencies; CI and `deploy.sh` run it.
+  modes and the old shapes they read from, the inventory lifecycle, sorting,
+  and what the after-eating follow-up covers. No dependencies; CI and `deploy.sh` run it.
 - `apps/portfolio/test/mealplan-rules.test.mjs`: security rules against
   the Firestore emulator. See `apps/portfolio/test/README.md`.
 
