@@ -7,21 +7,27 @@
 //   node test/meal-planner.test.mjs
 
 import {
-  PEOPLE,
   addDays,
   ageLabel,
   dayProgress,
   findByName,
   inStock,
+  isLegacyShared,
   itemState,
+  kitchenConfig,
   laterKey,
+  makePeople,
   matchNames,
   mondayOf,
+  newPersonKey,
   normalizeLink,
   ratingSummary,
   readDay,
   readSlot,
   samePick,
+  sectionSlots,
+  shownSections,
+  slotPath,
   slotState,
   sortItems,
   splitItems,
@@ -94,15 +100,60 @@ eq("writing none", writeSlot({ items: [], none: true }), { none: true });
 eq("writing nothing deletes the slot", writeSlot({ items: [] }), null);
 eq("text picks match by name, others by id", [samePick(pick, { ...pick, name: "renamed" }), samePick({ kind: "text", name: "Toast" }, { kind: "text", name: "toast" })], [true, true]);
 
+console.log("\nkitchen config:");
+const legacyKitchen = kitchenConfig({});
+eq("a kitchen from before people were editable keeps its four keys", legacyKitchen.active.map((p) => p.key), ["josh", "ashley", "cam", "bodhi"]);
+eq(
+  "and today's layout: three per-person meals, two shared",
+  legacyKitchen.sections.map((s) => `${s.key}:${s.mode}`),
+  ["breakfast:each", "lunch:each", "snack:each", "dinner:all", "dessert:all"]
+);
+const cousin = kitchenConfig({
+  people: [
+    { key: "pa", name: "Sam", active: true },
+    { key: "pb", name: "Alex", active: true },
+    { key: "pc", name: "Riley", active: false },
+  ],
+  sections: { breakfast: { mode: "all" }, snack: { mode: "each", people: ["pb", "pc"] }, dinner: { mode: "each", people: [] } },
+});
+eq("removed people keep their name but lose their rows", [cousin.people.length, cousin.active.map((p) => p.name)], [3, ["Sam", "Alex"]]);
+eq("a section can be shared", cousin.sections[0].mode, "all");
+eq("a per-person section lists only chosen, active people", cousin.sections[2].people.map((p) => p.name), ["Alex"]);
+eq("a section with nobody chosen is hidden", shownSections(cousin).map((s) => s.key), ["breakfast", "lunch", "snack", "dessert"]);
+eq("junk keys (and the reserved 'all') are dropped", kitchenConfig({ people: [{ key: "all", name: "x" }, { key: "a.b", name: "y" }, { key: "ok", name: "" }] }).people, [
+  { key: "ok", name: "Someone", active: true },
+]);
+let seq = [0.1, 0.1, 0.5];
+const fixed = () => seq.shift();
+const k1 = newPersonKey([], () => 0.1);
+eq("person keys are short and field-name safe", /^p[a-z0-9]{6}$/.test(k1), true);
+eq("a key already taken is never reused", newPersonKey([k1], fixed) !== k1, true);
+eq("makePeople gives everyone a distinct key", new Set(makePeople(["A", "B", "C"]).map((p) => p.key)).size, 3);
+
+console.log("\ndays by mode:");
+const ok = (d) => readDay(d, legacyKitchen);
+eq("slots live at section.person or section.all", [slotPath("breakfast", "cam"), slotPath("dinner", null)], ["breakfast.cam", "dinner.all"]);
+eq("old bare dinner slot reads as the shared slot", ok({ dinner: { items: [pick] } }).dinner.shared.items, [pick]);
+eq("new dinner.all reads as the shared slot", ok({ dinner: { all: { items: [fish] } } }).dinner.shared.items, [fish]);
+eq("old bare single-pick dessert still reads", ok({ dessert: pick }).dessert.shared.items, [pick]);
+eq("old per-person { pick } reads", ok({ breakfast: { cam: { pick } } }).breakfast.byPerson.cam.items, [pick]);
+eq("a shared and a per-person slot can sit in one section", ok({ lunch: { all: { items: [fish] }, cam: { items: [stick] } } }).lunch.shared.items, [fish]);
+eq("old dinnerMod reads as dinner's mods", ok({ dinnerMod: "Cam: plain" }).mods.dinner, "Cam: plain");
+eq("mods.dinner wins over the old field", ok({ dinnerMod: "old", mods: { dinner: "new" } }).mods.dinner, "new");
+eq("isLegacyShared spots old bare slots only", [isLegacyShared({ items: [] }), isLegacyShared(pick), isLegacyShared({ all: {} }), isLegacyShared({ cam: {} })], [true, true, false, false]);
+const shared = kitchenConfig({ sections: { breakfast: { mode: "all" } } });
+eq("a shared breakfast is one row", sectionSlots(shared.sections[0], readDay({ breakfast: { all: { items: [pick] } } }, shared)).map((r) => [r.person, r.slot.items.length]), [[null, 1]]);
+
 console.log("\nold snacks:");
-const legacy = readDay({ snacks: [fish, stick] });
-eq("old Snack 1 lands on Cam", legacy.snack.cam.items, [fish]);
-eq("old Snack 2 lands on Bodhi", legacy.snack.bodhi.items, [stick]);
-eq("Josh and Ashley start undecided", [slotState(legacy.snack.josh), slotState(legacy.snack.ashley)], ["undecided", "undecided"]);
-eq("once snacks are per person the old array is ignored", readDay({ snack: { josh: { items: [fish] } }, snacks: [stick] }).snack.cam.items, []);
+const legacy = ok({ snacks: [fish, stick] });
+eq("old Snack 1 lands on Cam", legacy.snack.byPerson.cam.items, [fish]);
+eq("old Snack 2 lands on Bodhi", legacy.snack.byPerson.bodhi.items, [stick]);
+eq("Josh and Ashley start undecided", [slotState(legacy.snack.byPerson.josh), slotState(legacy.snack.byPerson.ashley)], ["undecided", "undecided"]);
+eq("once snacks are per person the old array is ignored", ok({ snack: { josh: { items: [fish] } }, snacks: [stick] }).snack.byPerson.cam.items, []);
+eq("a kitchen without a Cam just doesn't map it", readDay({ snacks: [fish] }, cousin).snack.byPerson, { pb: { items: [], none: false, eaten: false } });
 
 console.log("\nprogress:");
-const all = (v) => Object.fromEntries(PEOPLE.map((p) => [p.key, v]));
+const all = (v) => Object.fromEntries(legacyKitchen.active.map((p) => [p.key, v]));
 const fullDay = {
   breakfast: all({ none: true }),
   lunch: all({ items: [pick] }),
@@ -110,9 +161,10 @@ const fullDay = {
   dinner: { items: [pick, fish] },
   dessert: pick,
 };
-eq("an untouched day is 0 of 14", dayProgress(undefined), { done: 0, total: 14 });
-eq("a fully settled day is 14 of 14, old and new shapes mixed", dayProgress(fullDay), { done: 14, total: 14 });
-eq("old two-slot snacks count toward Cam and Bodhi", dayProgress({ snacks: [fish, null] }), { done: 1, total: 14 });
+eq("an untouched day is 0 of 14", dayProgress(undefined, legacyKitchen), { done: 0, total: 14 });
+eq("a fully settled day is 14 of 14, old and new shapes mixed", dayProgress(fullDay, legacyKitchen), { done: 14, total: 14 });
+eq("old two-slot snacks count toward Cam and Bodhi", dayProgress({ snacks: [fish, null] }, legacyKitchen), { done: 1, total: 14 });
+eq("counts follow the kitchen: shared breakfast, 2 lunches, 1 snack, dessert", dayProgress({ breakfast: { all: { none: true } } }, cousin), { done: 1, total: 5 });
 
 console.log("\nrecipes:");
 eq("bare domains become links", normalizeLink("example.com/pesto"), "https://example.com/pesto");

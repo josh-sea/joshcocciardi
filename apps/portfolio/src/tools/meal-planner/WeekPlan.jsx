@@ -2,26 +2,26 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Chip, { Legend } from "./Chip";
 import FollowUp from "./FollowUp";
 import PickSheet from "./PickSheet";
-import { saveSlot, saveSnacks, setRating, setUsed, updateRecipe, watchWeek } from "./store";
+import { saveMod, saveSlot, saveSnacks, setRating, setUsed, updateRecipe, watchWeek } from "./store";
 import {
-  PEOPLE,
-  SECTIONS,
   addDays,
   dayProgress,
+  isLegacyShared,
   itemState,
   laterKey,
   mondayOf,
   readDay,
   samePick,
+  sectionSlots,
   shortDate,
+  shownSections,
+  slotPath,
   slotState,
   todayKey,
   weekDays,
   weekLabel,
   writeSlot,
 } from "./plan";
-
-const EVERYONE = PEOPLE.map((p) => p.key);
 
 // The button at the right end of a slot: Skip for a person who doesn't need
 // the meal, Ate once what's planned has been eaten.
@@ -35,7 +35,7 @@ const Pill = ({ on, kind, label, onClick }) => (
 /* One row of the plan. The chips are the slot's contents, each with its own
    ✕, so taking something off never needs the picker. The + (or tapping the
    empty part of the row) opens the picker to add more. */
-function SlotRow({ label, slot, perPerson, onOpen, onRemove, onSkip, onAte }) {
+function SlotRow({ label, slot, onOpen, onRemove, onSkip, onAte }) {
   const state = slotState(slot);
   const openIfBackground = (e) => {
     if (e.target === e.currentTarget) onOpen();
@@ -67,22 +67,42 @@ function SlotRow({ label, slot, perPerson, onOpen, onRemove, onSkip, onAte }) {
       </div>
       {state === "meal" ? (
         <Pill kind="ate" label="Ate" on={slot.eaten} onClick={onAte} />
-      ) : perPerson ? (
+      ) : (
         <Pill kind="skip" label="Skip" on={state === "none"} onClick={onSkip} />
-      ) : null}
+      )}
     </div>
+  );
+}
+
+/* A shared section's mods note ("Cam: butter noodles instead of pesto").
+   Edited locally and saved on blur, so typing isn't a write per keystroke;
+   it resets whenever the saved text or the day changes underneath. */
+function ModField({ label, saved, example, onSave }) {
+  const [text, setText] = useState(saved);
+  useEffect(() => setText(saved), [saved]);
+  return (
+    <label className="field">
+      <span className="flabel">{label} mods</span>
+      <textarea
+        className="input"
+        rows={2}
+        value={text}
+        placeholder={example}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => text.trim() !== saved && onSave(text.trim())}
+      />
+    </label>
   );
 }
 
 /* The week, one day at a time. A strip of seven days across the top (with a
    settled-slots count under each), the chosen day's sections below. */
-export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, onAddInventory, onError }) {
+export default function WeekPlan({ hid, config, recipes, inventory, stock, onAddRecipe, onAddInventory, onError }) {
   const today = todayKey();
   const [monday, setMonday] = useState(() => mondayOf(today));
   const [dayKey, setDayKey] = useState(today);
   const [days, setDays] = useState({});
   const [sheet, setSheet] = useState(null);
-  const [mod, setMod] = useState("");
   const [followUp, setFollowUp] = useState(null);
 
   useEffect(() => {
@@ -91,15 +111,11 @@ export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, 
   }, [hid, monday, onError]);
 
   const week = weekDays(monday);
-  const day = useMemo(() => readDay(days[dayKey]), [days, dayKey]);
+  const raw = days[dayKey];
+  const day = useMemo(() => readDay(raw, config), [raw, config]);
+  const sections = shownSections(config);
   const dayName = week.find((d) => d.key === dayKey)?.name || "";
   const when = `${dayName}, ${shortDate(dayKey)}`;
-
-  // The dinner mod field is edited locally and saved on blur, so every
-  // keystroke isn't a write. Reset it whenever the day (or its saved value)
-  // changes underneath.
-  const savedMod = day.dinnerMod;
-  useEffect(() => setMod(savedMod), [savedMod, dayKey]);
 
   // Lands on today when the week holds it, otherwise on that week's Monday.
   const shiftWeek = (n, home = false) => {
@@ -111,30 +127,38 @@ export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, 
   const closeSheet = useCallback(() => setSheet(null), []);
   const closeFollowUp = useCallback(() => setFollowUp(null), []);
 
-  // Every slot write goes through here, and writes just that one field. The
-  // exception is the first snack edit on a day still holding the old
-  // two-slot `snacks` array: that one saves the whole per-person map and
-  // retires the array in the same write.
+  // Every slot write goes through here, and usually writes just that one
+  // field, so two phones editing different rows don't overwrite each other.
+  // Two older shapes get replaced whole on their first edit instead:
+  //   - a shared slot stored directly on the section (`dinner: { items }`),
+  //     which moves under `dinner.all`
+  //   - the old two-slot `snacks` array, which becomes the per-person map
   const write = (sec, person, slot) => {
     const value = writeSlot(slot);
-    if (sec.key === "snack" && Array.isArray(days[dayKey]?.snacks)) {
+    const key = person?.key;
+    if (sec.key === "snack" && key && Array.isArray(raw?.snacks)) {
       const all = {};
-      PEOPLE.forEach((p) => {
-        all[p.key] = p.key === person ? value : writeSlot(day.snack[p.key]);
+      sec.people.forEach((p) => {
+        all[p.key] = p.key === key ? value : writeSlot(day.snack.byPerson[p.key]);
       });
       return saveSnacks(hid, dayKey, all).catch(onError);
     }
-    const path = sec.perPerson ? `${sec.key}.${person}` : sec.key;
-    return saveSlot(hid, dayKey, path, value).catch(onError);
+    if (isLegacyShared(raw?.[sec.key])) {
+      const whole = {};
+      if (key) whole[key] = value;
+      else if (value) whole.all = value;
+      return saveSlot(hid, dayKey, sec.key, Object.keys(whole).length ? whole : null).catch(onError);
+    }
+    return saveSlot(hid, dayKey, slotPath(sec.key, key), value).catch(onError);
   };
 
-  const slotOf = (sec, person) => (sec.perPerson ? day[sec.key][person] : day[sec.key]);
+  const slotOf = (sec, person) => (person ? day[sec.key].byPerson[person.key] : day[sec.key].shared);
 
   const open = (sec, person) => {
-    const who = PEOPLE.find((p) => p.key === person);
     const slot = slotOf(sec, person);
+    const meal = sec.key === "snack" ? "Snack" : sec.label;
     setSheet({
-      title: who ? `${who.name}: ${sec.key === "snack" ? "Snack" : sec.label}` : sec.label,
+      title: person ? `${person.name}: ${meal}` : sec.label,
       sub: when,
       items: slot.items,
       sources: sec.sources,
@@ -143,8 +167,13 @@ export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, 
       onAddInventory: sec.sources.includes("inventory") ? onAddInventory : null,
       // Adding something to a skipped slot un-skips it; emptying it leaves it
       // undecided. Eaten carries over while the slot still has items.
-      onChange: (items) => write(sec, person, { items, none: false, eaten: slot.eaten && items.length > 0 }),
-      onNone: sec.perPerson ? () => write(sec, person, { items: [], none: true }) : null,
+      onChange: (items) =>
+        write(sec, person, {
+          items,
+          none: false,
+          eaten: slot.eaten && items.length > 0,
+        }),
+      onNone: () => write(sec, person, { items: [], none: true }),
     });
   };
 
@@ -162,35 +191,38 @@ export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, 
   // Ate flags the whole slot as eaten. Turning it on also keeps the other
   // pages in step, one block per item in a single follow-up: each recipe is
   // marked made (dated to this plan day, never earlier than it already was)
-  // and asks for thumbs from whoever had it, and each inventory item still in
-  // stock asks whether it's finished. Turning it off only clears the flag;
-  // undoing a rating or a used-up mark by surprise would be worse.
+  // and asks for thumbs from whoever had it (that person, or everyone for a
+  // shared row), and each inventory item still in stock asks whether it's
+  // finished. Turning it off only clears the flag; undoing a rating or a
+  // used-up mark by surprise would be worse.
   const ate = (sec, person) => {
     const slot = slotOf(sec, person);
     const eaten = !slot.eaten;
     write(sec, person, { ...slot, eaten });
     if (!eaten) return;
-    const people = person ? [person] : EVERYONE;
+    const people = person ? [person] : config.active;
     const blocks = [];
     slot.items.forEach((p) => {
       if (blocks.some((b) => b.kind === p.kind && b.id === p.id)) return;
       if (p.kind === "recipe") {
         const r = recipes.find((x) => x.id === p.id);
         if (!r) return;
-        updateRecipe(hid, r.id, { made: true, lastMade: laterKey(r.lastMade, dayKey) }).catch(onError);
+        updateRecipe(hid, r.id, {
+          made: true,
+          lastMade: laterKey(r.lastMade, dayKey),
+        }).catch(onError);
         blocks.push({ kind: "recipe", id: r.id, name: r.name, people });
       } else if (p.kind === "inventory") {
         const item = inventory.find((i) => i.id === p.id);
-        // Already struck through (Cam and Bodhi split the frozen pizza), or
+        // Already struck through (two kids split the frozen pizza), or
         // deleted since: nothing to ask.
         if (item && itemState(item) === "stock") blocks.push({ kind: "inventory", id: item.id, name: item.name });
       }
     });
     if (!blocks.length) return;
-    const who = PEOPLE.find((p) => p.key === person);
     const meal = sec.key === "snack" ? "snack" : sec.label.toLowerCase();
     setFollowUp({
-      title: who ? `After ${who.name}'s ${meal}` : `After ${meal}`,
+      title: person ? `After ${person.name}'s ${meal}` : `After ${meal}`,
       sub: blocks.some((b) => b.kind === "recipe") ? `Marked made ${when}.` : when,
       blocks,
     });
@@ -219,7 +251,7 @@ export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, 
 
       <div className="strip" role="tablist">
         {week.map((d) => {
-          const { done, total } = dayProgress(days[d.key]);
+          const { done, total } = dayProgress(days[d.key], config);
           return (
             <button
               key={d.key}
@@ -246,43 +278,32 @@ export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, 
         <Legend />
       </div>
 
-      {SECTIONS.map((sec) => (
+      {sections.length === 0 && (
+        <div className="empty">Every section is empty. Choose who eats what in Kitchen settings.</div>
+      )}
+
+      {sections.map((sec) => (
         <section key={sec.key} className="card">
           <h3 className="sechead">{sec.label}</h3>
-          {sec.perPerson ? (
-            PEOPLE.map((p) => (
-              <SlotRow
-                key={p.key}
-                label={p.name}
-                slot={day[sec.key][p.key]}
-                perPerson
-                onOpen={() => open(sec, p.key)}
-                onRemove={(pick) => removeItem(sec, p.key, pick)}
-                onSkip={() => skip(sec, p.key)}
-                onAte={() => ate(sec, p.key)}
-              />
-            ))
-          ) : (
+          {sectionSlots(sec, day).map(({ person, slot }) => (
             <SlotRow
-              label="Everyone"
-              slot={day[sec.key]}
-              onOpen={() => open(sec, null)}
-              onRemove={(pick) => removeItem(sec, null, pick)}
-              onAte={() => ate(sec, null)}
+              key={person ? person.key : "all"}
+              label={person ? person.name : "Everyone"}
+              slot={slot}
+              onOpen={() => open(sec, person)}
+              onRemove={(pick) => removeItem(sec, person, pick)}
+              onSkip={() => skip(sec, person)}
+              onAte={() => ate(sec, person)}
             />
-          )}
-          {sec.key === "dinner" && (
-            <label className="field">
-              <span className="flabel">Dinner mods</span>
-              <textarea
-                className="input"
-                rows={2}
-                value={mod}
-                placeholder="Cam: butter noodles instead of pesto"
-                onChange={(e) => setMod(e.target.value)}
-                onBlur={() => mod.trim() !== savedMod && saveSlot(hid, dayKey, "dinnerMod", mod.trim()).catch(onError)}
-              />
-            </label>
+          ))}
+          {sec.mode === "all" && (
+            <ModField
+              key={dayKey}
+              label={sec.label}
+              saved={day.mods[sec.key]}
+              example={`${config.active[config.active.length - 1]?.name || "Sam"}: plain, no sauce`}
+              onSave={(text) => saveMod(hid, dayKey, sec.key, text).catch(onError)}
+            />
           )}
         </section>
       ))}

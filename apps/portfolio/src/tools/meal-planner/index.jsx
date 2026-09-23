@@ -4,9 +4,9 @@ import Inventory from "./Inventory";
 import Recipes from "./Recipes";
 import Shopping from "./Shopping";
 import WeekPlan from "./WeekPlan";
-import { HouseholdSetup, Members } from "./Household";
+import { HouseholdSetup, KitchenSettings } from "./Household";
 import { authMessage, redirectSettled, signInWithGoogle, signOutOfMealPlanner, watchAuth } from "./auth";
-import { inStock } from "./plan";
+import { inStock, kitchenConfig } from "./plan";
 import { addRecipe, stockItems, watchHouseholds, watchInventory, watchRecipes } from "./store";
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ export default function MealPlanner() {
   const [recipes, setRecipes] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [tab, setTab] = useState(readTab);
-  const [showMembers, setShowMembers] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -115,6 +115,13 @@ export default function MealPlanner() {
   }, [user, verified, onError]);
 
   const household = households && households[0];
+  // Who's in the kitchen and how each meal is laid out, defaults filled in.
+  // Keyed on the saved fields so the plan only re-derives when they change.
+  const config = useMemo(
+    () => kitchenConfig(household),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(household?.people), JSON.stringify(household?.sections)]
+  );
 
   // The id the recipe, inventory, and plan listeners run against. It only
   // takes a household once the server has confirmed it: listening under a
@@ -154,7 +161,7 @@ export default function MealPlanner() {
 
   const pickTab = (t) => {
     setTab(t);
-    setShowMembers(false);
+    setShowSettings(false);
     writeTab(t);
     window.scrollTo(0, 0);
   };
@@ -190,10 +197,18 @@ export default function MealPlanner() {
     body = <div className="center">opening the kitchen…</div>;
   } else if (!household) {
     body = <HouseholdSetup user={user} onError={onError} />;
-  } else if (showMembers) {
-    body = <Members household={household} user={user} onError={onError} onClose={() => setShowMembers(false)} />;
+  } else if (showSettings) {
+    body = (
+      <KitchenSettings
+        household={household}
+        config={config}
+        user={user}
+        onError={onError}
+        onClose={() => setShowSettings(false)}
+      />
+    );
   } else if (tab === "recipes") {
-    body = <Recipes hid={hid} user={user} recipes={recipes} onError={onError} />;
+    body = <Recipes hid={hid} user={user} people={config.active} recipes={recipes} onError={onError} />;
   } else if (tab === "inventory") {
     body = <Inventory hid={hid} user={user} inventory={inventory} onError={onError} />;
   } else if (tab === "shopping") {
@@ -202,6 +217,7 @@ export default function MealPlanner() {
     body = (
       <WeekPlan
         hid={hid}
+        config={config}
         recipes={recipes}
         inventory={inventory}
         stock={stock}
@@ -221,8 +237,8 @@ export default function MealPlanner() {
             <span className="brand">{household ? household.name : "Family Meal Planner"}</span>
             <span className="acct">
               {household && (
-                <button className="linkish" type="button" onClick={() => setShowMembers(!showMembers)}>
-                  members
+                <button className="linkish" type="button" onClick={() => setShowSettings(!showSettings)}>
+                  settings
                 </button>
               )}
               <button className="linkish" type="button" onClick={signOutOfMealPlanner}>
@@ -236,8 +252,8 @@ export default function MealPlanner() {
                 <button
                   key={k}
                   type="button"
-                  className={tab === k && !showMembers ? "on" : ""}
-                  aria-current={tab === k && !showMembers ? "page" : undefined}
+                  className={tab === k && !showSettings ? "on" : ""}
+                  aria-current={tab === k && !showSettings ? "page" : undefined}
                   onClick={() => pickTab(k)}
                 >
                   {label}

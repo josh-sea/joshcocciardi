@@ -5,8 +5,10 @@
 /*  can import it straight into node.                                  */
 /* ------------------------------------------------------------------ */
 
-// The household, in the order every per-person row renders.
-export const PEOPLE = [
+// The people in a kitchen that was started before people were editable. A
+// kitchen with no `people` field of its own gets this list, and these keys,
+// which is what every plan and rating it saved already uses.
+export const LEGACY_PEOPLE = [
   { key: "josh", name: "Josh" },
   { key: "ashley", name: "Ashley" },
   { key: "cam", name: "Cam" },
@@ -117,18 +119,69 @@ export const cleanPick = (p) => (isPick(p) ? { kind: p.kind, id: p.id || null, n
 export const samePick = (a, b) =>
   !!a && !!b && a.kind === b.kind && (a.kind === "text" ? a.name.toLowerCase() === b.name.toLowerCase() : a.id === b.id);
 
-/* ------------------------------ slots ------------------------------ */
+/* ---------------------------- the kitchen -------------------------- */
 
-// The plan's sections, in order. Breakfast, lunch, and snacks are one slot
-// per person; dinner and dessert are one shared slot. `sources` says what a
-// slot can hold, and `text` whether anything typed in is fine too.
-export const SECTIONS = [
-  { key: "breakfast", label: "Breakfast", perPerson: true, sources: ["recipe", "inventory"], text: true },
-  { key: "lunch", label: "Lunch", perPerson: true, sources: ["recipe", "inventory"], text: true },
-  { key: "snack", label: "Snacks", perPerson: true, sources: ["inventory"], text: false },
-  { key: "dinner", label: "Dinner", perPerson: false, sources: ["recipe", "inventory"], text: false },
-  { key: "dessert", label: "Dessert", perPerson: false, sources: ["recipe", "inventory"], text: false },
+// Each kitchen names its own people and decides, section by section, whether
+// a meal is shared ("all": one Everyone row, like dinner) or per person
+// ("each": a row for each chosen person, like breakfast). The sections
+// themselves are fixed, and so is what each one can hold: `sources` is where
+// its items come from and `text` whether typing anything in is fine.
+export const SECTION_KINDS = [
+  { key: "breakfast", label: "Breakfast", sources: ["recipe", "inventory"], text: true, defaultMode: "each" },
+  { key: "lunch", label: "Lunch", sources: ["recipe", "inventory"], text: true, defaultMode: "each" },
+  { key: "snack", label: "Snacks", sources: ["inventory"], text: false, defaultMode: "each" },
+  { key: "dinner", label: "Dinner", sources: ["recipe", "inventory"], text: false, defaultMode: "all" },
+  { key: "dessert", label: "Dessert", sources: ["recipe", "inventory"], text: false, defaultMode: "all" },
 ];
+
+// A person's key is how plans and ratings refer to them, so it never changes
+// once made, and renaming someone keeps everything they've rated or eaten.
+// Keys become Firestore field names, so they stay short and alphanumeric, and
+// never "all", which is the shared slot in a section.
+export const newPersonKey = (taken = [], rand = Math.random) => {
+  let key;
+  do {
+    key = `p${Math.floor(rand() * 36 ** 6).toString(36).padStart(6, "0")}`;
+  } while (taken.includes(key));
+  return key;
+};
+
+export const makePeople = (names, taken = []) => {
+  const keys = [...taken];
+  return names.map((name) => {
+    const key = newPersonKey(keys);
+    keys.push(key);
+    return { key, name, active: true };
+  });
+};
+
+const cleanPeople = (raw) =>
+  Array.isArray(raw)
+    ? raw
+        .filter((p) => p && typeof p.key === "string" && /^[a-z0-9]{1,24}$/i.test(p.key) && p.key !== "all")
+        .map((p) => ({ key: p.key, name: String(p.name || "").trim() || "Someone", active: p.active !== false }))
+    : null;
+
+// Everything the plan needs to know about a kitchen, with defaults filled
+// in. Removed people stay in `people` (marked inactive) so their history
+// still has a name; only `active` people get rows or rating prompts.
+export const kitchenConfig = (household) => {
+  const people = cleanPeople(household?.people) || LEGACY_PEOPLE.map((p) => ({ ...p, active: true }));
+  const active = people.filter((p) => p.active);
+  const sections = SECTION_KINDS.map((kind) => {
+    const raw = household?.sections?.[kind.key] || {};
+    const mode = raw.mode === "all" || raw.mode === "each" ? raw.mode : kind.defaultMode;
+    const chosen = Array.isArray(raw.people) ? raw.people : active.map((p) => p.key);
+    return { ...kind, mode, people: active.filter((p) => chosen.includes(p.key)) };
+  });
+  return { people, active, sections };
+};
+
+// A section is on the plan if it's shared, or per person with at least one
+// person in it.
+export const shownSections = (config) => config.sections.filter((s) => s.mode === "all" || s.people.length > 0);
+
+/* ------------------------------ slots ------------------------------ */
 
 // A slot holds a list of picks, so a lunch can be goldfish and a meat stick
 // and a dinner can be pizza and sausage. Stored as
@@ -161,46 +214,67 @@ export const writeSlot = ({ items = [], none = false, eaten = false }) => {
   return none ? { none: true } : null;
 };
 
+// Where a slot lives in the day document: `breakfast.<personKey>` for a
+// per-person row, `breakfast.all` for a shared one. Both kinds can sit side
+// by side in one section, so switching a section between shared and per
+// person never throws away what was planned under the other mode.
+export const slotPath = (sectionKey, personKey) => `${sectionKey}.${personKey || "all"}`;
+
+// Before sections could switch modes, dinner and dessert stored their one
+// shared slot directly on the field (`dinner: { items }`) rather than under
+// `all`. This spots that shape so it can be read, and replaced on first save.
+export const isLegacyShared = (v) =>
+  !!v && typeof v === "object" && ("items" in v || "none" in v || "pick" in v || "kind" in v);
+
 // Snacks used to be two shared slots in a `snacks` array. In practice the
-// first was Cam's and the second Bodhi's, so that's where they land. Once a
-// day's snacks are saved per person the old array is deleted, so this only
-// ever reads days nobody has touched since.
+// first was Cam's and the second Bodhi's, so that's where they land when
+// those people exist. Once a day's snacks are saved per person the old array
+// is deleted, so this only ever reads days nobody has touched since.
 const LEGACY_SNACK_OWNERS = ["cam", "bodhi"];
 
-// A whole day, normalized: every section and person present, legacy shapes
-// folded in.
-export const readDay = (day) => {
+// A whole day for one kitchen, normalized: for each section a `shared` slot
+// and a `byPerson` map covering its current people, plus the mods note for
+// each section. Legacy shapes are folded in.
+export const readDay = (day, config) => {
   const d = day || {};
-  const out = { dinnerMod: typeof d.dinnerMod === "string" ? d.dinnerMod : "" };
-  SECTIONS.forEach((sec) => {
-    if (!sec.perPerson) {
-      out[sec.key] = readSlot(d[sec.key]);
-      return;
-    }
-    out[sec.key] = {};
-    PEOPLE.forEach((p) => {
-      out[sec.key][p.key] = readSlot(d[sec.key]?.[p.key]);
+  const out = { mods: {} };
+  config.sections.forEach((sec) => {
+    const raw = d[sec.key];
+    const shared = isLegacyShared(raw) ? raw : raw?.all;
+    const byPerson = {};
+    sec.people.forEach((p) => {
+      byPerson[p.key] = readSlot(isLegacyShared(raw) ? undefined : raw?.[p.key]);
     });
+    out[sec.key] = { shared: readSlot(shared), byPerson };
+    const mod = d.mods?.[sec.key] ?? (sec.key === "dinner" ? d.dinnerMod : undefined);
+    out.mods[sec.key] = typeof mod === "string" ? mod : "";
   });
-  if (!d.snack && Array.isArray(d.snacks)) {
+  const snack = config.sections.find((s) => s.key === "snack");
+  if (snack && !d.snack && Array.isArray(d.snacks)) {
     LEGACY_SNACK_OWNERS.forEach((who, i) => {
-      if (isPick(d.snacks[i])) out.snack[who] = readSlot(d.snacks[i]);
+      if (who in out.snack.byPerson && isPick(d.snacks[i])) out.snack.byPerson[who] = readSlot(d.snacks[i]);
     });
   }
   return out;
 };
 
+// The rows a section shows today: one Everyone row when shared, otherwise one
+// per person in it.
+export const sectionSlots = (sec, dayOut) =>
+  sec.mode === "all"
+    ? [{ person: null, slot: dayOut[sec.key].shared }]
+    : sec.people.map((p) => ({ person: p, slot: dayOut[sec.key].byPerson[p.key] }));
+
 // How much of a day is settled, for the counts on the week strip. A slot
 // counts once it holds something or is marked not needed.
-export const dayProgress = (day) => {
-  const d = readDay(day);
+export const dayProgress = (day, config) => {
+  const d = readDay(day, config);
   let done = 0;
   let total = 0;
-  SECTIONS.forEach((sec) => {
-    const slots = sec.perPerson ? PEOPLE.map((p) => d[sec.key][p.key]) : [d[sec.key]];
-    slots.forEach((s) => {
+  shownSections(config).forEach((sec) => {
+    sectionSlots(sec, d).forEach(({ slot }) => {
       total += 1;
-      if (slotState(s) !== "undecided") done += 1;
+      if (slotState(slot) !== "undecided") done += 1;
     });
   });
   return { done, total };
@@ -228,14 +302,15 @@ export const sourceLabel = (link) => {
   }
 };
 
-// Thumbs tally for a recipe card: how many of the four have weighed in, and
-// the net of ups minus downs.
-export const ratingSummary = (ratings) => {
+// Thumbs tally for a recipe card: how many of the kitchen's people have
+// weighed in, and the net of ups minus downs. Removed people's thumbs stay
+// stored but aren't counted.
+export const ratingSummary = (ratings, people = LEGACY_PEOPLE) => {
   const r = ratings || {};
   let up = 0;
   let down = 0;
   let rated = 0;
-  PEOPLE.forEach((p) => {
+  people.forEach((p) => {
     if (!RATINGS.includes(r[p.key])) return;
     rated += 1;
     if (r[p.key] === "up") up += 1;
