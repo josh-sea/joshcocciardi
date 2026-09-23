@@ -10,10 +10,16 @@ import {
   addDays,
   ageLabel,
   dayProgress,
+  findByName,
+  inStock,
+  itemState,
+  laterKey,
+  matchNames,
   mondayOf,
   normalizeLink,
   ratingSummary,
   slotState,
+  sortItems,
   splitItems,
   weekDays,
 } from "../src/tools/meal-planner/plan.js";
@@ -99,6 +105,34 @@ eq("same day", ageLabel(new Date(2026, 8, 22, 0, 5), now), "today");
 eq("late last night is yesterday", ageLabel(new Date(2026, 8, 21, 23, 55), now), "yesterday");
 eq("days", ageLabel(new Date(2026, 8, 17), now), "5 days ago");
 eq("weeks", ageLabel(new Date(2026, 7, 25), now), "4 weeks ago");
+
+console.log("\ninventory lifecycle:");
+const d = (day) => new Date(2026, 8, day);
+const inv = [
+  { id: "a", name: "milk", addedAt: d(20), usedAt: null },
+  { id: "b", name: "Eggs", addedAt: d(22), usedAt: d(23) },
+  { id: "c", name: "coffee", addedAt: null, usedAt: null, onList: true },
+  { id: "d", name: "apples", addedAt: d(22), usedAt: null },
+];
+eq("bought and not used is in stock", itemState(inv[0]), "stock");
+eq("struck through is used", itemState(inv[1]), "used");
+eq("never bought is wanted", itemState(inv[2]), "wanted");
+eq("only stock feeds the plan's pickers", inv.filter(inStock).map((i) => i.id), ["a", "d"]);
+eq("names match case-insensitively", findByName(inv, "  EGGS ")?.id, "b");
+eq(
+  "adding revives existing rows instead of duplicating",
+  matchNames(["Milk", "bread", "eggs"], inv).map((m) => [m.name, m.existing?.id || null]),
+  [["Milk", "a"], ["bread", null], ["eggs", "b"]]
+);
+eq("A to Z", sortItems(inv).map((i) => i.name), ["apples", "coffee", "Eggs", "milk"]);
+eq("Z to A", sortItems(inv, "name", "desc").map((i) => i.name), ["milk", "Eggs", "coffee", "apples"]);
+eq("newest first, names break ties, never-bought last", sortItems(inv, "added").map((i) => i.id), ["d", "b", "a", "c"]);
+eq("oldest first flips it", sortItems(inv, "added", "desc").map((i) => i.id), ["c", "a", "b", "d"]);
+
+console.log("\nmade dates:");
+eq("a later plan day moves last made forward", laterKey("2026-09-20", "2026-09-23"), "2026-09-23");
+eq("an older plan day never moves it back", laterKey("2026-09-23", "2026-09-20"), "2026-09-23");
+eq("first time made", laterKey(null, "2026-09-23"), "2026-09-23");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

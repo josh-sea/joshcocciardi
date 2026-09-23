@@ -1,23 +1,27 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import CSS from "./styles";
 import Inventory from "./Inventory";
 import Recipes from "./Recipes";
+import Shopping from "./Shopping";
 import WeekPlan from "./WeekPlan";
 import { HouseholdSetup, Members } from "./Household";
 import { authMessage, redirectSettled, signInWithGoogle, signOutOfMealPlanner, watchAuth } from "./auth";
-import { addItem, addRecipe, watchHouseholds, watchInventory, watchRecipes } from "./store";
+import { inStock } from "./plan";
+import { addRecipe, stockItems, watchHouseholds, watchInventory, watchRecipes } from "./store";
 
 // ---------------------------------------------------------------------------
-// Family Meal Planner: three pages, Recipes, Weekly Plan, and Inventory, over
-// one shared household. v1 is data capture only. Nothing matches recipes to
-// inventory or recommends anything yet; the plan simply draws its choices
-// from the other two pages.
+// Family Meal Planner: the weekly plan, recipes, inventory, and a shopping
+// list, over one shared household. Nothing matches recipes to inventory or
+// recommends anything yet. The plan draws its choices from recipes and what's
+// in stock, and tapping Ate on the plan feeds back into both: recipes get
+// marked made and rated, inventory gets struck through and relisted.
 // ---------------------------------------------------------------------------
 
 const TABS = [
-  ["plan", "Weekly Plan"],
+  ["plan", "Plan"],
   ["recipes", "Recipes"],
   ["inventory", "Inventory"],
+  ["shopping", "Shopping"],
 ];
 
 const TAB_KEY = "mealplan.tab";
@@ -144,7 +148,14 @@ export default function MealPlanner() {
   };
 
   const quickRecipe = useCallback((name) => addRecipe(hid, user.uid, { name, link: "", ingredients: "" }), [hid, user]);
-  const quickItem = useCallback((name) => addItem(hid, user.uid, name), [hid, user]);
+  // Adding from the plan's picker puts the item in stock (reviving a used-up
+  // row of the same name) and returns its id for the slot.
+  const quickItem = useCallback(
+    async (name) => (await stockItems(hid, user.uid, [name], inventory))[0],
+    [hid, user, inventory]
+  );
+  const stock = useMemo(() => inventory.filter(inStock), [inventory]);
+  const listCount = inventory.filter((i) => i.onList).length;
 
   let body;
   if (user === undefined) {
@@ -176,12 +187,15 @@ export default function MealPlanner() {
     body = <Recipes hid={hid} user={user} recipes={recipes} onError={onError} />;
   } else if (tab === "inventory") {
     body = <Inventory hid={hid} user={user} inventory={inventory} onError={onError} />;
+  } else if (tab === "shopping") {
+    body = <Shopping hid={hid} user={user} inventory={inventory} onError={onError} />;
   } else {
     body = (
       <WeekPlan
         hid={hid}
         recipes={recipes}
         inventory={inventory}
+        stock={stock}
         onAddRecipe={quickRecipe}
         onAddInventory={quickItem}
         onError={onError}
@@ -218,6 +232,7 @@ export default function MealPlanner() {
                   onClick={() => pickTab(k)}
                 >
                   {label}
+                  {k === "shopping" && listCount > 0 && <span className="badge">{listCount}</span>}
                 </button>
               ))}
             </nav>

@@ -109,6 +109,8 @@ export const splitItems = (text) => {
 // recipe is renamed or the inventory row is eaten and deleted.
 export const makePick = (kind, id, name) => ({ kind, id: id || null, name: String(name || "").trim() });
 
+// A pick can also carry `eaten: true` once someone taps Ate, which is how
+// the plan records what the family actually had.
 export const isPick = (p) =>
   !!p && typeof p === "object" && ["recipe", "inventory", "text"].includes(p.kind) && !!p.name;
 
@@ -179,4 +181,48 @@ export const ratingSummary = (ratings) => {
     if (r[p.key] === "down") down += 1;
   });
   return { up, down, rated };
+};
+
+// The later of two YYYY-MM-DD keys. Marking an old day as eaten shouldn't
+// pull a recipe's last made date backwards.
+export const laterKey = (a, b) => (!a ? b || null : !b ? a : a > b ? a : b);
+
+/* ------------------------ inventory lifecycle ---------------------- */
+
+// Every item keeps one row for good, and its state comes from three fields:
+//   addedAt  when it last came into the house (null: never bought yet)
+//   usedAt   when it ran out (null while there's some left)
+//   onList   whether it's on the shopping list
+// So "stock" is bought and not used up, "used" is struck through and waiting
+// to be rebought or removed, and "wanted" is a list-only item nobody has
+// bought yet. Buying something brings its row back to "stock" with a new
+// date instead of adding a second row.
+export const itemState = (item) => {
+  if (!item || !item.addedAt) return "wanted";
+  return item.usedAt ? "used" : "stock";
+};
+
+export const inStock = (item) => itemState(item) === "stock";
+
+const nameKey = (s) => String(s || "").trim().toLowerCase();
+
+export const findByName = (items, name) => (items || []).find((i) => nameKey(i.name) === nameKey(name)) || null;
+
+// Pairs each incoming name with its existing row, if any, so adding "Milk"
+// when a used-up "milk" row exists revives that row rather than duplicating it.
+export const matchNames = (names, items) => names.map((name) => ({ name, existing: findByName(items, name) }));
+
+const time = (d) => (d instanceof Date ? d.getTime() : 0);
+
+// Inventory table order. Name sorts A to Z (or Z to A); added sorts newest
+// first (or oldest first), with names breaking ties.
+export const sortItems = (items, key = "name", dir = "asc") => {
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  const out = [...(items || [])];
+  if (key === "added") {
+    out.sort((a, b) => time(b.addedAt) - time(a.addedAt) || byName(a, b));
+  } else {
+    out.sort(byName);
+  }
+  return dir === "desc" ? out.reverse() : out;
 };
