@@ -362,3 +362,37 @@ export const sortItems = (items, key = "name", dir = "asc") => {
   }
   return dir === "desc" ? out.reverse() : out;
 };
+
+/* ---------------------------- after eating -------------------------- */
+
+// A recipe can name the inventory items it uses, as [{ id, name }]. The name
+// is a snapshot so the link still reads if the row is later deleted.
+export const recipeUses = (recipe) =>
+  Array.isArray(recipe?.uses) ? recipe.uses.filter((u) => u && typeof u.id === "string" && u.name) : [];
+
+// What the follow-up after Ate should cover for a slot's items:
+//   recipes  one per recipe eaten, to rate (by `people`)
+//   stock    one row per inventory item touched, whether picked directly or
+//            used by a recipe, each listed once
+// Inventory rows only include items that exist and have been bought (a
+// list-only item was never in the house to run out of). Items already used
+// up still appear, so they can go on the list from here.
+export const followUpFor = (items, { recipes, inventory, people }) => {
+  const out = { recipes: [], stock: [] };
+  const addStock = (id) => {
+    if (out.stock.some((s) => s.id === id)) return;
+    const item = (inventory || []).find((i) => i.id === id);
+    if (item && itemState(item) !== "wanted") out.stock.push({ id: item.id, name: item.name });
+  };
+  (items || []).forEach((p) => {
+    if (p.kind === "recipe") {
+      const r = (recipes || []).find((x) => x.id === p.id);
+      if (!r) return;
+      if (!out.recipes.some((x) => x.id === r.id)) out.recipes.push({ id: r.id, name: r.name, people });
+      recipeUses(r).forEach((u) => addStock(u.id));
+    } else if (p.kind === "inventory") {
+      addStock(p.id);
+    }
+  });
+  return out;
+};

@@ -137,7 +137,6 @@ textarea.input{resize:vertical;}
 .opt.on{background:var(--basil-soft);font-weight:700;}
 .followlist{display:flex;flex-direction:column;gap:14px;overflow-y:auto;}
 .followblock{display:flex;flex-direction:column;gap:8px;}
-.usedrow{display:flex;gap:6px;flex-wrap:wrap;}
 
 /* ------------------------------ recipes ------------------------------ */
 
@@ -226,6 +225,15 @@ textarea.input{resize:vertical;}
 .secset .seg button{padding:7px 12px;font-size:13.5px;}
 .chipbtn.toggle{background:#fff;}
 .chipbtn.toggle.on{background:var(--basil);border-color:var(--basil);color:#fff;}
+
+/* ------------------------- inventory after eating ------------------------- */
+.stockrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);}
+.stockrow:first-of-type{border-top:none;}
+.stockbtns{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;flex-shrink:0;}
+.stockbtns .toggle{background:#fff;border:none;padding:8px 13px;font-size:14px;font-weight:700;color:var(--soft);white-space:nowrap;}
+.stockbtns .toggle + .toggle{border-left:1px solid var(--line);}
+.stockbtns .toggle.on{background:var(--basil);color:#fff;}
+.linker{display:flex;flex-direction:column;gap:8px;}
 `;
 
 export default CSS;
