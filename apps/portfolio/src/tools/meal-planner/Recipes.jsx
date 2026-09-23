@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { addRecipe, deleteRecipe, setRating, updateRecipe } from "./store";
-import { PEOPLE, normalizeLink, ratingSummary, shortDate, sourceLabel, todayKey } from "./plan";
+import { normalizeLink, ratingSummary, shortDate, sourceLabel, todayKey } from "./plan";
 
 const THUMBS = [
   { value: "up", icon: "👍", label: "thumbs up" },
@@ -103,10 +103,10 @@ function RecipeForm({ initial, onSave, onCancel, saveLabel }) {
   );
 }
 
-function RecipeCard({ hid, recipe, onError }) {
+function RecipeCard({ hid, people, recipe, onError }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const { up, down, rated } = ratingSummary(recipe.ratings);
+  const { up, down, rated } = ratingSummary(recipe.ratings, people);
 
   // Marking as made stamps today's date. Unmarking clears it, since a last
   // made date on something never made would be a contradiction.
@@ -161,13 +161,13 @@ function RecipeCard({ hid, recipe, onError }) {
         {recipe.lastMade && <span>last made {shortDate(recipe.lastMade)}</span>}
         {rated > 0 && (
           <span>
-            {up > 0 && `👍 ${up}`} {down > 0 && `👎 ${down}`} {rated < PEOPLE.length && `· ${rated}/${PEOPLE.length} rated`}
+            {up > 0 && `👍 ${up}`} {down > 0 && `👎 ${down}`} {rated < people.length && `· ${rated}/${people.length} rated`}
           </span>
         )}
       </div>
 
       <div className="ratings">
-        {PEOPLE.map((p) => (
+        {people.map((p) => (
           <div key={p.key} className="rate">
             <span className="who">{p.name}</span>
             <span className="thumbs">
@@ -215,7 +215,7 @@ function RecipeCard({ hid, recipe, onError }) {
   );
 }
 
-export default function Recipes({ hid, user, recipes, onError }) {
+export default function Recipes({ hid, user, people, recipes, onError }) {
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("name");
@@ -228,13 +228,13 @@ export default function Recipes({ hid, user, recipes, onError }) {
     if (sort === "recent") hits.sort((a, b) => (b.lastMade || "").localeCompare(a.lastMade || ""));
     if (sort === "liked") {
       const score = (r) => {
-        const s = ratingSummary(r.ratings);
+        const s = ratingSummary(r.ratings, people);
         return s.up - s.down;
       };
       hits.sort((a, b) => score(b) - score(a));
     }
     return hits;
-  }, [recipes, q, sort]);
+  }, [recipes, people, q, sort]);
 
   return (
     <div className="page">
@@ -269,7 +269,7 @@ export default function Recipes({ hid, user, recipes, onError }) {
       )}
 
       {rows.map((r) => (
-        <RecipeCard key={r.id} hid={hid} recipe={r} onError={onError} />
+        <RecipeCard key={r.id} hid={hid} people={people} recipe={r} onError={onError} />
       ))}
       {recipes.length > 0 && rows.length === 0 && <div className="muted small pad">Nothing matches “{q}”.</div>}
     </div>

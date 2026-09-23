@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { PEOPLE } from "./plan";
 
 const THUMBS = [
   { value: "up", icon: "👍", label: "thumbs up" },
@@ -17,7 +16,7 @@ const USED = [
    skippable. One block per thing that was eaten:
 
    - a recipe asks for a thumb from whoever had it (one person for a
-     breakfast, lunch, or snack slot; all four for dinner or dessert)
+     person's row; everyone for a shared one)
    - an inventory item asks whether it's finished, with a one-tap "used up
      and back on the shopping list"
 
@@ -36,7 +35,7 @@ export default function FollowUp({ title, sub, blocks, ratingsFor, onRate, onUse
   // block once one of its three buttons is tapped.
   const done = (next) =>
     blocks.every((b) =>
-      b.kind === "recipe" ? b.people.every((p) => next[`${b.id}:${p}`]) : next[b.id]
+      b.kind === "recipe" ? b.people.every((p) => next[`${b.id}:${p.key}`]) : next[b.id]
     );
 
   const answer = (key, extra) => {
@@ -75,7 +74,7 @@ export default function FollowUp({ title, sub, blocks, ratingsFor, onRate, onUse
               )}
               {b.kind === "recipe" ? (
                 <div className="ratings follow">
-                  {PEOPLE.filter((p) => b.people.includes(p.key)).map((p) => {
+                  {b.people.map((p) => {
                     const current = ratingsFor(b.id)[p.key];
                     return (
                       <div key={p.key} className="rate">

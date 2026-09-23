@@ -2,14 +2,17 @@
 /*  Family Meal Planner: Firestore persistence                         */
 /*                                                                     */
 /*  mealplan_households/{hid}                                          */
-/*    name, ownerUid, memberEmails[], createdAt, updatedAt             */
+/*    name, ownerUid, memberEmails[], people[{key, name, active}],     */
+/*    sections{section: {mode, people[]}}, createdAt, updatedAt        */
 /*  mealplan_households/{hid}/recipes/{id}                             */
 /*    name, link, ingredients, made, lastMade, ratings{person: r},     */
 /*    createdBy, createdAt, updatedAt                                  */
 /*  mealplan_households/{hid}/days/{YYYY-MM-DD}                        */
 /*    date, breakfast{person: slot}, lunch{person: slot},              */
-/*    snack{person: slot}, dinner: slot, dessert: slot, dinnerMod      */
-/*    (a slot is { items[], eaten } or { none }; see plan.js)          */
+/*    snack{person: slot}, dinner{all: slot}, dessert{all: slot},      */
+/*    mods{section: text}                                              */
+/*    (a slot is { items[], eaten } or { none }; `all` is the shared   */
+/*    Everyone slot; see plan.js)                                      */
 /*  mealplan_households/{hid}/inventory/{id}                           */
 /*    name, addedAt, usedAt, onList, inCart, createdAt, createdBy      */
 /*                                                                     */
@@ -57,6 +60,10 @@ const shapeHousehold = (snap) => {
     name: d.name || "Our kitchen",
     ownerUid: d.ownerUid,
     memberEmails: Array.isArray(d.memberEmails) ? d.memberEmails : [],
+    // Raw; kitchenConfig() in plan.js fills in defaults. Kitchens started
+    // before these were editable have neither field.
+    people: d.people,
+    sections: d.sections,
     createdAt: when(d.createdAt),
     // True while a just-created household exists only locally. Its
     // subcollections can't be read until the server has it, because the
@@ -81,17 +88,22 @@ export const watchHouseholds = (email, cb, onError) =>
 
 const cleanEmails = (list) => [...new Set((list || []).map(normEmail).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))];
 
-export const createHousehold = async (user, { name, otherEmails }) => {
+export const createHousehold = async (user, { name, otherEmails, people }) => {
   const me = normEmail(user.email);
   const ref = await addDoc(hhCol(), {
     name: String(name || "").trim() || "Our kitchen",
     ownerUid: user.uid,
     memberEmails: cleanEmails([me, ...(otherEmails || [])]),
+    people,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
   return ref.id;
 };
+
+// Kitchen name, people, and how each section is laid out. Each is saved on
+// its own so two people editing different settings don't undo each other.
+export const saveKitchen = (hid, patch) => updateDoc(hhDoc(hid), { ...patch, updatedAt: serverTimestamp() });
 
 // The rules refuse any list that drops the person saving it, so nobody can
 // lock themselves out by accident.
@@ -186,6 +198,20 @@ export const saveSlot = (hid, dateKey, path, value) => {
   cursor[parts[parts.length - 1]] = empty ? deleteField() : value;
   return setDoc(doc(sub(hid, "days"), dateKey), data, { mergeFields: ["date", "updatedAt", path] });
 };
+
+// One section's mods note (dinner's "Cam: butter noodles instead of pesto").
+// Dinner's used to live in `dinnerMod`; saving it here retires that field.
+export const saveMod = (hid, dateKey, sectionKey, text) =>
+  setDoc(
+    doc(sub(hid, "days"), dateKey),
+    {
+      date: dateKey,
+      updatedAt: serverTimestamp(),
+      mods: { [sectionKey]: text || deleteField() },
+      ...(sectionKey === "dinner" ? { dinnerMod: deleteField() } : {}),
+    },
+    { mergeFields: ["date", "updatedAt", `mods.${sectionKey}`, ...(sectionKey === "dinner" ? ["dinnerMod"] : [])] }
+  );
 
 // Snacks are saved as the whole per-person map at once, and the same write
 // deletes the old two-slot `snacks` array. Writing one person at a time

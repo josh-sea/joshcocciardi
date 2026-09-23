@@ -214,6 +214,18 @@ textarea.input{resize:vertical;}
 .dayline .dayhead{margin:0;}
 .chipline{display:flex;flex-wrap:wrap;gap:6px;}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+
+/* --------------------------- kitchen settings --------------------------- */
+.personrow{gap:6px;}
+.personrow .input{flex:1;min-width:0;padding:8px 10px;}
+.removed{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px;}
+.secset{padding:12px 0;border-top:1px solid var(--line);}
+.sechead + .muted + .secset{border-top:none;}
+.secsethead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.secname{font-weight:700;}
+.secset .seg button{padding:7px 12px;font-size:13.5px;}
+.chipbtn.toggle{background:#fff;}
+.chipbtn.toggle.on{background:var(--basil);border-color:var(--basil);color:#fff;}
 `;
 
 export default CSS;

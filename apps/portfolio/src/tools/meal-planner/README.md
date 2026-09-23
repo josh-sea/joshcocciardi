@@ -11,19 +11,25 @@ tapping **Ate** on the plan feeds back into both.
 ingredients. That's the whole add form. Afterwards, whenever someone gets to
 it: a **Made it** toggle (turning it on stamps today as the last made date,
 turning it off clears it; "Made it again today" re-stamps), and a thumbs
-up / neutral / down from each of Josh, Ashley, Cam, and Bodhi. Tapping a
+up / neutral / down from each person in the kitchen. Tapping a
 chosen thumb again clears it, so "hasn't rated" stays distinct from neutral.
 
 **Plan.** Monday through Sunday, one day at a time, with a strip showing
-how many of each day's 14 slots are settled.
+how many of each day's slots are settled.
 
-| Section | Shape | Draws from |
-|---|---|---|
-| Breakfast | per person | recipes, inventory, or typed in |
-| Lunch | per person | recipes, inventory, or typed in |
-| Snacks | per person | inventory |
-| Dinner | shared, plus free-text **dinner mods** | recipes or inventory |
-| Dessert | shared | recipes or inventory |
+Each kitchen lays its meals out its own way (see **Kitchen settings**). Every
+section is either **Everyone**, one shared row with a mods note for
+per-person tweaks ("Luis: no cheese"), or **Per person**, a row for each
+chosen person. A kitchen starts with breakfast, lunch, and snacks per
+person and dinner and dessert shared.
+
+| Section | Draws from |
+|---|---|
+| Breakfast | recipes, inventory, or typed in |
+| Lunch | recipes, inventory, or typed in |
+| Snacks | inventory |
+| Dinner | recipes or inventory |
+| Dessert | recipes or inventory |
 
 Every slot holds a list, so a snack can be goldfish *and* a meat stick and
 dinner can be pizza *and* sausage. Each item is a chip whose look says what
@@ -36,8 +42,7 @@ Text on every chip meets 4.5:1 contrast.
 Quick edits happen right in the row, no picker needed:
 
 - **✕** on a chip takes it off.
-- **Skip** on an undecided breakfast, lunch, or snack marks it not needed
-  (tap again to undo).
+- **Skip** on an undecided row marks it not needed (tap again to undo).
 - **Ate** on any filled slot records that it's what was actually eaten.
 
 The **+** (or tapping the empty part of a row) opens the picker, which
@@ -49,9 +54,8 @@ Inventory choices only offer what's in stock.
 Turning Ate on opens one follow-up covering every item in the slot:
 
 - **recipe**: marked made, with a last made date of that plan day (never
-  moving the date backwards), and a thumb asked of whoever had it. That's
-  one person for breakfast, lunch, or a snack, and all four for dinner or
-  dessert.
+  moving the date backwards), and a thumb asked of whoever had it: that
+  person for a per-person row, and everyone for a shared one.
 - **inventory item**: *Used up + list*, *Used up*, or *Some left*. Items
   already struck through (Cam and Bodhi split the frozen pizza) aren't asked
   about again.
@@ -91,12 +95,32 @@ back with today's date instead of making a second one.
 An item keeps one row for its whole life: in stock, used up, on the list,
 and back in stock when you buy it.
 
+## Kitchen settings
+
+The **settings** link (top right) holds everything about the kitchen:
+
+- **Kitchen name.**
+- **People.** Add, rename, reorder (↑), or remove. A person's key, not their
+  name, is what plans and ratings point at, so a rename keeps everything.
+  Removing someone takes them off the plan and out of rating prompts but
+  keeps their history, and they can be brought back from the *Removed* row.
+  Nothing about a person is ever deleted.
+- **Meals.** For each section, *Everyone* or *Per person*, and for per
+  person, tap names to choose who gets a row. A new person joins every
+  per-person section. A per-person section with nobody chosen is hidden.
+- **Who can see this kitchen.** The email list.
+
+A kitchen started before this existed has no `people` or `sections` saved,
+and reads as Josh, Ashley, Cam, and Bodhi (keys `josh`, `ashley`, `cam`,
+`bodhi`) with today's layout, so nothing about it changes until someone
+edits the settings. New kitchens name their people at setup.
+
 ## Households and access
 
 Data belongs to a household, not a user, so two accounts plan the same
 week. Membership is a list of emails on the household, which is what lets
-one person add the other before they've ever signed in (Members, top
-right). Because access hangs on the email, it has to be a proven one: the
+one person add the other before they've ever signed in (Kitchen settings,
+top right). Because access hangs on the email, it has to be a proven one: the
 tool offers **Google sign-in only**, and the rules require
 `email_verified`. An email-and-password account claiming someone's address
 gets nothing.
@@ -107,22 +131,30 @@ A member can add or remove anyone except themselves; the founder
 ## Firestore
 
 ```
-mealplan_households/{hid}                 name, ownerUid, memberEmails[]
+mealplan_households/{hid}                 name, ownerUid, memberEmails[], people[], sections{}
 mealplan_households/{hid}/recipes/{id}    name, link, ingredients, made, lastMade, ratings{person}
-mealplan_households/{hid}/days/{date}     date, breakfast{person}, lunch{person}, snack{person},
-                                          dinner, dessert, dinnerMod
+mealplan_households/{hid}/days/{date}     date, {section}{personKey | all}, mods{section}
 mealplan_households/{hid}/inventory/{id}  name, addedAt, usedAt, onList, inCart, createdAt
 ```
 
 Dates (`days/{date}`, `lastMade`) are local `YYYY-MM-DD` strings rather
 than timestamps, so Tuesday's plan is Tuesday wherever it's read. A slot is
-`{ items: [pick, ...], eaten? }`, `{ none: true }`, or absent (undecided).
-A pick is `{ kind: "recipe" | "inventory" | "text", id, name }`.
+`{ items: [pick, ...], eaten? }`, `{ none: true }`, or absent (undecided),
+stored at `{section}.{personKey}` for a per-person row or `{section}.all` for
+a shared one. Both can sit in the same section, so switching a section
+between *Everyone* and *Per person* never throws away what was planned
+under the other. A pick is `{ kind: "recipe" | "inventory" | "text", id,
+name }`. Each shared section's mods note is at `mods.{section}`.
 
-Older days still read correctly (`readDay` in `plan.js`): a single `{ pick }`
-or bare pick becomes a one-item list, and the old two-slot `snacks` array
-maps to Cam (first) and Bodhi (second). The first snack edit on such a day
-saves the per-person `snack` map and deletes the array in the same write.
+Older days still read correctly (`readDay` in `plan.js`), and each old shape
+is replaced by the new one on its first edit:
+
+- a single `{ pick }` or bare pick reads as a one-item list
+- dinner and dessert stored directly on the field (`dinner: { items }`)
+  read as the shared slot, and move under `dinner.all`
+- `dinnerMod` reads as dinner's mods note, and moves to `mods.dinner`
+- the old two-slot `snacks` array maps to Cam (first) and Bodhi (second)
+  when those people exist, and becomes the per-person snack map
 
 An inventory row's state comes from its fields: in stock (`addedAt` set,
 `usedAt` null), used (`usedAt` set), or list-only (`addedAt` null, never
@@ -141,8 +173,8 @@ range), so no composite indexes are needed. Rules are in the repo root
 ## Tests
 
 - `apps/portfolio/test/meal-planner.test.mjs`: week math, the inventory
-  splitter, slots and the old shapes they read from, the inventory lifecycle
-  and sorting. No dependencies; CI and `deploy.sh` run it.
+  splitter, kitchen config (people, section modes, defaults), slots in both
+  modes and the old shapes they read from, the inventory lifecycle, sorting. No dependencies; CI and `deploy.sh` run it.
 - `apps/portfolio/test/mealplan-rules.test.mjs`: security rules against
   the Firestore emulator. See `apps/portfolio/test/README.md`.
 
