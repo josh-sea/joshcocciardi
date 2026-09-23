@@ -10,7 +10,7 @@
 /*    date, breakfast{person: entry}, lunch{person: entry},            */
 /*    snacks[2], dinner, dinnerMod, dessert, updatedAt                 */
 /*  mealplan_households/{hid}/inventory/{id}                           */
-/*    name, createdAt, createdBy                                       */
+/*    name, addedAt, usedAt, onList, inCart, createdAt, createdBy      */
 /*                                                                     */
 /*  A household, not a user, owns the data: Josh and Ashley plan the  */
 /*  same week from two accounts. Membership is by verified email       */
@@ -36,7 +36,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { addDays, isPick } from "./plan";
+import { addDays, isPick, matchNames } from "./plan";
 
 const COL = "mealplan_households";
 const hhCol = () => collection(db, COL);
@@ -186,46 +186,98 @@ export const saveSlot = (hid, dateKey, path, value) => {
   return setDoc(doc(sub(hid, "days"), dateKey), data, { mergeFields: ["date", "updatedAt", path] });
 };
 
-export const cleanPick = (p) => (isPick(p) ? { kind: p.kind, id: p.id || null, name: p.name } : null);
+export const cleanPick = (p) =>
+  isPick(p) ? { kind: p.kind, id: p.id || null, name: p.name, ...(p.eaten ? { eaten: true } : {}) } : null;
 
 /* ----------------------------- inventory --------------------------- */
 
+// Rows written before the shopping list existed only carry createdAt, which
+// was their added date. Rows written since always carry addedAt, and a
+// list-only item that has never been bought stores it as null, so the
+// fallback applies only when the field is missing altogether.
 const shapeItem = (snap) => {
   const d = snap.data({ serverTimestamps: "estimate" });
-  return { id: snap.id, name: d.name || "", createdAt: when(d.createdAt) };
+  return {
+    id: snap.id,
+    name: d.name || "",
+    addedAt: "addedAt" in d ? when(d.addedAt) : when(d.createdAt),
+    usedAt: when(d.usedAt),
+    onList: d.onList === true,
+    inCart: d.inCart === true,
+  };
 };
 
 export const watchInventory = (hid, cb, onError) =>
-  onSnapshot(
-    sub(hid, "inventory"),
-    (snap) => {
-      const rows = snap.docs.map(shapeItem);
-      rows.sort(
-        (a, b) =>
-          (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0) ||
-          a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-      );
-      cb(rows);
-    },
-    onError
-  );
+  onSnapshot(sub(hid, "inventory"), (snap) => cb(snap.docs.map(shapeItem)), onError);
 
-// One batch for the whole list, so a dictated grocery run lands all at once
-// with a single shared timestamp.
-export const addItems = async (hid, uid, names) => {
+const itemRef = (hid, id) => doc(sub(hid, "inventory"), id);
+
+// Back in the house as of now: fresh date, not used, off the list.
+const RESTOCK = () => ({ addedAt: serverTimestamp(), usedAt: null, onList: false, inCart: false });
+
+// Puts names into stock in one batch, so a dictated grocery run lands at
+// once. A name that already has a row (in stock, used up, or on the list)
+// revives that row with a new date instead of adding a duplicate. `items` is
+// the current inventory, used for that matching. Returns the row ids in the
+// order of `names`.
+export const stockItems = async (hid, uid, names, items) => {
   const batch = writeBatch(db);
-  names.forEach((name) => {
-    batch.set(doc(sub(hid, "inventory")), { name, createdAt: serverTimestamp(), createdBy: uid });
+  const ids = matchNames(names, items).map(({ name, existing }) => {
+    if (existing) {
+      batch.update(itemRef(hid, existing.id), RESTOCK());
+      return existing.id;
+    }
+    const ref = doc(sub(hid, "inventory"));
+    batch.set(ref, { name, ...RESTOCK(), createdAt: serverTimestamp(), createdBy: uid });
+    return ref.id;
   });
   await batch.commit();
-  return names.length;
+  return ids;
 };
 
-// Returns the new row's id so a slot can point at it straight away.
-export const addItem = async (hid, uid, name) => {
-  const ref = doc(sub(hid, "inventory"));
-  await setDoc(ref, { name, createdAt: serverTimestamp(), createdBy: uid });
-  return ref.id;
+// Puts names on the shopping list. Known items are flagged; new ones become
+// list-only rows that join the inventory the first time they're bought.
+export const listItems = async (hid, uid, names, items) => {
+  const batch = writeBatch(db);
+  matchNames(names, items).forEach(({ name, existing }) => {
+    if (existing) {
+      batch.update(itemRef(hid, existing.id), { onList: true });
+    } else {
+      batch.set(doc(sub(hid, "inventory")), {
+        name,
+        addedAt: null,
+        usedAt: null,
+        onList: true,
+        inCart: false,
+        createdAt: serverTimestamp(),
+        createdBy: uid,
+      });
+    }
+  });
+  await batch.commit();
 };
 
-export const deleteItem = (hid, id) => deleteDoc(doc(sub(hid, "inventory"), id));
+// Strikes an item through (or brings it back if tapped again). Optionally
+// puts it straight on the shopping list in the same write.
+export const setUsed = (hid, id, used, { toList = false } = {}) =>
+  updateDoc(itemRef(hid, id), {
+    usedAt: used ? serverTimestamp() : null,
+    ...(toList ? { onList: true } : {}),
+  });
+
+// Off the list. A list-only item that was never bought has nothing left to
+// be, so its row goes too.
+export const unlistItem = (hid, item) =>
+  item.addedAt ? updateDoc(itemRef(hid, item.id), { onList: false, inCart: false }) : deleteDoc(itemRef(hid, item.id));
+
+export const setInCart = (hid, id, inCart) => updateDoc(itemRef(hid, id), { inCart });
+
+// Done shopping: everything checked off comes into stock dated now.
+export const checkout = async (hid, ids) => {
+  const batch = writeBatch(db);
+  ids.forEach((id) => batch.update(itemRef(hid, id), RESTOCK()));
+  await batch.commit();
+  return ids.length;
+};
+
+export const deleteItem = (hid, id) => deleteDoc(itemRef(hid, id));

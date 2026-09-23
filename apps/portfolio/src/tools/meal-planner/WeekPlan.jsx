@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useState } from "react";
+import FollowUp from "./FollowUp";
 import PickSheet from "./PickSheet";
-import { cleanPick, saveSlot, watchWeek } from "./store";
+import { cleanPick, saveSlot, setRating, setUsed, updateRecipe, watchWeek } from "./store";
 import {
   PEOPLE,
   addDays,
   dayProgress,
   isPick,
+  itemState,
+  laterKey,
   mondayOf,
   shortDate,
   slotState,
@@ -19,6 +22,17 @@ const PER_PERSON = [
   { key: "lunch", label: "Lunch" },
 ];
 
+const EVERYONE = PEOPLE.map((p) => p.key);
+
+// The buttons at the right end of a slot, so the common calls don't need the
+// picker: Skip for a person who doesn't need the meal, Ate once it's eaten.
+const Pill = ({ on, kind, label, onClick }) => (
+  <button type="button" className={`pill ${kind} ${on ? "on" : ""}`} aria-pressed={!!on} onClick={onClick}>
+    {kind === "ate" && on ? "✓ " : ""}
+    {label}
+  </button>
+);
+
 const PickText = ({ pick, placeholder }) =>
   isPick(pick) ? (
     <span className="picked">
@@ -29,15 +43,30 @@ const PickText = ({ pick, placeholder }) =>
     <span className="placeholder">{placeholder}</span>
   );
 
+// Dinner and dessert: one shared pick for everyone.
+const SharedSlot = ({ pick, placeholder, onOpen, onAte }) => {
+  const has = isPick(pick);
+  return (
+    <div className={`slot ${has ? "meal" : "undecided"} ${has && pick.eaten ? "eaten" : ""}`}>
+      <button type="button" className="slotmain" onClick={onOpen}>
+        <span className="who">Everyone</span>
+        <PickText pick={pick} placeholder={placeholder} />
+      </button>
+      {has && <Pill kind="ate" label="Ate" on={pick.eaten} onClick={() => onAte(pick)} />}
+    </div>
+  );
+};
+
 /* The week, one day at a time. A strip of seven days across the top (with a
    settled-slots count under each), the chosen day's five sections below. */
-export default function WeekPlan({ hid, recipes, inventory, onAddRecipe, onAddInventory, onError }) {
+export default function WeekPlan({ hid, recipes, inventory, stock, onAddRecipe, onAddInventory, onError }) {
   const today = todayKey();
   const [monday, setMonday] = useState(() => mondayOf(today));
   const [dayKey, setDayKey] = useState(today);
   const [days, setDays] = useState({});
   const [sheet, setSheet] = useState(null);
   const [mod, setMod] = useState("");
+  const [followUp, setFollowUp] = useState(null);
 
   useEffect(() => {
     setDays({});
@@ -62,6 +91,7 @@ export default function WeekPlan({ hid, recipes, inventory, onAddRecipe, onAddIn
   };
 
   const closeSheet = useCallback(() => setSheet(null), []);
+  const closeFollowUp = useCallback(() => setFollowUp(null), []);
 
   const save = (path, value) => saveSlot(hid, dayKey, path, value).catch(onError);
 
@@ -79,6 +109,34 @@ export default function WeekPlan({ hid, recipes, inventory, onAddRecipe, onAddIn
     });
   };
 
+  // Ate toggles the eaten flag on the pick itself. Turning it on also keeps
+  // the other two pages in step: a recipe is marked made (dated to this plan
+  // day, never earlier than it already was) and asks for thumbs from whoever
+  // had it; an inventory item asks whether it's finished. Turning it off only
+  // clears the flag, since undoing a rating or a used-up mark by surprise
+  // would be worse than leaving it.
+  const toggleAte = (pick, write, people) => {
+    const eaten = !pick.eaten;
+    write({ ...pick, eaten });
+    if (!eaten) return;
+    if (pick.kind === "recipe") {
+      const r = recipes.find((x) => x.id === pick.id);
+      if (!r) return;
+      updateRecipe(hid, r.id, { made: true, lastMade: laterKey(r.lastMade, dayKey) }).catch(onError);
+      setFollowUp({ kind: "recipe", id: r.id, name: r.name, people, when: `${dayName}, ${shortDate(dayKey)}` });
+    } else if (pick.kind === "inventory") {
+      const item = inventory.find((i) => i.id === pick.id);
+      // Already struck through (Cam and Bodhi split the frozen pizza), or
+      // deleted since: nothing to ask.
+      if (!item || itemState(item) !== "stock") return;
+      setFollowUp({ kind: "inventory", id: item.id, name: item.name, people });
+    }
+  };
+
+  const writePerson = (meal, person) => (p) => save(`${meal.key}.${person.key}`, { pick: cleanPick(p) });
+  const skipPerson = (meal, person, entry) =>
+    save(`${meal.key}.${person.key}`, slotState(entry) === "none" ? null : { none: true });
+
   const snacks = [0, 1].map((i) => (isPick(day.snacks?.[i]) ? day.snacks[i] : null));
   const openSnack = (i) =>
     setSheet({
@@ -87,12 +145,13 @@ export default function WeekPlan({ hid, recipes, inventory, onAddRecipe, onAddIn
       value: snacks[i],
       sources: ["inventory"],
       onAddInventory,
-      onPick: (p) => {
-        const next = [...snacks];
-        next[i] = cleanPick(p);
-        save("snacks", next.some(Boolean) ? next : null);
-      },
+      onPick: (p) => writeSnack(i)(p),
     });
+  const writeSnack = (i) => (p) => {
+    const next = [...snacks];
+    next[i] = cleanPick(p);
+    save("snacks", next.some(Boolean) ? next : null);
+  };
 
   const openDinner = () =>
     setSheet({
@@ -166,15 +225,28 @@ export default function WeekPlan({ hid, recipes, inventory, onAddRecipe, onAddIn
           {PEOPLE.map((person) => {
             const entry = day[meal.key]?.[person.key];
             const state = slotState(entry);
+            const eaten = state === "meal" && entry.pick.eaten;
             return (
-              <button key={person.key} type="button" className={`slot ${state}`} onClick={() => openPerson(meal, person)}>
-                <span className="who">{person.name}</span>
-                {state === "none" ? (
-                  <span className="none">Not needed</span>
+              <div key={person.key} className={`slot ${state} ${eaten ? "eaten" : ""}`}>
+                <button type="button" className="slotmain" onClick={() => openPerson(meal, person)}>
+                  <span className="who">{person.name}</span>
+                  {state === "none" ? (
+                    <span className="none">Not needed</span>
+                  ) : (
+                    <PickText pick={entry?.pick} placeholder="Undecided" />
+                  )}
+                </button>
+                {state === "meal" ? (
+                  <Pill
+                    kind="ate"
+                    label="Ate"
+                    on={eaten}
+                    onClick={() => toggleAte(entry.pick, writePerson(meal, person), [person.key])}
+                  />
                 ) : (
-                  <PickText pick={entry?.pick} placeholder="Undecided" />
+                  <Pill kind="skip" label="Skip" on={state === "none"} onClick={() => skipPerson(meal, person, entry)} />
                 )}
-              </button>
+              </div>
             );
           })}
         </section>
@@ -183,19 +255,19 @@ export default function WeekPlan({ hid, recipes, inventory, onAddRecipe, onAddIn
       <section className="card">
         <h3 className="sechead">Snacks</h3>
         {snacks.map((s, i) => (
-          <button key={i} type="button" className={`slot ${s ? "meal" : "undecided"}`} onClick={() => openSnack(i)}>
-            <span className="who">Snack {i + 1}</span>
-            <PickText pick={s} placeholder="From inventory" />
-          </button>
+          <div key={i} className={`slot ${s ? "meal" : "undecided"} ${s?.eaten ? "eaten" : ""}`}>
+            <button type="button" className="slotmain" onClick={() => openSnack(i)}>
+              <span className="who">Snack {i + 1}</span>
+              <PickText pick={s} placeholder="From inventory" />
+            </button>
+            {s && <Pill kind="ate" label="Ate" on={s.eaten} onClick={() => toggleAte(s, writeSnack(i), EVERYONE)} />}
+          </div>
         ))}
       </section>
 
       <section className="card">
         <h3 className="sechead">Dinner</h3>
-        <button type="button" className={`slot ${isPick(day.dinner) ? "meal" : "undecided"}`} onClick={openDinner}>
-          <span className="who">Everyone</span>
-          <PickText pick={day.dinner} placeholder="Pick a recipe" />
-        </button>
+        <SharedSlot pick={day.dinner} placeholder="Pick a recipe" onOpen={openDinner} onAte={(p) => toggleAte(p, (x) => save("dinner", cleanPick(x)), EVERYONE)} />
         <label className="field">
           <span className="flabel">Dinner mods</span>
           <textarea
@@ -211,14 +283,24 @@ export default function WeekPlan({ hid, recipes, inventory, onAddRecipe, onAddIn
 
       <section className="card">
         <h3 className="sechead">Dessert</h3>
-        <button type="button" className={`slot ${isPick(day.dessert) ? "meal" : "undecided"}`} onClick={openDessert}>
-          <span className="who">Everyone</span>
-          <PickText pick={day.dessert} placeholder="Recipe or inventory" />
-        </button>
+        <SharedSlot pick={day.dessert} placeholder="Recipe or inventory" onOpen={openDessert} onAte={(p) => toggleAte(p, (x) => save("dessert", cleanPick(x)), EVERYONE)} />
       </section>
 
       {sheet && (
-        <PickSheet {...sheet} recipes={recipes} inventory={inventory} onClose={closeSheet} />
+        <PickSheet {...sheet} recipes={recipes} inventory={stock} onClose={closeSheet} />
+      )}
+
+      {followUp && (
+        <FollowUp
+          followUp={followUp}
+          ratings={recipes.find((r) => r.id === followUp.id)?.ratings || {}}
+          onRate={(person, value) => setRating(hid, followUp.id, person, value).catch(onError)}
+          onUsedUp={(toList) => {
+            setUsed(hid, followUp.id, true, { toList }).catch(onError);
+            closeFollowUp();
+          }}
+          onClose={closeFollowUp}
+        />
       )}
     </div>
   );
