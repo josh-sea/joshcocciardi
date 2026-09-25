@@ -234,6 +234,49 @@ textarea.input{resize:vertical;}
 .stockbtns .toggle + .toggle{border-left:1px solid var(--line);}
 .stockbtns .toggle.on{background:var(--basil);color:#fff;}
 .linker{display:flex;flex-direction:column;gap:8px;}
+
+/* ----------------------------- amounts ----------------------------- */
+.trow .iname .amount{display:block;background:none;border:none;padding:1px 0 0;font-size:13px;color:var(--soft);text-align:left;text-decoration:none;}
+.trow .iname .amount.empty{color:#9A8D83;font-size:12px;}
+.trow.carted .iname .amount{text-decoration:line-through;}
+.amountin{display:block;margin-top:3px;width:100%;max-width:220px;font:inherit;font-size:16px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:#FFFDF9;}
+
+/* ------------------------------- Ask AI ------------------------------- */
+.fab{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:40;width:58px;height:58px;border-radius:50%;
+  border:none;background:var(--ink);color:#fff !important;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 18px rgba(42,35,32,.28);}
+.mp{padding-bottom:96px;}
+.chatscrim{align-items:stretch;}
+.chatsheet{background:var(--cream);width:100%;max-width:640px;height:100%;display:flex;flex-direction:column;margin:0 auto;
+  padding-top:env(safe-area-inset-top);}
+@media (min-width:700px){.chatscrim{align-items:center;}.chatsheet{height:88vh;border-radius:16px;overflow:hidden;}}
+.chathead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--card);}
+.chattools{display:flex;align-items:center;gap:6px;}
+.chatmodel{font:inherit;font-size:13px;padding:6px 6px;border:1px solid var(--line);border-radius:8px;background:#fff;max-width:110px;}
+.chatkey{padding:16px;display:flex;flex-direction:column;gap:10px;}
+.chatlog{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.bubble{max-width:88%;padding:9px 13px;border-radius:14px;line-height:1.45;overflow-wrap:anywhere;}
+.bubble.me{align-self:flex-end;background:var(--ink);color:#fff;border-bottom-right-radius:4px;white-space:pre-wrap;}
+.bubble.ai{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:4px;}
+.bubble.ai p{margin:0 0 8px;}
+.bubble.ai p:last-child,.bubble.ai ul:last-child,.bubble.ai ol:last-child{margin-bottom:0;}
+.bubble.ai ul,.bubble.ai ol{margin:0 0 8px;padding-left:20px;}
+.bubble.ai .mdhead{font-weight:700;}
+.aistatus{align-self:flex-start;font-size:13px;color:var(--soft);}
+.aistatus.ok{color:var(--basil);font-weight:500;}
+.aicard{align-self:stretch;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
+.aicardhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.aicardbody ul,.aicardbody ol{margin:4px 0 8px;padding-left:20px;font-size:14px;}
+.aibuy{align-self:stretch;display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
+.aibuyrow{display:flex;align-items:center;gap:8px;font-size:14px;padding:3px 0;}
+.aibuyrow input{width:18px;height:18px;accent-color:var(--basil);}
+.aibuy .btn{margin-top:6px;}
+.chatfoot{border-top:1px solid var(--line);background:var(--card);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;}
+.chatctx{display:flex;gap:6px;flex-wrap:wrap;}
+.chatctx .chipbtn{font-size:13px;padding:6px 10px;flex-shrink:0;}
+.chatin{display:flex;gap:8px;align-items:flex-end;}
+.chatin textarea{flex:1;resize:none;}
+.chatcost{text-align:right;font-size:11.5px;}
 `;
 
 export default CSS;

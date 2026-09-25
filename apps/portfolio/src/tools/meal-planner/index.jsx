@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import CSS from "./styles";
 import Inventory from "./Inventory";
 import Recipes from "./Recipes";
@@ -8,6 +8,9 @@ import { HouseholdSetup, KitchenSettings } from "./Household";
 import { authMessage, redirectSettled, signInWithGoogle, signOutOfMealPlanner, watchAuth } from "./auth";
 import { inStock, kitchenConfig } from "./plan";
 import { addRecipe, stockItems, watchHouseholds, watchInventory, watchRecipes } from "./store";
+
+// The chat, and the Anthropic SDK with it, only load once someone opens it.
+const Chat = lazy(() => import("./Chat"));
 
 // ---------------------------------------------------------------------------
 // Family Meal Planner: the weekly plan, recipes, inventory, and a shopping
@@ -71,6 +74,7 @@ export default function MealPlanner() {
   const [inventory, setInventory] = useState([]);
   const [tab, setTab] = useState(readTab);
   const [showSettings, setShowSettings] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -283,6 +287,29 @@ export default function MealPlanner() {
         </div>
       )}
       {body}
+      {hid && !showSettings && (
+        <button className="fab" type="button" aria-label="Ask AI" title="Ask AI" onClick={() => setChatOpen(true)}>
+          <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-4.5 3.6A.6.6 0 0 1 3.5 21V18H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm4 6.2a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm4 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm4 0a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z"
+            />
+          </svg>
+        </button>
+      )}
+      {hid && chatOpen && (
+        <Suspense fallback={<div className="scrim"><div className="chatsheet center">opening…</div></div>}>
+          <Chat
+            hid={hid}
+            user={user}
+            household={household}
+            config={config}
+            recipes={recipes}
+            inventory={inventory}
+            onClose={() => setChatOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

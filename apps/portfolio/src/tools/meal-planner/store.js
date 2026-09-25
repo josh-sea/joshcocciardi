@@ -15,7 +15,8 @@
 /*    (a slot is { items[], eaten } or { none }; `all` is the shared   */
 /*    Everyone slot; see plan.js)                                      */
 /*  mealplan_households/{hid}/inventory/{id}                           */
-/*    name, addedAt, usedAt, onList, inCart, createdAt, createdBy      */
+/*    name, addedAt, usedAt, onList, inCart, amount, createdAt,        */
+/*    createdBy                                                        */
 /*                                                                     */
 /*  A household, not a user, owns the data: Josh and Ashley plan the  */
 /*  same week from two accounts. Membership is by verified email       */
@@ -247,6 +248,7 @@ const shapeItem = (snap) => {
     usedAt: when(d.usedAt),
     onList: d.onList === true,
     inCart: d.inCart === true,
+    amount: typeof d.amount === "string" ? d.amount : "",
   };
 };
 
@@ -255,8 +257,9 @@ export const watchInventory = (hid, cb, onError) =>
 
 const itemRef = (hid, id) => doc(sub(hid, "inventory"), id);
 
-// Back in the house as of now: fresh date, not used, off the list.
-const RESTOCK = () => ({ addedAt: serverTimestamp(), usedAt: null, onList: false, inCart: false });
+// Back in the house as of now: fresh date, not used, off the list. The
+// amount was how much to buy, so it goes once it's bought.
+const RESTOCK = () => ({ addedAt: serverTimestamp(), usedAt: null, onList: false, inCart: false, amount: null });
 
 // Puts names into stock in one batch, so a dictated grocery run lands at
 // once. A name that already has a row (in stock, used up, or on the list)
@@ -278,16 +281,25 @@ export const stockItems = async (hid, uid, names, items) => {
   return ids;
 };
 
-// Puts names on the shopping list. Known items are flagged; new ones become
-// list-only rows that join the inventory the first time they're bought.
-export const listItems = async (hid, uid, names, items) => {
+// Puts things on the shopping list. Each entry is a name, or { name, amount }
+// where amount is how much to buy ("2 lemons", "1 dozen"). Known items are
+// flagged; new ones become list-only rows that join the inventory the first
+// time they're bought. An amount given here replaces any already on the row.
+export const listItems = async (hid, uid, entries, items) => {
+  const list = entries.map((e) => (typeof e === "string" ? { name: e, amount: "" } : e));
+  const amounts = list.map((e) => String(e.amount || "").trim());
   const batch = writeBatch(db);
-  matchNames(names, items).forEach(({ name, existing }) => {
+  matchNames(
+    list.map((e) => e.name),
+    items
+  ).forEach(({ name, existing }, i) => {
+    const amount = amounts[i] ? { amount: amounts[i] } : {};
     if (existing) {
-      batch.update(itemRef(hid, existing.id), { onList: true });
+      batch.update(itemRef(hid, existing.id), { onList: true, ...amount });
     } else {
       batch.set(doc(sub(hid, "inventory")), {
         name,
+        ...amount,
         addedAt: null,
         usedAt: null,
         onList: true,
@@ -316,6 +328,10 @@ export const unlistItem = (hid, item) =>
 // On or off the shopping list, for an item that has been in the house.
 export const setListed = (hid, id, onList) =>
   updateDoc(itemRef(hid, id), onList ? { onList: true } : { onList: false, inCart: false });
+
+// How much to buy, shown under the item on the shopping list. Blank clears it.
+export const setAmount = (hid, id, amount) =>
+  updateDoc(itemRef(hid, id), { amount: String(amount || "").trim() || null });
 
 export const setInCart = (hid, id, inCart) => updateDoc(itemRef(hid, id), { inCart });
 

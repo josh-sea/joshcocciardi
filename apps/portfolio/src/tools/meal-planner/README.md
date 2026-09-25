@@ -102,6 +102,40 @@ back with today's date instead of making a second one.
 An item keeps one row for its whole life: in stock, used up, on the list,
 and back in stock when you buy it.
 
+## Ask AI
+
+The round chat button (bottom right) opens a chat with Claude about the
+kitchen. It runs in the browser with your own Anthropic API key, the same
+key Sunday Desk stores on this device (`sd.anthropicKey.v1` in
+localStorage, never Firestore), so a phone needs it entered once.
+
+- **What it can see** is chosen per question with the chips above the text
+  box: Recipes, Inventory, Shopping list, Today's plan or This week. Only
+  ticked parts are sent, as a `<kitchen>` block with the question. The block
+  is only resent when it has changed, so follow-ups stay cheap.
+- **🌐 Web** lets it search the web.
+- **Recipes it suggests** come back as a card (the `propose_recipe` tool):
+  *Save recipe* adds it to Recipes, with the inventory items it uses linked,
+  and a to-buy list with *Add to shopping list*. The to-buy list leaves out
+  pantry staples (salt, pepper, oils, vinegar, dried herbs and spices; fresh
+  herbs stay) and uses purchase amounts (1 lemon, not 1 tsp lemon juice).
+  Anything matching an in-stock item starts unticked.
+- **"Add 2 lemons to my list"** is done straight away (the
+  `add_to_shopping_list` tool), amounts included.
+- The model defaults to Claude Opus 5 with server-side refusal fallback
+  (`fallbacks: "default"`); the picker offers the same models as Sunday
+  Desk. A running cost estimate sits under the text box.
+- The conversation is kept on the device per kitchen; ↺ starts a new one.
+
+`assistant.js` holds the tools, input validation, system prompt, and context
+builder (no network, so it's unit tested); `Chat.jsx` holds the tool loop,
+streaming, and cards, and is lazy-loaded with the SDK only when opened.
+
+**Amounts on the shopping list.** Every list item can carry an optional
+amount, shown in grey under its name ("2", "1 dozen", "1 lb"). Tap it (or
+*+ amount*) to type one. Amounts the assistant adds land in the same place,
+and they clear when the item is bought.
+
 ## Kitchen settings
 
 The **settings** link (top right) holds everything about the kitchen:
@@ -141,7 +175,7 @@ A member can add or remove anyone except themselves; the founder
 mealplan_households/{hid}                 name, ownerUid, memberEmails[], people[], sections{}
 mealplan_households/{hid}/recipes/{id}    name, link, ingredients, uses[{id, name}], made, lastMade, ratings{person}
 mealplan_households/{hid}/days/{date}     date, {section}{personKey | all}, mods{section}
-mealplan_households/{hid}/inventory/{id}  name, addedAt, usedAt, onList, inCart, createdAt
+mealplan_households/{hid}/inventory/{id}  name, addedAt, usedAt, onList, inCart, amount, createdAt
 ```
 
 Dates (`days/{date}`, `lastMade`) are local `YYYY-MM-DD` strings rather
@@ -182,7 +216,8 @@ range), so no composite indexes are needed. Rules are in the repo root
 - `apps/portfolio/test/meal-planner.test.mjs`: week math, the inventory
   splitter, kitchen config (people, section modes, defaults), slots in both
   modes and the old shapes they read from, the inventory lifecycle, sorting,
-  and what the after-eating follow-up covers. No dependencies; CI and `deploy.sh` run it.
+  what the after-eating follow-up covers, and the Ask AI tools, validation,
+  and context. No dependencies; CI and `deploy.sh` run it.
 - `apps/portfolio/test/mealplan-rules.test.mjs`: security rules against
   the Firestore emulator. See `apps/portfolio/test/README.md`.
 

@@ -36,6 +36,15 @@ import {
   weekDays,
   writeSlot,
 } from "../src/tools/meal-planner/plan.js";
+import {
+  buildContext,
+  buyRows,
+  isContextBlock,
+  recipeToSave,
+  systemPrompt,
+  validateListItems,
+  validateRecipe,
+} from "../src/tools/meal-planner/assistant.js";
 
 let pass = 0;
 let fail = 0;
@@ -198,6 +207,8 @@ eq("struck through is used", itemState(inv[1]), "used");
 eq("never bought is wanted", itemState(inv[2]), "wanted");
 eq("only stock feeds the plan's pickers", inv.filter(inStock).map((i) => i.id), ["a", "d"]);
 eq("names match case-insensitively", findByName(inv, "  EGGS ")?.id, "b");
+eq("a plain plural finds the singular", [findByName([{ id: "l", name: "lemon" }], "Lemons")?.id, findByName([{ id: "t", name: "tomato" }], "tomatoes")?.id], ["l", "t"]);
+eq("a double s isn't treated as a plural", findByName([{ id: "g", name: "glas" }], "glass"), null);
 eq(
   "adding revives existing rows instead of duplicating",
   matchNames(["Milk", "bread", "eggs"], inv).map((m) => [m.name, m.existing?.id || null]),
@@ -235,6 +246,53 @@ eq("used-up items still get a row (to relist); never-bought and deleted ones don
 eq("typed-in meals ask nothing", followUpFor([{ kind: "text", name: "Toast" }], { recipes: book, inventory: pantry, people: kid }), { recipes: [], stock: [] });
 eq("a deleted recipe asks nothing", followUpFor([{ kind: "recipe", id: "nope", name: "x" }], { recipes: book, inventory: pantry, people: kid }), { recipes: [], stock: [] });
 eq("recipeUses drops malformed links", recipeUses({ uses: [{ id: "a", name: "A" }, { id: 3, name: "B" }, { id: "c" }, null] }), [{ id: "a", name: "A" }]);
+
+console.log("\nask AI:");
+const good = {
+  name: " Lemon chicken ",
+  servings: "4",
+  source_url: "https://example.com/lemon-chicken",
+  ingredients: ["2 lb chicken thighs", "1 lemon", "2 tbsp olive oil"],
+  steps: ["Heat oven", "Roast 35 min"],
+  uses_inventory: ["pasta", "Eggs", "not there"],
+  to_buy: [{ name: "lemon", amount: "1" }, { name: "chicken thighs", amount: "2 lb" }, { name: "milk" }, { amount: "3" }],
+};
+const v = validateRecipe(good);
+eq("a complete recipe validates and is trimmed", [v.ok, v.value.name, v.value.toBuy.length], [true, "Lemon chicken", 3]);
+eq("a truncated recipe is refused, not guessed at", validateRecipe({ name: "x", ingredients: ["a"] }).ok, false);
+eq("a non-http source link is dropped", validateRecipe({ ...good, source_url: "javascript:alert(1)" }).value.sourceUrl, "");
+eq("list items need a name", validateListItems({ items: [{ amount: "2" }] }).ok, false);
+eq("list items keep amounts", validateListItems({ items: [{ name: "lemons", amount: "2" }] }).value, [{ name: "lemons", amount: "2" }]);
+const kitchenInv = [
+  { id: "pasta", name: "pasta", addedAt: d(20), usedAt: null },
+  { id: "eggs", name: "eggs", addedAt: d(20), usedAt: d(22), onList: true },
+  { id: "milk", name: "Milk", addedAt: d(20), usedAt: null },
+  { id: "want", name: "coffee", addedAt: null, usedAt: null, onList: true },
+];
+const saved = recipeToSave(v.value, kitchenInv);
+eq("saving links inventory names it recognizes (case-insensitive), skips the rest", saved.uses, [{ id: "pasta", name: "pasta" }, { id: "eggs", name: "eggs" }]);
+eq("saving folds servings, ingredients and method into the text", saved.ingredients.split("\n").slice(0, 2).concat(saved.ingredients.split("\n").slice(-2)), ["Serves 4", "2 lb chicken thighs", "1. Heat oven", "2. Roast 35 min"]);
+eq("to-buy rows flag what's already in stock", buyRows(v.value, kitchenInv).map((r) => [r.name, r.inStock]), [["lemon", false], ["chicken thighs", false], ["milk", true]]);
+const ctxConfig = kitchenConfig({});
+const ctx = buildContext({
+  picked: ["inventory", "shopping", "today"],
+  todayKey: "2026-09-23",
+  recipes: [],
+  inventory: kitchenInv,
+  days: { "2026-09-23": { dinner: { all: { items: [{ kind: "recipe", id: "r", name: "Tacos" }] } } } },
+  config: ctxConfig,
+  people: ctxConfig.active,
+});
+eq("context is marked so the chat can hide it", isContextBlock(ctx), true);
+eq("context names the date, stock, used-up items, the list with amounts, and today's dinner", [
+  ctx.includes("Today is 2026-09-23"),
+  ctx.includes("- pasta (added"),
+  ctx.includes("Used up, not restocked: eggs"),
+  ctx.includes("- coffee"),
+  ctx.includes("Dinner: everyone: Tacos (recipe)"),
+  ctx.includes("Recipes ("),
+], [true, true, true, true, true, false]);
+eq("the system prompt names the household and the purchase-amount rule", [systemPrompt("K", ctxConfig.active).includes("Josh, Ashley, Cam, Bodhi"), /1 lemon rather than 1 tsp lemon juice/.test(systemPrompt("K", []))], [true, true]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
