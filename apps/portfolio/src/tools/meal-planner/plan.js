@@ -340,7 +340,17 @@ export const itemState = (item) => {
 
 export const inStock = (item) => itemState(item) === "stock";
 
-const nameKey = (s) => String(s || "").trim().toLowerCase();
+// Names match case-insensitively and ignoring a plain plural on the last
+// word, so "Lemons" finds "lemon" and "tomatoes" finds "tomato". Both sides
+// go through the same rule, so it can only ever join names that differ by
+// that ending ("glass" is left alone: a double s isn't a plural).
+const nameKey = (s) =>
+  String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/(o)es$/, "$1")
+    .replace(/([^s])s$/, "$1");
 
 export const findByName = (items, name) => (items || []).find((i) => nameKey(i.name) === nameKey(name)) || null;
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { checkout, deleteItem, listItems, setInCart, unlistItem } from "./store";
+import { checkout, deleteItem, listItems, setAmount, setInCart, unlistItem } from "./store";
 import { ageLabel, itemState, sortItems, splitItems } from "./plan";
 
 /* The shopping list, in three parts:
@@ -9,6 +9,43 @@ import { ageLabel, itemState, sortItems, splitItems } from "./plan";
      Used up   everything struck through in inventory, one tap to list it
    All of it lives on the same inventory rows, so an item never exists twice:
    it's in stock, used up, or on the list, and buying it brings it back. */
+/* How much to buy, in grey under the item: "2 lemons", "1 dozen". Optional;
+   tap it (or "+ amount") to type one, Enter or tap away to save. */
+function Amount({ value, name, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value);
+  if (editing) {
+    return (
+      <input
+        className="amountin"
+        autoFocus
+        value={text}
+        aria-label={`Amount of ${name}`}
+        placeholder="e.g. 2, 1 dozen, 1 lb"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        onBlur={() => {
+          setEditing(false);
+          if (text.trim() !== value) onSave(text);
+        }}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={`amount ${value ? "" : "empty"}`}
+      aria-label={value ? `Amount of ${name}: ${value}. Tap to change.` : `Add an amount for ${name}`}
+      onClick={() => {
+        setText(value);
+        setEditing(true);
+      }}
+    >
+      {value || "+ amount"}
+    </button>
+  );
+}
+
 export default function Shopping({ hid, user, inventory, onError }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -101,6 +138,7 @@ export default function Shopping({ hid, user, inventory, onError }) {
             <span className="iname">
               {i.name}
               {itemState(i) === "wanted" && <span className="tag new">new</span>}
+              <Amount value={i.amount} name={i.name} onSave={(a) => setAmount(hid, i.id, a).catch(onError)} />
             </span>
             <button
               className="iconbtn quiet"
