@@ -39,6 +39,35 @@ npm i --no-save @firebase/rules-unit-testing
 node test/mealplan-rules.test.mjs
 ```
 
+## `readingbuddy-rules.test.mjs`
+
+Firestore security-rules tests for My Reading Buddy: bookshelf members
+(matched by verified email) share its books; strangers, signed-out clients,
+and an unverified account claiming a member's address get nothing; and a
+member can't remove themselves, empty the list, or take over the shelf.
+Same setup as the suites above:
+
+```sh
+firebase emulators:start --only firestore --project josh-cocciardi
+cd apps/portfolio
+npm i --no-save @firebase/rules-unit-testing
+node test/readingbuddy-rules.test.mjs
+```
+
+## `readingbuddy.test.mjs`
+
+Pure-helper tests for My Reading Buddy: choosing a recording format every
+device can play back (MP4/AAC first, then WebM), fitting a spread to the
+screen, shrinking photos, page reordering, page-turn direction, and putting
+picked photos in page order. No dependencies and no emulator:
+
+```sh
+cd apps/portfolio
+node test/readingbuddy.test.mjs
+```
+
+`deploy.sh` and the CI workflow both run it before the portfolio build.
+
 ## `meal-planner.test.mjs`
 
 Pure-helper tests for the Meal Planner: Monday-to-Sunday week math across

@@ -69,6 +69,26 @@ service firebase.storage {
       allow delete: if isOwner(userId);
     }
 
+    // ── My Reading Buddy ────────────────────────────────────────────────
+    // Book spreads and the recordings read over them, under
+    // readingbuddy/{shelfId}/{bookId}/{file}. Same approach as the Collector
+    // Shop above: Storage rules can't see shelf membership in Firestore, so
+    // access is a verified sign-in plus the unguessable path (shelfId and
+    // bookId are Firestore auto-ids only members ever see), and download
+    // URLs carry their own token. The app shrinks photos to 2400px JPEGs
+    // well under the 10MB cap; 25MB of AAC is over an hour of reading.
+    function isReadingBuddyUser() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    match /readingbuddy/{shelfId}/{allPaths=**} {
+      allow read: if isReadingBuddyUser();
+      allow write: if isReadingBuddyUser()
+        && ((request.resource.size < 10 * 1024 * 1024 && request.resource.contentType.matches('image/.*'))
+          || isValidAudio());
+      allow delete: if isReadingBuddyUser();
+    }
+
     // ── PSX Station save data ───────────────────────────────────────────
     // Owner-only, under psx/{uid}/{discId}/. Deliberately narrow: only the
     // save states, their screenshots and the memory card sync here. Disc

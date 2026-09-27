@@ -77,6 +77,15 @@ const tools = [
     tech: ["React", "Firebase Auth", "Firestore"],
     component: lazy(() => import("./meal-planner")),
   },
+  {
+    slug: "myreadingbuddy",
+    title: "My Reading Buddy",
+    description:
+      "Photograph a picture book spread by spread and read each one aloud. The kids pick it off the shelf, press play, and it reads itself to them, turning the pages as it goes.",
+    added: "2026-09-25",
+    tech: ["React", "MediaRecorder", "Firebase Storage", "Firestore"],
+    component: lazy(() => import("./myreadingbuddy")),
+  },
 ];
 
 export default tools;

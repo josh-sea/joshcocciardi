@@ -14,6 +14,7 @@
 #   ./deploy.sh psx          - Copy psx station (no build), deploy hosting + rules
 #   ./deploy.sh solra        - Run the Solra tests, copy (no build), deploy hosting
 #   ./deploy.sh gatekeeper   - Deploy Gatekeeper parent app + functions + firestore (igatekeeper.web.app)
+#   ./deploy.sh myreadingbuddy - Build portfolio, deploy hosting + firestore and storage rules
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
 #
@@ -171,6 +172,9 @@ build_portfolio() {
     log "Testing Meal Planner helpers..."
     node test/meal-planner.test.mjs || fail "Meal Planner tests failed"
 
+    log "Testing My Reading Buddy helpers..."
+    node test/readingbuddy.test.mjs || fail "My Reading Buddy tests failed"
+
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
     npm run build || fail "Portfolio build failed"
@@ -199,6 +203,7 @@ deploy_hosting() {
     echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Swing Coach:    https://www.joshcocciardi.com/projects/swing-coach"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
+    echo "  Reading Buddy:  https://www.joshcocciardi.com/tools/myreadingbuddy"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
 }
 
@@ -347,6 +352,15 @@ case "${1:-all}" in
         echo "========================================"
         deploy_gatekeeper
         ;;
+    myreadingbuddy)
+        echo "========================================"
+        echo "  Deploying My Reading Buddy"
+        echo "========================================"
+        build_portfolio
+        deploy_firestore
+        deploy_storage
+        deploy_hosting
+        ;;
     firestore)
         echo "========================================"
         echo "  Deploying Firestore only"
@@ -361,7 +375,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|gatekeeper|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|gatekeeper|firestore|storage]"
         exit 1
         ;;
 esac

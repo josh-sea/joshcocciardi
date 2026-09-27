@@ -68,6 +68,12 @@ jobs:
         working-directory: apps/portfolio
         run: node test/meal-planner.test.mjs
 
+      # My Reading Buddy's recording-format choice, spread sizing, and page
+      # order helpers. Pure functions, no install needed.
+      - name: Test My Reading Buddy helpers
+        working-directory: apps/portfolio
+        run: node test/readingbuddy.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
           for app in playball canitwo recipebox psx solra; do

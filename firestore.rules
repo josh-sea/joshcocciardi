@@ -350,6 +350,41 @@ service cloud.firestore {
       }
     }
 
+    // ── My Reading Buddy (apps/portfolio/src/tools/myreadingbuddy) ──────
+    // A bookshelf owns the books: photographed spreads plus a recording per
+    // spread. Membership is a list of lowercased verified emails, the same
+    // model as the Meal Planner, so one parent can record while away and
+    // the kids listen at home on the other parent's login. The photos and
+    // recordings themselves live in Storage (see storage.rules).
+    function rbIsMember(sid) {
+      return mpSignedIn()
+        && exists(/databases/$(database)/documents/readingbuddy_shelves/$(sid))
+        && mpEmail() in get(/databases/$(database)/documents/readingbuddy_shelves/$(sid)).data.memberEmails;
+    }
+
+    match /readingbuddy_shelves/{sid} {
+      // `resource == null` lets a get() on a missing shelf read as "not
+      // found" instead of a permissions error.
+      allow read: if mpSignedIn()
+        && (resource == null || mpEmail() in resource.data.memberEmails);
+      allow create: if mpSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && mpValidMembers(request.resource.data)
+        && mpEmail() in request.resource.data.memberEmails;
+      // Any member can add or remove others, but never themselves, and the
+      // founder never changes.
+      allow update: if mpSignedIn()
+        && mpEmail() in resource.data.memberEmails
+        && mpEmail() in request.resource.data.memberEmails
+        && mpValidMembers(request.resource.data)
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if mpSignedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /books/{bookId} {
+        allow read, write: if rbIsMember(sid);
+      }
+    }
+
     // ── Draft Night: fantasy draft boards ────────────────────────────────
     // One document per league, holding both the league configuration (teams,
     // draft slot, roster shape, scoring) and that draft's live state (`gone`
@@ -612,7 +647,7 @@ service cloud.firestore {
     }
 
     // Default authenticated access for other collections.
-    // CanITwo, Recipe Box, Mise, the Meal Planner, /work and the per-user `users` tree are excluded —
+    // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
     // rules above (in Firestore, any matching `allow` wins), and every
     // signed-in user could read and write everyone else's documents.
@@ -629,6 +664,7 @@ service cloud.firestore {
         && !collection.matches('mise_.*')
         && !collection.matches('draftnight_.*')
         && !collection.matches('mealplan_.*')
+        && !collection.matches('readingbuddy_.*')
         && !collection.matches('gatekeeper_.*')
         && !collection.matches('collector_.*')
         && !collection.matches('workbook_.*')
