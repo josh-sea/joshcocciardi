@@ -74,6 +74,13 @@ const CSS = `
   background:var(--berry-soft);color:#8A2A10;border-radius:14px;padding:10px 14px;font-weight:600;position:relative;z-index:30;}
 .rb.bare .banner{position:fixed;left:16px;right:16px;top:calc(12px + env(safe-area-inset-top));margin:0;}
 .err{margin-top:12px;color:#8A2A10;font-weight:600;}
+.ok{margin-top:12px;color:#2F6B3D;font-weight:600;}
+.btn.wide{width:100%;}
+.rule{display:flex;align-items:center;gap:10px;margin:18px 0 6px;color:var(--soft);font-size:13px;font-weight:700;}
+.rule::before,.rule::after{content:"";flex:1;height:2px;background:var(--line);}
+.authform{text-align:left;}
+.authform .btn{margin-top:4px;}
+.authfoot{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 18px;margin-top:16px;}
 
 .gate{min-height:90vh;display:flex;align-items:center;justify-content:center;padding:16px;}
 .gatecard{max-width:420px;text-align:center;padding:28px 24px;}

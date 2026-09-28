@@ -4,7 +4,8 @@ import Editor from "./Editor";
 import Reader from "./Reader";
 import Recorder from "./Recorder";
 import { Library, ShelfSettings, ShelfSetup } from "./Shelf";
-import { authMessage, redirectSettled, signInWithGoogle, signOutOfReadingBuddy, watchAuth } from "./auth";
+import { redirectSettled, signOutOfReadingBuddy, watchAuth } from "./auth";
+import { SignIn, VerifyEmail } from "./SignIn";
 import { watchBooks, watchShelves } from "./store";
 
 // ---------------------------------------------------------------------------
@@ -39,31 +40,11 @@ const explain = (e) => {
   return e?.message || String(e);
 };
 
-function Gate({ error, onSignIn, busy }) {
-  return (
-    <div className="gate">
-      <div className="card form gatecard">
-        <div className="logo" aria-hidden="true">
-          📖
-        </div>
-        <h1 className="h1">My Reading Buddy</h1>
-        <p className="muted">
-          Snap the pages of a favorite book, read it aloud, and the kids can hear you read it any time, even when
-          you're away.
-        </p>
-        <button className="btn" type="button" disabled={busy} onClick={onSignIn}>
-          {busy ? "Signing in…" : "Continue with Google"}
-        </button>
-        {error && <div className="err">{error}</div>}
-      </div>
-    </div>
-  );
-}
-
 export default function MyReadingBuddy() {
   const [user, setUser] = useState(undefined); // undefined while auth resolves
-  const [authErr, setAuthErr] = useState(null);
-  const [authBusy, setAuthBusy] = useState(false);
+  // Bumped when an email account's link has been clicked. Firebase updates
+  // the user object in place, so something has to tell React to look again.
+  const [, setVerifiedAt] = useState(0);
   const [shelves, setShelves] = useState(undefined);
   const [books, setBooks] = useState(undefined);
   const [view, setView] = useState({ name: "shelf" });
@@ -125,18 +106,6 @@ export default function MyReadingBuddy() {
     if (books && books.length === 0) setGrownUps(true);
   }, [books]);
 
-  const signIn = async () => {
-    setAuthBusy(true);
-    setAuthErr(null);
-    try {
-      await signInWithGoogle();
-    } catch (e) {
-      setAuthErr(authMessage(e));
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
   const open = (next) => {
     setView(next);
     window.scrollTo(0, 0);
@@ -163,22 +132,9 @@ export default function MyReadingBuddy() {
   if (user === undefined) {
     body = <div className="center">checking your session…</div>;
   } else if (!user) {
-    body = <Gate error={authErr} busy={authBusy} onSignIn={signIn} />;
+    body = <SignIn />;
   } else if (!verified) {
-    body = (
-      <div className="gate">
-        <div className="card form gatecard">
-          <h2 className="h2">Use Google to sign in</h2>
-          <p className="muted">
-            {user.email || "This account"} isn't a verified address, and bookshelves are shared by verified email. Sign
-            out and continue with Google instead.
-          </p>
-          <button className="btn" type="button" onClick={signOutOfReadingBuddy}>
-            Sign out
-          </button>
-        </div>
-      </div>
-    );
+    body = <VerifyEmail user={user} onVerified={() => setVerifiedAt(Date.now())} />;
   } else if (shelves === undefined || (shelf && !sid) || (sid && books === undefined)) {
     body = <div className="center">opening the bookshelf…</div>;
   } else if (!shelf) {

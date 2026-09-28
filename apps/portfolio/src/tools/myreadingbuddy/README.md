@@ -22,12 +22,21 @@ flip) and the next one starts.
 button. Pause, the arrows, or a swipe turn pages by hand; if it was reading it
 carries on from the new page. The screen stays awake while it reads.
 
-## Sharing
+## Signing in and sharing
 
-A **bookshelf** owns the books, shared by verified Google email (same model
-as the Meal Planner's households). One parent can record while away and the
-kids listen at home on the other parent's login. Add people in **settings**
-(visible in Grown-ups mode).
+Sign in with **Google**, or with **any email address** (Yahoo, iCloud, work)
+and a password. An email account gets a verification link and can't see any
+bookshelf until it's clicked; the screen re-checks on its own when you come
+back to the tab. Forgot password sends a reset link.
+
+A **bookshelf** owns the books, shared by verified email (same model as the
+Meal Planner's households). One parent can record while away and the kids
+listen at home on the other parent's login. Add people in **settings**
+(visible in Grown-ups mode) by whatever address they sign in with.
+
+Verification is what keeps sharing safe: without it, anyone could create an
+account as someone else's address and see that family's books. The rules
+check `email_verified`, not the sign-in provider.
 
 ## Data
 
@@ -53,7 +62,8 @@ WebM/Opus fall back to that; older iPads may not play those takes.
 
 | File | What |
 | --- | --- |
-| `index.jsx` | Auth, shelf, and which screen is showing |
+| `index.jsx` | Auth state, shelf, and which screen is showing |
+| `SignIn.jsx` | Google / email sign-in, sign-up, reset, and the verify-your-email screen |
 | `Shelf.jsx` | Shelf setup, settings, the book grid, new-book form |
 | `Editor.jsx` | A book's title, pages, and recording status |
 | `Recorder.jsx` | Page-by-page recording |
