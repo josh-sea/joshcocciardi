@@ -17,6 +17,7 @@ import {
   createUserWithEmailAndPassword,
   getRedirectResult,
   onAuthStateChanged,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -75,6 +76,27 @@ export const signUpWithEmail = async (email, password, displayName) => {
 
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email);
 
+/* Email and password accounts start unverified. Tools that share data by
+   email (anything whose rules check email_verified) send this link and wait
+   for it to be clicked. The link lands back on `returnTo`. */
+export const sendVerification = (returnTo) => {
+  const user = auth.currentUser;
+  if (!user) return Promise.resolve();
+  return sendEmailVerification(user, returnTo ? { url: returnTo } : undefined);
+};
+
+/* Clicking the link happens in another tab (or on another device), so this
+   tab's user still reads as unverified until it asks again. reload() picks up
+   the new flag; the forced token refresh gets it into the ID token, which is
+   what security rules read. Returns whether the account is verified now. */
+export const refreshVerified = async () => {
+  const user = auth.currentUser;
+  if (!user) return false;
+  await user.reload();
+  if (user.emailVerified) await user.getIdToken(true);
+  return !!auth.currentUser?.emailVerified;
+};
+
 export const signOutEverywhere = () => signOut(auth);
 
 const MESSAGES = {
@@ -91,6 +113,8 @@ const MESSAGES = {
   "auth/popup-closed-by-user": "The sign-in window closed before it finished. Try again.",
   "auth/cancelled-popup-request": "Another sign-in window was already open. Try again.",
   "auth/popup-blocked": "Your browser blocked the sign-in window. Allow popups for this site.",
+  "auth/user-disabled": "This account has been turned off.",
+  "auth/requires-recent-login": "Sign in again to do that.",
 };
 
 export const authMessage = (e) => MESSAGES[e?.code] || e?.message || "Something went wrong.";

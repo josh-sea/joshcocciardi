@@ -56,7 +56,7 @@ export function ShelfSetup({ user, onError }) {
           />
         </label>
         <p className="muted small">
-          Everyone on the shelf signs in with Google and can add books, record, and listen.
+          Everyone on the shelf signs in with that email (Google or any other address) and can add books, record, and listen.
         </p>
         <button className="btn" type="submit" disabled={busy}>
           {busy ? "Starting…" : "Start the bookshelf"}
@@ -110,7 +110,7 @@ export function ShelfSettings({ shelf, user, onError, onClose }) {
       <section className="card">
         <h3 className="flabel">Who can see this bookshelf</h3>
         <p className="muted small" style={{ marginTop: 0 }}>
-          Everyone here signs in with Google using the email shown, and can add books, record, and listen.
+          Each person signs in with the email shown, either through Google or with a password for any address (Yahoo, iCloud, and so on), and can add books, record, and listen.
         </p>
         <ul className="members">
           {shelf.memberEmails.map((addr) => (

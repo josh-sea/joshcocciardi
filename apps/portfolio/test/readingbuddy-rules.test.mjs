@@ -71,6 +71,10 @@ await check("josh reads it", assertSucceeds(getDoc(book(josh))));
 await check("josh lists the shelf's books", assertSucceeds(getDocs(collection(josh, COL, S, "books"))));
 await check("josh records a page", assertSucceeds(updateDoc(book(josh), { pages: [{ ...page, audio: { url: "a", path: "p", type: "audio/mp4", secs: 12 } }] })));
 await check("gram (added by email) reads it", assertSucceeds(getDoc(book(as("gram", "gram@example.com")))));
+// An email-and-password account (not Google) that has clicked its
+// verification link. Sign-in provider doesn't matter, only the proven address.
+await check("a verified Yahoo account added by email reads it", assertSucceeds(updateDoc(doc(josh, COL, S), { memberEmails: [...shelf.memberEmails, "gram@example.com", "ry@yahoo.com"] }).then(() => getDoc(book(as("ry", "Ry@Yahoo.com"))))));
+await check("the same Yahoo address before verifying gets nothing", assertFails(getDoc(book(as("ry2", "ry@yahoo.com", false)))));
 await check("stranger CANNOT read it", assertFails(getDoc(book(stranger))));
 await check("stranger CANNOT list the books", assertFails(getDocs(collection(stranger, COL, S, "books"))));
 await check("stranger CANNOT add a book", assertFails(setDoc(book(stranger, "B2"), { title: "x", pages: [] })));
@@ -82,7 +86,7 @@ console.log("\nunknown subcollections:");
 await check("josh CANNOT write an unlisted subcollection", assertFails(setDoc(doc(josh, COL, S, "secrets", "x"), { a: 1 })));
 
 console.log("\nremoval:");
-await check("josh removes gram", assertSucceeds(updateDoc(doc(josh, COL, S), { memberEmails: shelf.memberEmails })));
+await check("josh removes gram (and the Yahoo account)", assertSucceeds(updateDoc(doc(josh, COL, S), { memberEmails: shelf.memberEmails })));
 await check("gram can no longer read the books", assertFails(getDocs(collection(as("gram", "gram@example.com"), COL, S, "books"))));
 await check("ash deletes the book", assertSucceeds(deleteDoc(book(ash))));
 await check("josh deletes the shelf", assertSucceeds(deleteDoc(doc(josh, COL, S))));
