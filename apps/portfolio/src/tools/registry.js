@@ -13,6 +13,10 @@ import { lazy } from "react";
 //      main portfolio bundle.
 //   3. Build + deploy (`./deploy.sh portfolio` from the repo root). Firebase's
 //      SPA rewrite already routes /tools/<slug> here — no config changes needed.
+//
+// `hidden: true` keeps a tool routable at /tools/<slug> but out of every
+// index (/tools and /projects). Use it for private tools; the tool itself is
+// responsible for its own sign-in gate, and its data for its own rules.
 const tools = [
   {
     slug: "income-inequality",
@@ -86,6 +90,19 @@ const tools = [
     tech: ["React", "MediaRecorder", "Firebase Storage", "Firestore"],
     component: lazy(() => import("./myreadingbuddy")),
   },
+  {
+    slug: "seasonal-box",
+    title: "Seasonal Box HQ",
+    description:
+      "Private admin console for the seasonal home box: agents that research, source, curate, and run operations, with every outside action waiting on an approval.",
+    added: "2026-10-02",
+    tech: ["React", "Cloud Functions", "Claude API", "Firestore"],
+    hidden: true,
+    component: lazy(() => import("./seasonal-box")),
+  },
 ];
+
+// What the public indexes list.
+export const listedTools = tools.filter((t) => !t.hidden);
 
 export default tools;

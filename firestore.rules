@@ -646,8 +646,85 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ── Seasonal Box HQ (/tools/seasonal-box) ────────────────────────────
+    // Private to one verified Google account. Keep this list in sync with
+    // functions/seasonalbox/config.js and src/work/access.js.
+    //
+    // The browser can edit what Josh owns (settings, agents, seasons, makers,
+    // notes) and can decide proposals, but it can never write what the agent
+    // runtime must be honest about: spend (ledger, counters), step logs, an
+    // executed result, or a run's cost and progress. Those come only from the
+    // Cloud Functions via the Admin SDK, which bypasses these rules.
+    function sboxAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['joshua.cocciardi@gmail.com'];
+    }
+
+    match /sbox_settings/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_agents/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_seasons/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_briefs/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_themes/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_makers/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_products/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_kits/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_tiers/{id} { allow read, write: if sboxAdmin(); }
+    match /sbox_notes/{id} { allow read, write: if sboxAdmin(); }
+
+    // Spend is recorded only by the functions.
+    match /sbox_ledger/{id} { allow read: if sboxAdmin(); allow write: if false; }
+    match /sbox_counters/{id} { allow read: if sboxAdmin(); allow write: if false; }
+
+    // The Anthropic key: writable by Josh, readable by no client, ever.
+    match /sbox_secrets/{id} {
+      allow read: if false;
+      allow write: if sboxAdmin();
+    }
+
+    // Runs: the browser may queue one, cancel one, or ask a stopped one to
+    // resume. Everything else on a run (tick, claim, cost, status changes
+    // beyond those) belongs to the runner.
+    match /sbox_runs/{runId} {
+      allow read: if sboxAdmin();
+      allow create: if sboxAdmin()
+        && request.resource.data.status == 'queued'
+        && request.resource.data.tick == 0
+        && request.resource.data.cost == 0
+        && request.resource.data.keys().hasOnly(['agentId', 'seasonId', 'trigger', 'instructions', 'feedback', 'status', 'tick', 'cost', 'steps', 'createdAt']);
+      allow update: if sboxAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resumeRequestedAt', 'endedAt', 'error'])
+        && (
+          (request.resource.data.status == 'cancelled'
+            && resource.data.status in ['queued', 'running', 'budget_paused', 'failed', 'awaiting_approval'])
+          // Resume: a failed run, or a running one whose step stopped
+          // checking in. The runner's claim still guards against a double run.
+          || (request.resource.data.status == 'queued' && resource.data.status in ['failed', 'running', 'queued'])
+        );
+      allow delete: if false;
+
+      match /steps/{stepId} {
+        allow read: if sboxAdmin();
+        allow write: if false;
+      }
+    }
+
+    // Proposals: Josh decides (status, decision, manual completion). The
+    // execution result is written only by the executor.
+    match /sbox_proposals/{id} {
+      allow read: if sboxAdmin();
+      allow create: if false;
+      allow update: if sboxAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decision', 'manual', 'decidedAt'])
+        && (request.resource.data.status == resource.data.status
+          || (resource.data.status == 'pending' && request.resource.data.status in ['approved', 'rejected']))
+        && (!('manual' in request.resource.data.diff(resource.data).affectedKeys())
+          || resource.data.execution.status == 'manual');
+      allow delete: if false;
+    }
+
     // Default authenticated access for other collections.
-    // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, /work and the per-user `users` tree are excluded —
+    // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, Seasonal Box HQ, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
     // rules above (in Firestore, any matching `allow` wins), and every
     // signed-in user could read and write everyone else's documents.
@@ -668,6 +745,7 @@ service cloud.firestore {
         && !collection.matches('gatekeeper_.*')
         && !collection.matches('collector_.*')
         && !collection.matches('workbook_.*')
+        && !collection.matches('sbox_.*')
         && collection != 'work_private';
     }
   }

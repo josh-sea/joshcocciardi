@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Container, Header, Card } from "semantic-ui-react";
-import tools from "./registry";
+import { listedTools as tools } from "./registry";
 
 // Directory of all registered React tools.
 const ToolsIndex = () => (

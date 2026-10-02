@@ -89,6 +89,17 @@ service firebase.storage {
       allow delete: if isReadingBuddyUser();
     }
 
+    // ── Seasonal Box HQ ─────────────────────────────────────────────────
+    // Mood-board images and raw agent step logs, written only by the Cloud
+    // Functions. Readable by the one admin account; never writable by a
+    // client. Same allowlist as the sbox_* block in firestore.rules.
+    match /sbox/{allPaths=**} {
+      allow read: if request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['joshua.cocciardi@gmail.com'];
+      allow write: if false;
+    }
+
     // ── PSX Station save data ───────────────────────────────────────────
     // Owner-only, under psx/{uid}/{discId}/. Deliberately narrow: only the
     // save states, their screenshots and the memory card sync here. Disc

@@ -74,6 +74,13 @@ jobs:
         working-directory: apps/portfolio
         run: node test/readingbuddy.test.mjs
 
+      # Seasonal Box HQ's date math, inbox order, seed agents, and the check
+      # that the client's stage machine and action registry match the copy the
+      # Cloud Functions enforce. Pure functions, no install needed.
+      - name: Test Seasonal Box helpers
+        working-directory: apps/portfolio
+        run: node test/seasonal-box.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
           for app in playball canitwo recipebox psx solra; do

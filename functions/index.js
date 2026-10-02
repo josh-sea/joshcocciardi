@@ -29,6 +29,15 @@ exports.synthesizeWord = workbook.synthesizeWord;
 const espn = require('./espn');
 exports.espnFantasy = espn.espnFantasy;
 
+// Seasonal Box HQ: agent runtime, approval executors, and the season stage
+// machine for the private /tools/seasonal-box admin app.
+const sbox = require('./seasonalbox');
+exports.sboxRunStep = sbox.sboxRunStep;
+exports.sboxProposal = sbox.sboxProposal;
+exports.sboxSeason = sbox.sboxSeason;
+exports.sboxHeartbeat = sbox.sboxHeartbeat;
+exports.sboxCheckKey = sbox.sboxCheckKey;
+
 // Recompute a place's aggregates from all of its reviews whenever any
 // review is created or updated. Full recount (not incremental): reviews per
 // place are small, and a recount self-heals any historical drift.
