@@ -15,6 +15,7 @@
 #   ./deploy.sh solra        - Run the Solra tests, copy (no build), deploy hosting
 #   ./deploy.sh gatekeeper   - Deploy Gatekeeper parent app + functions + firestore (igatekeeper.web.app)
 #   ./deploy.sh myreadingbuddy - Build portfolio, deploy hosting + firestore and storage rules
+#   ./deploy.sh seasonal-box - Build portfolio, deploy rules + the sbox* agent functions + hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
 #
@@ -175,6 +176,9 @@ build_portfolio() {
     log "Testing My Reading Buddy helpers..."
     node test/readingbuddy.test.mjs || fail "My Reading Buddy tests failed"
 
+    log "Testing Seasonal Box helpers..."
+    node test/seasonal-box.test.mjs || fail "Seasonal Box tests failed"
+
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
     npm run build || fail "Portfolio build failed"
@@ -227,6 +231,15 @@ deploy_workbook_function() {
     # Needs the Cloud Text-to-Speech API enabled on the josh-cocciardi project.
     firebase deploy --only functions:synthesizeWord || warn "synthesizeWord deploy failed (is the Text-to-Speech API enabled?)"
     success "synthesizeWord deployed"
+}
+
+deploy_seasonal_box_functions() {
+    log "Deploying Seasonal Box agent runtime (sbox* functions)..."
+    cd "$ROOT_DIR"
+    firebase deploy --only \
+      functions:sboxRunStep,functions:sboxProposal,functions:sboxSeason,functions:sboxHeartbeat,functions:sboxCheckKey \
+      || fail "Seasonal Box functions deploy failed"
+    success "Seasonal Box functions deployed"
 }
 
 deploy_firestore() {
@@ -361,6 +374,17 @@ case "${1:-all}" in
         deploy_storage
         deploy_hosting
         ;;
+    seasonal-box)
+        echo "========================================"
+        echo "  Deploying Seasonal Box HQ"
+        echo "========================================"
+        build_portfolio
+        deploy_firestore
+        deploy_storage
+        deploy_seasonal_box_functions
+        deploy_hosting
+        echo "  Seasonal Box:   https://www.joshcocciardi.com/tools/seasonal-box (private)"
+        ;;
     firestore)
         echo "========================================"
         echo "  Deploying Firestore only"
@@ -375,7 +399,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|gatekeeper|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|seasonal-box|gatekeeper|firestore|storage]"
         exit 1
         ;;
 esac

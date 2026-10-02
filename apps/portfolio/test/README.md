@@ -104,3 +104,34 @@ node test/swing-coach.test.mjs
 
 Exits non-zero if any case fails. `deploy.sh` and the CI workflow both run it
 before the portfolio build.
+
+## `seasonal-box.test.mjs`
+
+Pure-helper tests for Seasonal Box HQ: milestone dates counted back from a ship
+date (across month, year, and DST boundaries), milestone risk, approval inbox
+order, the ten seed agents' internal consistency (known tools, scopes, and
+actions; no money action set to green), and that the client's stage machine
+and action registry match `functions/seasonalbox/config.js`, which is what
+actually enforces them. No dependencies and no emulator:
+
+```sh
+cd apps/portfolio
+node test/seasonal-box.test.mjs
+```
+
+`deploy.sh` and the CI workflow both run it before the portfolio build.
+
+## `seasonal-box-rules.test.mjs`
+
+Firestore security-rules tests for Seasonal Box HQ: only the allowlisted,
+verified account gets into any `sbox_*` collection; the API key is
+write-only; and even that account cannot forge spend (ledger, counters), step
+logs, a run's cost or progress, or an execution result. Same setup as the
+suites above:
+
+```sh
+firebase emulators:start --only firestore --project josh-cocciardi
+cd apps/portfolio
+npm i --no-save @firebase/rules-unit-testing
+node test/seasonal-box-rules.test.mjs
+```

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Container, Card, Icon, Modal, Image } from "semantic-ui-react";
 import { useNavigate } from "react-router-dom";
-import toolRegistry from "../tools/registry";
+import { listedTools as toolRegistry } from "../tools/registry";
 import "../App.css";
 
 /* ------------------------------------------------------------------ */
