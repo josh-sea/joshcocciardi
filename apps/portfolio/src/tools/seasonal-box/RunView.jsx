@@ -26,8 +26,17 @@ const Step = ({ s }) => (
       </div>
     )}
     {(s.serverCalls || []).map((c, i) => (
-      <div className="sb-call" key={`s${i}`}>
+      <div className={`sb-call ${c.error ? "err" : ""}`} key={`s${i}`}>
         <b>{c.name}</b> <span className="sb-faint">{c.input}</span>
+        {c.error ? (
+          <div className="sb-small" style={{ color: "var(--red)", marginTop: 2 }}>
+            Error from Anthropic: <code>{c.error}</code>
+          </div>
+        ) : c.results != null ? (
+          <div className="sb-small sb-faint" style={{ marginTop: 2 }}>
+            {c.results} result{c.results === 1 ? "" : "s"}
+          </div>
+        ) : null}
       </div>
     ))}
     {(s.toolCalls || []).map((c) => {

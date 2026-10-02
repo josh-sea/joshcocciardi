@@ -80,7 +80,7 @@ const callClaude = async (apiKey, req) => {
 const describeError = (e) => {
   if (e instanceof Anthropic.AuthenticationError) return 'The Anthropic API key was rejected. Update it in Settings.';
   if (e instanceof Anthropic.PermissionDeniedError) return 'The API key is not allowed to use this model.';
-  if (e instanceof Anthropic.RateLimitError) return 'Rate limited by Anthropic. The step will retry.';
+  if (e instanceof Anthropic.RateLimitError) return 'Rate limited by Anthropic, still after waiting a minute. Press Resume in a few minutes to retry this step.';
   if (e instanceof Anthropic.BadRequestError) return `Anthropic rejected the request: ${String(e.message).slice(0, 300)}`;
   if (e instanceof Anthropic.APIError) return `Anthropic API error ${e.status || ''}: ${String(e.message).slice(0, 300)}`;
   return String(e?.message || e).slice(0, 300);
