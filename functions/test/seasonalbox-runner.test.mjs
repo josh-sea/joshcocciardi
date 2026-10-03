@@ -27,6 +27,7 @@ const require = createRequire(import.meta.url);
 const requests = [];
 let script = [];
 let failNext = 0;
+let rateLimitNext = 0;
 
 const sse = (res, type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
 
@@ -36,6 +37,12 @@ const server = http.createServer((req, res) => {
   req.on("end", () => {
     const parsed = body ? JSON.parse(body) : {};
     requests.push({ url: req.url, headers: req.headers, body: parsed });
+    if (rateLimitNext > 0) {
+      rateLimitNext -= 1;
+      res.writeHead(429, { "content-type": "application/json", "retry-after": "0" });
+      res.end(JSON.stringify({ type: "error", error: { type: "rate_limit_error", message: "scripted 429" } }));
+      return;
+    }
     if (failNext > 0) {
       failNext -= 1;
       res.writeHead(400, { "content-type": "application/json" });
@@ -57,6 +64,9 @@ const server = http.createServer((req, res) => {
       if (block.type === "text") {
         sse(res, "content_block_start", { index, content_block: { type: "text", text: "" } });
         sse(res, "content_block_delta", { index, delta: { type: "text_delta", text: block.text } });
+      } else if (block.type === "server_tool_use" || block.type.endsWith("_tool_result")) {
+        // Hosted tool blocks arrive whole in content_block_start.
+        sse(res, "content_block_start", { index, content_block: block });
       } else if (block.type === "tool_use") {
         sse(res, "content_block_start", { index, content_block: { type: "tool_use", id: block.id, name: block.name, input: {} } });
         sse(res, "content_block_delta", { index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input) } });
@@ -74,6 +84,7 @@ process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${server.address().port}`;
 process.env.FIRESTORE_EMULATOR_HOST ||= "127.0.0.1:8080";
 process.env.FIREBASE_STORAGE_EMULATOR_HOST ||= "127.0.0.1:9199";
 process.env.GCLOUD_PROJECT = "josh-cocciardi";
+process.env.SBOX_BACKOFF_MS = "300";
 
 const { initializeApp } = require("firebase-admin/app");
 initializeApp({ projectId: "josh-cocciardi", storageBucket: "josh-cocciardi.firebasestorage.app" });
@@ -368,6 +379,52 @@ ok("the error is readable", /Anthropic rejected the request/.test(failed.error |
 await doc("sbox_runs", r7).update({ status: "queued", error: null });
 const fixed = await drive(r7);
 ok("resume finishes the run from the same step", fixed.status === "awaiting_approval" && requests.length === 2, fixed.status);
+
+console.log("web search errors and rate limits:");
+await seed();
+script = [
+  {
+    content: [
+      { type: "server_tool_use", id: "srv1", name: "web_search", input: { query: "beeswax candles Hudson Valley" } },
+      { type: "web_search_tool_result", tool_use_id: "srv1", content: { type: "web_search_tool_result_error", error_code: "too_many_requests" } },
+      tool("w1", "save_note", { text: "search limited" }),
+    ],
+  },
+  {
+    content: [
+      { type: "server_tool_use", id: "srv2", name: "web_search", input: { query: "beeswax candles Hudson Valley" } },
+      { type: "web_search_tool_result", tool_use_id: "srv2", content: [{ type: "web_search_result", url: "https://example.com", title: "x", encrypted_content: "e" }] },
+      tool("w2", "submit_brief", { title: "t", summary: "s", content: TREND }),
+    ],
+  },
+];
+requests.length = 0;
+const r9 = await queue({ agentId: "trend-researcher", seasonId: "S1" });
+await runStep(r9);
+const afterErr = await get("sbox_runs", r9);
+const step0 = (await db.collection("sbox_runs").doc(r9).collection("steps").doc("0000").get()).data();
+ok("a search error is recorded with its code", step0.serverCalls?.[0]?.error === "too_many_requests", step0.serverCalls);
+ok("…and remembered on the run", afterErr.lastSearchError === "too_many_requests");
+const t0 = Date.now();
+await runStep(r9);
+ok("the next step waits out the limit first", Date.now() - t0 >= 300, Date.now() - t0);
+const step1 = (await db.collection("sbox_runs").doc(r9).collection("steps").doc("0001").get()).data();
+ok("a successful search records its result count", step1.serverCalls?.[0]?.results === 1, step1.serverCalls);
+ok("the replayed search error reaches the model intact", JSON.stringify(requests[1].body.messages).includes("too_many_requests"));
+ok("agents are told a search error is temporary", requests[0].body.system[0].text.includes("too_many_requests"));
+
+script = [{ content: [tool("z1", "submit_brief", { title: "t", summary: "s", content: TREND })] }];
+rateLimitNext = 4; // the SDK's own 3 retries, plus one more
+requests.length = 0;
+const r10 = await queue({ agentId: "trend-researcher", seasonId: "S1" });
+const survived = await drive(r10);
+ok("a 429 that outlasts the SDK's retries is waited out and retried", survived.status === "awaiting_approval", survived.status);
+rateLimitNext = 20;
+const r11 = await queue({ agentId: "trend-researcher", seasonId: "S1" });
+script = [{ content: [tool("z2", "submit_brief", { title: "t", summary: "s", content: TREND })] }];
+const stuck = await drive(r11);
+rateLimitNext = 0;
+ok("a lasting 429 fails resumably with an honest message", stuck.status === "failed" && stuck.resumable && /Press Resume/.test(stuck.error), stuck.error);
 
 console.log("heartbeat and stage machine:");
 await seed();
