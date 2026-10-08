@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import AccountBar from "./AccountBar";
 import ThemePicker from "./ThemePicker";
 import { themeClass } from "./themes";
+import { getDetails } from "./store";
 import { EXAMPLE, downloadJson, parseImport, serializePlans } from "./transfer";
 import { COMPLETE_COLOR, OWNERS, OWNER_ORDER, TEMPLATES, countAll, leavesOf } from "./tree";
 
@@ -148,8 +149,9 @@ function ImportPlan({ onImport, onCancel }) {
         Import from JSON
       </div>
       <div className="sub" style={{ marginTop: 6, lineHeight: 1.6 }}>
-        one plan, a bare tree, or {"{ \"plans\": [ … ] }"} · steps are {"{ name, owner, done, children }"} ·
-        owner is us, them, or third · up to 9 levels deep
+        one plan, a bare tree, or {"{ \"plans\": [ … ] }"} · steps are{" "}
+        {"{ name, owner, done, notes, links, comments, children }"} · owner is us, them, or third · up to 9
+        levels deep
       </div>
 
       <label className="field">
@@ -227,9 +229,18 @@ export default function Picker({
     setNote(n > 1 ? `Imported ${n} plans.` : null);
   };
 
-  const exportAll = () => {
-    const stamp = new Date().toISOString().slice(0, 10);
-    downloadJson(`mise-plans-${stamp}.json`, serializePlans(rows));
+  const [exporting, setExporting] = useState(false);
+  const exportAll = async () => {
+    setExporting(true);
+    try {
+      const withDetails = await Promise.all(
+        rows.map(async (r) => ({ ...r, details: await getDetails(r.id).catch(() => ({})) }))
+      );
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJson(`mise-plans-${stamp}.json`, serializePlans(withDetails));
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -254,8 +265,13 @@ export default function Picker({
           {!panel && (
             <div className="row" style={{ marginLeft: "auto" }}>
               {rows.length > 0 && (
-                <button className="act" onClick={exportAll} title="Download every plan as one JSON file">
-                  export all ↓
+                <button
+                  className="act"
+                  onClick={exportAll}
+                  disabled={exporting}
+                  title="Download every plan as one JSON file"
+                >
+                  {exporting ? "exporting…" : "export all ↓"}
                 </button>
               )}
               <button className="act" onClick={() => setPanel("import")}>

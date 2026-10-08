@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { detailSummary } from "./details";
 import { COMPLETE_COLOR, OWNERS, OWNER_ORDER, countAll, leavesOf } from "./tree";
 
 /* Left edge of every block: the open leaves beneath it, split by owner. A
@@ -49,7 +50,7 @@ function Track({ node }) {
   );
 }
 
-export function Cell({ item, depthWindow, selected, editing, onSelect, onCommit }) {
+export function Cell({ item, depthWindow, selected, editing, onSelect, onCommit, summary }) {
   const { node: x, depth, rowStart, rowSpan, stretch, truncated } = item;
   const inputRef = useRef(null);
   useEffect(() => {
@@ -94,6 +95,7 @@ export function Cell({ item, depthWindow, selected, editing, onSelect, onCommit 
         {isLeaf
           ? `${OWNERS[x.owner].label}${x.done ? " · done" : ""}`
           : `${done}/${leaves.length} end steps`}
+        {summary && <span className="has"> · {summary}</span>}
       </div>
       {truncated && <div className="badge">+{countAll(x)}</div>}
       <Track node={x} />
@@ -102,7 +104,7 @@ export function Cell({ item, depthWindow, selected, editing, onSelect, onCommit 
 }
 
 /* Flat outline of the full subtree under the current outcome, no depth cap. */
-export function PlanView({ root }) {
+export function PlanView({ root, details = {} }) {
   const rows = [];
   const walk = (x, prefix, depth) => {
     rows.push({ x, wbs: prefix, depth });
@@ -126,16 +128,20 @@ export function PlanView({ root }) {
         const ls = leavesOf(x);
         const d = ls.filter((l) => l.done).length;
         const isLeaf = x.children.length === 0;
+        const notes = details[x.id]?.notes?.trim();
+        const summary = detailSummary(details[x.id]);
         return (
-          <div className="prow" key={x.id} style={{ paddingLeft: (depth - 1) * 16 }}>
+          <div className="prow" key={x.id} style={{ paddingLeft: (depth - 1) * 16, flexWrap: "wrap" }}>
             <span className="wbs">{wbs}</span>
             <span className="swatch" style={{ background: OWNERS[x.owner].color, opacity: isLeaf ? 1 : 0 }} />
             <span className="pname" style={{ opacity: isLeaf && x.done ? 0.45 : 1 }}>
               {x.name}
             </span>
             <span className="pmeta">
+              {summary && <span className="has">{summary} · </span>}
               {isLeaf ? (x.done ? "done" : OWNERS[x.owner].label) : `${d}/${ls.length}`}
             </span>
+            {notes && <div className="pnote">{notes}</div>}
           </div>
         );
       })}

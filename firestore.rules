@@ -293,6 +293,17 @@ service cloud.firestore {
         // the parent plan is deleted (Firestore does not cascade).
         allow delete: if ownsPlan();
       }
+
+      // Per-step notes, links, comments, and attachment records, one doc
+      // per step keyed by node id. Owner-only, same as the plan itself.
+      match /details/{nodeId} {
+        function ownsPlanForDetails() {
+          return request.auth != null
+            && exists(/databases/$(database)/documents/mise_implementations/$(implId))
+            && get(/databases/$(database)/documents/mise_implementations/$(implId)).data.ownerUid == request.auth.uid;
+        }
+        allow read, write: if ownsPlanForDetails();
+      }
     }
 
     // ── Family Meal Planner (apps/portfolio/src/tools/meal-planner) ─────

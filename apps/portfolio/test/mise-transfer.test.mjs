@@ -8,6 +8,7 @@
 
 import { EXAMPLE, parseImport, planFilename, serializePlan, serializePlans } from "../src/tools/mise/transfer.js";
 import { THEMES, THEME_CSS, isTheme } from "../src/tools/mise/themes.js";
+import { cleanUrl, detailSummary, isEmptyDetails, linkLabel, readDetails, safeFileName } from "../src/tools/mise/details.js";
 import { MAX_DEPTH, casapTemplate, heightOf, leavesOf } from "../src/tools/mise/tree.js";
 
 let pass = 0;
@@ -75,6 +76,43 @@ eq("an empty name still makes a file", planFilename("  "), "plan.mise.json");
 eq("every theme has a css block", THEMES.every((t) => THEME_CSS.includes(`.t-${t.key}{`)), true);
 eq("no theme is missing a token", /undefined/.test(THEME_CSS), false);
 eq("isTheme", [isTheme("pine"), isTheme("terminal"), isTheme("nope"), isTheme(undefined)], [true, true, false, false]);
+
+console.log("\nstep details:");
+eq("bare domains get https", cleanUrl("dmv.ny.gov/change-address"), "https://dmv.ny.gov/change-address");
+eq("javascript: links are refused", cleanUrl("javascript:alert(1)"), "");
+eq("data: links are refused", cleanUrl("data:text/html,hi"), "");
+eq("mailto and tel are kept", [cleanUrl("mailto:a@b.com"), cleanUrl("tel:9149953070")], ["mailto:a@b.com", "tel:9149953070"]);
+eq("words aren't links", [cleanUrl("call the clerk"), cleanUrl("clerk")], ["", ""]);
+eq("labels fall back to host and path", linkLabel({ url: "https://www.irs.gov/forms/8822" }), "irs.gov/forms/8822");
+eq("summary", detailSummary({ notes: "x", links: [{}, {}], attachments: [{}], comments: [] }), "note · 2 links · 1 file");
+eq("whitespace notes are empty", isEmptyDetails({ notes: "  ", links: [], comments: [], attachments: [] }), true);
+eq("readDetails drops unsafe links and empty comments", (() => {
+  const d = readDetails({ links: [{ url: "javascript:x" }, { url: "ok.com" }], comments: [{ text: " " }, { text: "hi", at: 5 }] });
+  return [d.links.map((l) => l.url), d.comments.map((c) => c.text)];
+})(), [["https://ok.com/"], ["hi"]]);
+eq("attachments without a stored path are dropped", readDetails({ attachments: [{ name: "x", url: "u" }] }).attachments.length, 0);
+eq("file names are path-safe", safeFileName("../scan #1?.pdf"), "..-scan -1-.pdf");
+
+console.log("\ndetails in json:");
+const tree = { id: "r", name: "Root", owner: "us", done: false, children: [{ id: "a", name: "A", owner: "them", done: false, children: [] }] };
+const details = {
+  r: { notes: "", links: [], comments: [], attachments: [] },
+  a: {
+    notes: "Conf #123",
+    links: [{ id: "l", url: "https://dmv.ny.gov/", label: "DMV" }],
+    comments: [{ id: "c", text: "Called them", by: "u", name: "Josh", at: Date.parse("2026-10-08T12:00:00Z") }],
+    attachments: [{ id: "f", name: "scan.pdf", path: "mise/u/i/a/f-scan.pdf", url: "https://secret-token", size: 1, type: "application/pdf", at: 1 }],
+  },
+};
+const json = serializePlan({ name: "P", layout: {}, tree, details });
+eq("uploaded files never reach the export", json.includes("secret-token"), false);
+const [p2] = parseImport(json);
+const d2 = p2.details[p2.tree.children[0].id];
+eq("notes, links, and comments round-trip", [d2.notes, d2.links[0].url, d2.links[0].label, d2.comments[0].text, d2.comments[0].at], ["Conf #123", "https://dmv.ny.gov/", "DMV", "Called them", Date.parse("2026-10-08T12:00:00Z")]);
+eq("steps without details carry none", Object.keys(p2.details).length, 1);
+const [loose] = parseImport(JSON.stringify({ name: "L", children: [{ name: "s", note: "n", links: ["irs.gov", "javascript:x"], comments: ["first"] }] }));
+const ld = Object.values(loose.details)[0];
+eq("plain-string links and comments import; unsafe links don't", [ld.notes, ld.links.map((l) => l.url), ld.comments.map((c) => c.text)], ["n", ["https://irs.gov/"], ["first"]]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

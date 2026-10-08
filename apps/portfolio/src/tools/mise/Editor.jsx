@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AccountBar from "./AccountBar";
 import { Cell, PlanView } from "./Chart";
+import { detailSummary } from "./details";
+import Drawer from "./Drawer";
 import ThemePicker from "./ThemePicker";
-import { logEvent, saveTree } from "./store";
+import { clearDetails, logEvent, saveTree, watchDetails } from "./store";
 import { downloadJson, planFilename, serializePlan } from "./transfer";
 import {
   COMPLETE_COLOR,
@@ -32,6 +34,9 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename, onThem
   const [editingId, setEditingId] = useState(null);
   const [saveState, setSaveState] = useState("saved"); // saved | saving | error
   const [notice, setNotice] = useState(null);
+  const [details, setDetails] = useState({}); // { nodeId: details }
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const detailsRef = useRef(details);
 
   // Refs shadow the state so the debounced write always sees the newest tree
   // rather than whatever was current when the timer was set.
@@ -121,6 +126,32 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename, onThem
     [commitState]
   );
 
+  // Notes, links, files, and comments for every step in this plan.
+  useEffect(
+    () =>
+      watchDetails(
+        implId,
+        (next) => {
+          detailsRef.current = next;
+          setDetails(next);
+        },
+        (e) => console.error("[mise] details failed:", e)
+      ),
+    [implId]
+  );
+
+  // Escape folds the drawer first, then lets go of the selection. Ignored
+  // while typing so it doesn't eat an input's own Escape.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape" || /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (drawerOpen) setDrawerOpen(false);
+      else setSelId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
+
   // The root element carries the theme class, so tell it as soon as it changes
   // here rather than waiting for the debounced save to echo back.
   useEffect(() => {
@@ -145,7 +176,13 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename, onThem
   const exportPlan = () =>
     downloadJson(
       planFilename(impl.name),
-      serializePlan({ name: impl.name, client: impl.client, layout: layoutRef.current, tree: treeRef.current })
+      serializePlan({
+        name: impl.name,
+        client: impl.client,
+        layout: layoutRef.current,
+        tree: treeRef.current,
+        details: detailsRef.current,
+      })
     );
 
   const zoomTo = (id) => {
@@ -203,11 +240,28 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename, onThem
     const trail = findPath(treeRef.current, id);
     if (!trail || trail.length < 2) return;
     const doomed = trail[trail.length - 1];
+    const doomedIds = [];
+    const collect = (x) => {
+      doomedIds.push(x.id);
+      x.children.forEach(collect);
+    };
+    collect(doomed);
+    const withDetails = doomedIds.filter((n) => detailSummary(detailsRef.current[n])).length;
+    if (
+      withDetails &&
+      !window.confirm(
+        `Delete "${doomed.name}"? Notes, links, files, and comments on ${withDetails} step${
+          withDetails === 1 ? "" : "s"
+        } go with it.`
+      )
+    )
+      return;
     const next = removeNode(treeRef.current, id);
     // Only move the outcome if it was inside what just got deleted; deleting a
     // node further down the chart shouldn't yank the view around.
     const focusLost = findPath(doomed, layoutRef.current.focusId);
     commitState(next, focusLost ? { focusId: trail[trail.length - 2].id } : null);
+    clearDetails(implId, doomedIds, detailsRef.current);
     // Close the ledger entry for anything that was opened but never finished,
     // otherwise a deleted step reads as forever-open in the cycle-time math.
     leavesOf(doomed)
@@ -343,6 +397,7 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename, onThem
                   editing={editingId === item.node.id}
                   onSelect={(id) => setSelId(id === selId ? null : id)}
                   onCommit={commitName}
+                  summary={detailSummary(details[item.node.id])}
                 />
               ))}
             </div>
@@ -368,63 +423,63 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename, onThem
           </div>
         </>
       ) : (
-        <PlanView root={focus} />
+        <PlanView root={focus} details={details} />
       )}
 
       {selInView && (
-        <div className="dock">
-          <div className="dockname">
-            <span className="pill" style={{ background: OWNERS[selInView.owner].color }}>
-              {OWNERS[selInView.owner].label}
-            </span>
-            <span>{selInView.name}</span>
-          </div>
-          <div className="acts">
-            {selHasKids && !selIsFocus && (
-              <button className="act solid" onClick={() => zoomTo(selInView.id)}>
-                open ▸
-              </button>
-            )}
-            {selIsFocus && parent && (
-              <button className="act solid" onClick={() => zoomTo(parent.id)}>
-                ◂ up a level
-              </button>
-            )}
-            {selIsLeaf && (
-              <button className="act solid" onClick={() => toggleDone(selInView.id)}>
-                {selInView.done ? "reopen" : "mark done"}
-              </button>
-            )}
-            <button className="act" onClick={() => setEditingId(selInView.id)}>
-              rename
+        <Drawer
+          implId={implId}
+          ownerUid={impl.ownerUid || user.uid}
+          user={user}
+          node={selInView}
+          details={details[selInView.id]}
+          open={drawerOpen}
+          onToggle={() => setDrawerOpen((o) => !o)}
+        >
+          {selHasKids && !selIsFocus && (
+            <button className="act solid" onClick={() => zoomTo(selInView.id)}>
+              open ▸
             </button>
-            <button
-              className="act"
-              disabled={!canNest(tree, selInView.id)}
-              onClick={() => addChild(selInView.id)}
-            >
-              ＋ step left
+          )}
+          {selIsFocus && parent && (
+            <button className="act solid" onClick={() => zoomTo(parent.id)}>
+              ◂ up a level
             </button>
-            {selInView.id !== tree.id && (
-              <button className="act" onClick={() => addSibling(selInView.id)}>
-                ＋ row below
-              </button>
-            )}
-            {selIsLeaf && (
-              <button className="act" onClick={() => cycleOwner(selInView.id)}>
-                owner ▸
-              </button>
-            )}
-            {selInView.id !== tree.id && (
-              <button className="act danger" onClick={() => remove(selInView.id)}>
-                delete
-              </button>
-            )}
-            <button className="act" onClick={() => setSelId(null)}>
-              close
+          )}
+          {selIsLeaf && (
+            <button className="act solid" onClick={() => toggleDone(selInView.id)}>
+              {selInView.done ? "reopen" : "mark done"}
             </button>
-          </div>
-        </div>
+          )}
+          <button className="act" onClick={() => setEditingId(selInView.id)}>
+            rename
+          </button>
+          <button
+            className="act"
+            disabled={!canNest(tree, selInView.id)}
+            onClick={() => addChild(selInView.id)}
+          >
+            ＋ step left
+          </button>
+          {selInView.id !== tree.id && (
+            <button className="act" onClick={() => addSibling(selInView.id)}>
+              ＋ row below
+            </button>
+          )}
+          {selIsLeaf && (
+            <button className="act" onClick={() => cycleOwner(selInView.id)}>
+              owner ▸
+            </button>
+          )}
+          {selInView.id !== tree.id && (
+            <button className="act danger" onClick={() => remove(selInView.id)}>
+              delete
+            </button>
+          )}
+          <button className="act" onClick={() => setSelId(null)}>
+            close
+          </button>
+        </Drawer>
       )}
     </>
   );
