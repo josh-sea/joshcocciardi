@@ -4,6 +4,7 @@ import Editor from "./Editor";
 import Picker from "./Picker";
 import CSS from "./styles";
 import { signOutOfMise, watchAuth } from "./auth";
+import { DEFAULT_THEME, isTheme, themeClass } from "./themes";
 import {
   createImplementation,
   deleteImplementation,
@@ -32,6 +33,25 @@ const writeLast = (uid, id) => {
   }
 };
 
+/* The shelf's own theme (sign-in, picker) is a per-device preference; each
+   plan carries its own theme in its layout. */
+const SHELF_KEY = "mise:shelfTheme";
+const readShelfTheme = () => {
+  try {
+    const t = window.localStorage.getItem(SHELF_KEY);
+    return isTheme(t) ? t : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
+  }
+};
+const writeShelfTheme = (t) => {
+  try {
+    window.localStorage.setItem(SHELF_KEY, t);
+  } catch {
+    /* private mode — the choice just won't stick */
+  }
+};
+
 const Splash = ({ children }) => <div className="center">{children}</div>;
 
 export default function Mise() {
@@ -41,6 +61,8 @@ export default function Mise() {
   const [listError, setListError] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [openDoc, setOpenDoc] = useState(undefined); // undefined loading, null gone
+  const [shelfTheme, setShelfTheme] = useState(readShelfTheme);
+  const [planTheme, setPlanTheme] = useState(null); // the open plan's, live from the editor
   const restoredRef = useRef(false);
 
   useEffect(() => watchAuth((u) => setUser(u || null)), []);
@@ -84,6 +106,7 @@ export default function Mise() {
 
   // The open plan, live.
   useEffect(() => {
+    setPlanTheme(null);
     if (!openId) {
       setOpenDoc(undefined);
       return undefined;
@@ -127,6 +150,33 @@ export default function Mise() {
     },
     [user, open]
   );
+
+  /* Imports create one plan at a time so a failure partway through still
+     leaves the earlier ones saved, and reports how far it got. A single plan
+     opens straight away; several land on the shelf. */
+  const importPlans = useCallback(
+    async (plans) => {
+      const ids = [];
+      try {
+        for (const p of plans) {
+          ids.push(await createImplementation(user.uid, { ...p, theme: p.theme || shelfTheme }));
+        }
+      } catch (e) {
+        console.error("[mise] import failed:", e);
+        throw new Error(
+          `Imported ${ids.length} of ${plans.length} before a save failed: ${e.message}`
+        );
+      }
+      if (ids.length === 1) open(ids[0]);
+      return ids.length;
+    },
+    [user, open, shelfTheme]
+  );
+
+  const changeShelfTheme = useCallback((t) => {
+    setShelfTheme(t);
+    writeShelfTheme(t);
+  }, []);
 
   const remove = useCallback(
     async (id) => {
@@ -175,6 +225,7 @@ export default function Mise() {
         onExit={exit}
         onSignOut={signOut}
         onRename={rename}
+        onTheme={setPlanTheme}
       />
     );
   } else {
@@ -186,14 +237,19 @@ export default function Mise() {
         error={listError}
         onOpen={open}
         onCreate={create}
+        onImport={importPlans}
         onDelete={remove}
         onSignOut={signOut}
+        shelfTheme={shelfTheme}
+        onShelfTheme={changeShelfTheme}
       />
     );
   }
 
+  const theme = openId && openDoc ? planTheme || openDoc.layout.theme : shelfTheme;
+
   return (
-    <div className="mise">
+    <div className={`mise ${themeClass(theme)}`}>
       <style>{CSS}</style>
       {body}
     </div>

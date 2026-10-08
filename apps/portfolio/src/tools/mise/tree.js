@@ -20,13 +20,15 @@ export const node = (name, owner = "us", done = false, children = []) => ({
 const n_ = node;
 const grp = (name, children) => ({ id: uid(), name, owner: "us", done: false, children });
 
+/* Colors are theme tokens (see themes.js), so inline styles follow whichever
+   theme the surrounding element carries. */
 export const OWNERS = {
-  us: { label: "us", color: "#2B6B58" },
-  them: { label: "them", color: "#C0722A" },
-  third: { label: "3rd", color: "#4A6FA5" },
+  us: { label: "us", color: "var(--own-us)" },
+  them: { label: "them", color: "var(--own-them)" },
+  third: { label: "3rd", color: "var(--own-third)" },
 };
 export const OWNER_ORDER = ["us", "them", "third"];
-export const COMPLETE_COLOR = "#1F4A3F";
+export const COMPLETE_COLOR = "var(--complete)";
 
 /* Firestore caps map/array nesting at 20 levels, and one tree level costs
    two (a map inside an array), so the tree itself can go 10 deep before a
