@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AccountBar from "./AccountBar";
 import { Cell, PlanView } from "./Chart";
+import ThemePicker from "./ThemePicker";
 import { logEvent, saveTree } from "./store";
+import { downloadJson, planFilename, serializePlan } from "./transfer";
 import {
   COMPLETE_COLOR,
   MAX_DEPTH,
@@ -21,7 +23,7 @@ import {
    a user can tab away — and unmount/pagehide flush anyway. */
 const SAVE_DELAY = 600;
 
-export default function Editor({ user, impl, onExit, onSignOut, onRename }) {
+export default function Editor({ user, impl, onExit, onSignOut, onRename, onTheme }) {
   const implId = impl.id;
 
   const [tree, setTree] = useState(() => impl.tree);
@@ -119,6 +121,12 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename }) {
     [commitState]
   );
 
+  // The root element carries the theme class, so tell it as soon as it changes
+  // here rather than waiting for the debounced save to echo back.
+  useEffect(() => {
+    if (onTheme) onTheme(layout.theme);
+  }, [layout.theme, onTheme]);
+
   /* --------------------------- derived --------------------------- */
 
   const path = useMemo(() => findPath(tree, layout.focusId) || [tree], [tree, layout.focusId]);
@@ -133,6 +141,12 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename }) {
   const selInView = sel && cells.some((c) => c.node.id === sel.id) ? sel : null;
 
   /* --------------------------- actions --------------------------- */
+
+  const exportPlan = () =>
+    downloadJson(
+      planFilename(impl.name),
+      serializePlan({ name: impl.name, client: impl.client, layout: layoutRef.current, tree: treeRef.current })
+    );
 
   const zoomTo = (id) => {
     commitState(null, { focusId: id });
@@ -229,7 +243,7 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename }) {
           </button>
           <button
             className="crumb"
-            style={{ fontFamily: "'IBM Plex Sans Condensed',sans-serif", fontSize: 15, fontWeight: 600 }}
+            style={{ fontFamily: "var(--font-cond)", fontSize: 15, fontWeight: 600 }}
             onClick={onRename}
             title="Rename this implementation"
           >
@@ -244,6 +258,9 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename }) {
             </button>
           )}
           <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button className="up" onClick={exportPlan} title="Download this plan as JSON">
+              export ↓
+            </button>
             <AccountBar user={user} onSignOut={onSignOut} />
           </div>
         </div>
@@ -274,6 +291,7 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename }) {
               plan
             </button>
           </div>
+          <ThemePicker value={layout.theme} onChange={(t) => commitState(null, { theme: t })} />
         </div>
 
         <div className="navrow">
@@ -295,7 +313,7 @@ export default function Editor({ user, impl, onExit, onSignOut, onRename }) {
       </div>
 
       {notice && (
-        <div className="hint" style={{ padding: "12px 16px 0", color: "#9B3A2E" }}>
+        <div className="hint" style={{ padding: "12px 16px 0", color: "var(--danger)" }}>
           {notice}
         </div>
       )}

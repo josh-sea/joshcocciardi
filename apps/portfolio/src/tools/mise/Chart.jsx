@@ -115,7 +115,7 @@ export function PlanView({ root }) {
   return (
     <div className="plan">
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontFamily: "'IBM Plex Sans Condensed',sans-serif", fontSize: 21, fontWeight: 600 }}>
+        <div style={{ fontFamily: "var(--font-cond)", fontSize: 21, fontWeight: 600 }}>
           {root.name}
         </div>
         <div className="sub">

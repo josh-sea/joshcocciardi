@@ -1,5 +1,8 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import AccountBar from "./AccountBar";
+import ThemePicker from "./ThemePicker";
+import { themeClass } from "./themes";
+import { EXAMPLE, downloadJson, parseImport, serializePlans } from "./transfer";
 import { COMPLETE_COLOR, OWNERS, OWNER_ORDER, TEMPLATES, countAll, leavesOf } from "./tree";
 
 /* The same owner-mix rule the chart uses, drawn as a full-width bar so the
@@ -22,10 +25,11 @@ function PlanBar({ tree }) {
   );
 }
 
-function NewPlan({ onCreate, onCancel, busy }) {
+function NewPlan({ onCreate, onCancel, busy, defaultTheme }) {
   const [name, setName] = useState("");
   const [client, setClient] = useState("");
   const [template, setTemplate] = useState(TEMPLATES[0].key);
+  const [theme, setTheme] = useState(defaultTheme);
 
   const submit = (e) => {
     e.preventDefault();
@@ -35,6 +39,7 @@ function NewPlan({ onCreate, onCancel, busy }) {
       name: name.trim() || "New implementation",
       client: client.trim(),
       tree: chosen.build(),
+      theme,
     });
   };
 
@@ -82,6 +87,11 @@ function NewPlan({ onCreate, onCancel, busy }) {
         </div>
       </div>
 
+      <div className="field">
+        <span className="flabel">Theme</span>
+        <ThemePicker value={theme} onChange={setTheme} />
+      </div>
+
       <button className="btn" type="submit" disabled={busy}>
         {busy ? "Creating…" : "Create"}
       </button>
@@ -92,9 +102,114 @@ function NewPlan({ onCreate, onCancel, busy }) {
   );
 }
 
-export default function Picker({ user, rows, loading, error, onOpen, onCreate, onDelete, onSignOut }) {
-  const [creating, setCreating] = useState(false);
+/* Paste JSON or pick a .json file. Files are read into the same box so what
+   is about to be imported is always visible and editable first. */
+function ImportPlan({ onImport, onCancel }) {
+  const [text, setText] = useState("");
+  const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+
+  const readFile = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      setText(await f.text());
+      setErr(null);
+    } catch (x) {
+      setErr(`Couldn't read ${f.name}: ${x.message}`);
+    }
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    let plans;
+    try {
+      plans = parseImport(text);
+    } catch (x) {
+      setErr(x.message);
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await onImport(plans);
+    } catch (x) {
+      setErr(x.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="sheet" style={{ maxWidth: "none", marginTop: 18 }} onSubmit={submit}>
+      <div className="h1" style={{ fontSize: 18 }}>
+        Import from JSON
+      </div>
+      <div className="sub" style={{ marginTop: 6, lineHeight: 1.6 }}>
+        one plan, a bare tree, or {"{ \"plans\": [ … ] }"} · steps are {"{ name, owner, done, children }"} ·
+        owner is us, them, or third · up to 9 levels deep
+      </div>
+
+      <label className="field">
+        <span className="flabel">JSON</span>
+        <textarea
+          className="area"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={EXAMPLE}
+          spellCheck={false}
+          autoFocus
+        />
+      </label>
+
+      <div className="row" style={{ marginTop: 8 }}>
+        <button className="act" type="button" onClick={() => fileRef.current?.click()}>
+          choose file…
+        </button>
+        <button className="act" type="button" onClick={() => setText(EXAMPLE)}>
+          use example
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: "none" }}
+          onChange={readFile}
+        />
+      </div>
+
+      {err && <div className="err">{err}</div>}
+
+      <button className="btn" type="submit" disabled={busy || !text.trim()}>
+        {busy ? "Importing…" : "Import"}
+      </button>
+      <button className="btn ghost" type="button" onClick={onCancel} disabled={busy}>
+        Cancel
+      </button>
+    </form>
+  );
+}
+
+export default function Picker({
+  user,
+  rows,
+  loading,
+  error,
+  onOpen,
+  onCreate,
+  onImport,
+  onDelete,
+  onSignOut,
+  shelfTheme,
+  onShelfTheme,
+}) {
+  const [panel, setPanel] = useState(null); // null | "new" | "import"
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const creating = panel === "new";
+  const setCreating = (on) => setPanel(on ? "new" : null);
 
   const create = async (payload) => {
     setBusy(true);
@@ -106,13 +221,25 @@ export default function Picker({ user, rows, loading, error, onOpen, onCreate, o
     }
   };
 
+  const runImport = async (plans) => {
+    const n = await onImport(plans);
+    setPanel(null);
+    setNote(n > 1 ? `Imported ${n} plans.` : null);
+  };
+
+  const exportAll = () => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadJson(`mise-plans-${stamp}.json`, serializePlans(rows));
+  };
+
   return (
     <>
       <div className="bar">
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span className="word">Mise</span>
           <span className="sub">everything flows right</span>
-          <div style={{ marginLeft: "auto" }}>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <ThemePicker value={shelfTheme} onChange={onShelfTheme} />
             <AccountBar user={user} onSignOut={onSignOut} />
           </div>
         </div>
@@ -124,30 +251,50 @@ export default function Picker({ user, rows, loading, error, onOpen, onCreate, o
           <span className="sub">
             {loading ? "loading…" : `${rows.length} plan${rows.length === 1 ? "" : "s"}`}
           </span>
-          {!creating && (
-            <button
-              className="act solid"
-              style={{ marginLeft: "auto" }}
-              onClick={() => setCreating(true)}
-            >
-              ＋ new
-            </button>
+          {!panel && (
+            <div className="row" style={{ marginLeft: "auto" }}>
+              {rows.length > 0 && (
+                <button className="act" onClick={exportAll} title="Download every plan as one JSON file">
+                  export all ↓
+                </button>
+              )}
+              <button className="act" onClick={() => setPanel("import")}>
+                import ↑
+              </button>
+              <button className="act solid" onClick={() => setCreating(true)}>
+                ＋ new
+              </button>
+            </div>
           )}
         </div>
 
         {error && <div className="err">{error}</div>}
+        {note && <div className="ok">{note}</div>}
 
-        {creating && <NewPlan onCreate={create} onCancel={() => setCreating(false)} busy={busy} />}
+        {creating && (
+          <NewPlan
+            onCreate={create}
+            onCancel={() => setCreating(false)}
+            busy={busy}
+            defaultTheme={shelfTheme}
+          />
+        )}
+        {panel === "import" && <ImportPlan onImport={runImport} onCancel={() => setPanel(null)} />}
 
-        {!loading && rows.length === 0 && !creating && (
+        {!loading && rows.length === 0 && !panel && (
           <div className="empty" style={{ marginTop: 18 }}>
             <div className="planname">No plans yet</div>
             <div className="sub" style={{ marginTop: 6 }}>
-              Start from the Casap structure or a blank outcome.
+              Start from the Casap structure, a blank outcome, or a JSON file.
             </div>
-            <button className="act solid" style={{ marginTop: 14 }} onClick={() => setCreating(true)}>
-              ＋ new implementation
-            </button>
+            <div className="row" style={{ marginTop: 14, justifyContent: "center" }}>
+              <button className="act solid" onClick={() => setCreating(true)}>
+                ＋ new implementation
+              </button>
+              <button className="act" onClick={() => setPanel("import")}>
+                import JSON ↑
+              </button>
+            </div>
           </div>
         )}
 
@@ -156,7 +303,7 @@ export default function Picker({ user, rows, loading, error, onOpen, onCreate, o
             const leaves = r.tree ? leavesOf(r.tree) : [];
             const done = leaves.filter((l) => l.done).length;
             return (
-              <div className="planitem" key={r.id}>
+              <div className={`planitem ${themeClass(r.layout.theme)}`} key={r.id}>
                 <button className="planopen" onClick={() => onOpen(r.id)}>
                   <div className="planname">{r.name}</div>
                   <div className="sub" style={{ marginTop: 3 }}>
@@ -181,8 +328,8 @@ export default function Picker({ user, rows, loading, error, onOpen, onCreate, o
         </div>
 
         <div className="hint" style={{ padding: "26px 0 0" }}>
-          each plan is one convergence chart · the bar is one segment per end step, pine for closed and
-          owner color for what is still open
+          each plan is one convergence chart · the bar is one segment per end step, dark for closed and
+          owner color for what is still open · each card wears its plan's theme
         </div>
       </div>
     </>

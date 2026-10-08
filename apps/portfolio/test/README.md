@@ -135,3 +135,14 @@ cd apps/portfolio
 npm i --no-save @firebase/rules-unit-testing
 node test/seasonal-box-rules.test.mjs
 ```
+
+## `mise-transfer.test.mjs`
+
+Pure-helper tests for Mise's JSON import and export: a plan survives a round
+trip, hand-written files are read forgivingly, files too deep or too large to
+save are refused, and every theme defines every token. No dependencies:
+
+```sh
+cd apps/portfolio
+node test/mise-transfer.test.mjs
+```

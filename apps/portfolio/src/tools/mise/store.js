@@ -3,6 +3,7 @@
 /*                                                                     */
 /*  mise_implementations/{implId}                                      */
 /*    ownerUid, name, client, tree, layout, createdAt, updatedAt       */
+/*    (layout: depthWindow, view, focusId, theme)                       */
 /*  mise_implementations/{implId}/events/{eventId}                     */
 /*    nodeId, nodeName, type, at, actor                                */
 /*                                                                     */
@@ -26,6 +27,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { DEFAULT_THEME, isTheme } from "./themes";
 import { sanitize } from "./tree";
 
 const COL = "mise_implementations";
@@ -33,12 +35,13 @@ const implCol = () => collection(db, COL);
 const implDoc = (id) => doc(db, COL, id);
 const eventsCol = (id) => collection(db, COL, id, "events");
 
-export const DEFAULT_LAYOUT = { depthWindow: 4, view: "chart", focusId: null };
+export const DEFAULT_LAYOUT = { depthWindow: 4, view: "chart", focusId: null, theme: DEFAULT_THEME };
 
 const readLayout = (raw) => ({
   depthWindow: [3, 4, 5].includes(raw?.depthWindow) ? raw.depthWindow : DEFAULT_LAYOUT.depthWindow,
   view: raw?.view === "plan" ? "plan" : "chart",
   focusId: typeof raw?.focusId === "string" ? raw.focusId : null,
+  theme: isTheme(raw?.theme) ? raw.theme : DEFAULT_THEME,
 });
 
 const shape = (snap) => {
@@ -75,13 +78,13 @@ export const watchImplementation = (id, cb, onError) =>
     onError
   );
 
-export const createImplementation = async (ownerUid, { name, client, tree }) => {
+export const createImplementation = async (ownerUid, { name, client, tree, theme }) => {
   const ref = await addDoc(implCol(), {
     ownerUid,
     name,
     client: client || "",
     tree: sanitize(tree),
-    layout: DEFAULT_LAYOUT,
+    layout: readLayout({ ...DEFAULT_LAYOUT, theme }),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

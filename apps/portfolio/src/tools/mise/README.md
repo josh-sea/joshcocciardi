@@ -15,6 +15,9 @@ from; this file covers what the shipped version does and how it persists.
 | `Editor.jsx` | One implementation: the chart, the action dock, and all writes. |
 | `Chart.jsx` | Presentational cells, owner stripe, progress track, plan view. |
 | `tree.js` | Tree model, layout engine, seed templates. Pure, no React. |
+| `themes.js` | Color themes, as CSS custom properties scoped to `t-<key>`. |
+| `ThemePicker.jsx` | The row of theme swatches used in the editor, picker, and new-plan form. |
+| `transfer.js` | JSON import and export. Pure, plus one download helper. |
 | `store.js` | Firestore reads and writes. |
 | `auth.js`, `firebase.js` | Firebase app, providers, friendly error strings. |
 
@@ -29,7 +32,7 @@ mise_implementations/{implId}
   name       "Sunrise CU go-live"
   client     optional
   tree       nested { id, name, owner, done, children[] }
-  layout     { depthWindow: 3|4|5, view: "chart"|"plan", focusId }
+  layout     { depthWindow: 3|4|5, view: "chart"|"plan", focusId, theme }
   createdAt, updatedAt
 
 mise_implementations/{implId}/events/{eventId}
@@ -61,6 +64,60 @@ Types written today: `opened` (step created), `closed` (marked done),
 read as forever-open in that math. `nodeId` is the join key back into the tree;
 `nodeName` is a snapshot from the moment of the event, so a step renamed later
 keeps its old name in the ledger.
+
+## Themes
+
+Six themes: **Pine** (the original), **Ember** (orange), **Harbor** (blue),
+**Fuchsia**, **Ink** (black and white with one red accent), and **Terminal**
+(green on black, all monospace). Each is a block of CSS custom properties in
+`themes.js`; `styles.js` and the inline owner colors in `tree.js` only ever
+read those tokens, so adding a theme is one entry in `THEMES` and nothing else.
+
+The theme is stored per plan in `layout.theme` and picked from the swatches in
+the editor's second row (or on the new-plan form). The shelf and sign-in screen
+use a separate per-device theme kept in `localStorage`, and each card on the
+shelf wears its own plan's theme. Older plans without a theme read as Pine.
+
+## JSON import and export
+
+`export ↓` in the editor downloads the open plan; `export all ↓` on the shelf
+downloads every plan in one file. `import ↑` on the shelf takes pasted JSON or
+a `.json` file and creates new plans from it. One plan opens straight away;
+several land on the shelf.
+
+```json
+{
+  "format": "mise",
+  "version": 1,
+  "name": "Kitchen remodel",
+  "client": "",
+  "theme": "ember",
+  "tree": {
+    "name": "Kitchen done",
+    "children": [
+      { "name": "Demo complete", "children": [
+        { "name": "Permit approved", "owner": "third", "done": true },
+        { "name": "Cabinets removed", "owner": "us" }
+      ] },
+      { "name": "Countertop chosen", "owner": "them" }
+    ]
+  }
+}
+```
+
+- Several plans go in `{ "plans": [ … ] }` or a plain array.
+- A bare tree (`{ "name", "children" }` with no wrapper) is also accepted; the
+  plan is named after its outcome.
+- Import is forgiving about hand-written files: `title`/`label` work for
+  `name`, `steps` works for `children`, owners like `client` or `vendor` map
+  to `them` and `third`, and `"status": "done"` counts as done. `done` is
+  ignored on merge blocks, which always derive it.
+- Ids are never exported and are regenerated on import, so the same file can
+  be imported twice without colliding. The event ledger isn't exported.
+- Files deeper than `MAX_DEPTH` or over 2,000 steps are refused with a
+  message, rather than failing at write time.
+
+Tests: `node test/mise-transfer.test.mjs` from `apps/portfolio`.
 
 ## Writes
 
