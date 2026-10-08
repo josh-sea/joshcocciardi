@@ -14,6 +14,8 @@ from; this file covers what the shipped version does and how it persists.
 | `Picker.jsx` | The shelf of implementations, plus the new-plan form. |
 | `Editor.jsx` | One implementation: the chart, the action dock, and all writes. |
 | `Chart.jsx` | Presentational cells, owner stripe, progress track, plan view. |
+| `Drawer.jsx` | The bottom drawer for the selected step: actions, notes, links, files, comments. |
+| `details.js` | Step-details shape, URL cleaning, summaries. Pure, no Firebase. |
 | `tree.js` | Tree model, layout engine, seed templates. Pure, no React. |
 | `themes.js` | Color themes, as CSS custom properties scoped to `t-<key>`. |
 | `ThemePicker.jsx` | The row of theme swatches used in the editor, picker, and new-plan form. |
@@ -37,6 +39,11 @@ mise_implementations/{implId}
 
 mise_implementations/{implId}/events/{eventId}
   nodeId, nodeName, type, actor, at
+
+mise_implementations/{implId}/details/{nodeId}
+  notes, links[], comments[], attachments[], updatedAt
+
+Storage: mise/{ownerUid}/{implId}/{nodeId}/{fileId}-{name}
 ```
 
 Notes:
@@ -64,6 +71,31 @@ Types written today: `opened` (step created), `closed` (marked done),
 read as forever-open in that math. `nodeId` is the join key back into the tree;
 `nodeName` is a snapshot from the moment of the event, so a step renamed later
 keeps its old name in the ledger.
+
+## Step details (the drawer)
+
+Selecting a block opens the drawer at the bottom with the step's actions.
+Tap the grip or the "details ▴" link to slide it up. Escape folds it, then
+clears the selection.
+
+- **Notes**: free text, autosaved on a 700ms debounce and flushed when the
+  step changes or the drawer closes.
+- **Links**: http(s), `mailto:` and `tel:` only. A bare domain gets `https://`;
+  anything else (`javascript:` and friends) is refused, so a pasted link can't
+  run script when clicked.
+- **Files**: uploaded to Firebase Storage under the owner's uid, 25 MB each,
+  30 per step. Drag and drop works on the files panel.
+- **Comments**: a dated running log. Plans are private, so for now this is a
+  log for yourself.
+
+Details live in their own docs under `details/`, keyed by node id, not inside
+the tree. The tree can already sit near Firestore's 20-level nesting limit,
+and arrays of maps inside a node would push it over; separate docs also mean
+typing a note never rewrites the whole plan. Adds use `arrayUnion` so two
+uploads finishing together can't drop each other; removes go through a
+transaction keyed on the item's id. Deleting a step (or a plan) deletes its
+details and uploaded files too, after a confirm when there is anything to
+lose. Cells and plan-view rows show a short summary ("note · 2 links").
 
 ## Themes
 
@@ -112,6 +144,10 @@ several land on the shelf.
   `name`, `steps` works for `children`, owners like `client` or `vendor` map
   to `them` and `third`, and `"status": "done"` counts as done. `done` is
   ignored on merge blocks, which always derive it.
+- Any step can carry `notes`, `links` (`[{ url, label }]` or plain URL
+  strings) and `comments` (`[{ text, name, at }]` or plain strings); they
+  export and import with the plan. Uploaded files are not exported, since
+  their download URLs carry access tokens and JSON files get passed around.
 - Ids are never exported and are regenerated on import, so the same file can
   be imported twice without colliding. The event ledger isn't exported.
 - Files deeper than `MAX_DEPTH` or over 2,000 steps are refused with a
@@ -162,8 +198,9 @@ production builds always point at the real project.
 ## Deploying
 
 ```bash
-./deploy.sh firestore     # rules — required before the tool works for anyone
-./deploy.sh portfolio     # the app
+./deploy.sh mise          # app + Firestore and Storage rules, all at once
+./deploy.sh firestore     # rules only
+./deploy.sh portfolio     # app only
 ```
 
 Auth providers used are Google and email/password; both are already enabled on

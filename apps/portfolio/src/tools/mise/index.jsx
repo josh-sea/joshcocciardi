@@ -9,6 +9,7 @@ import {
   createImplementation,
   deleteImplementation,
   renameImplementation,
+  writeDetails,
   watchImplementation,
   watchImplementations,
 } from "./store";
@@ -159,7 +160,9 @@ export default function Mise() {
       const ids = [];
       try {
         for (const p of plans) {
-          ids.push(await createImplementation(user.uid, { ...p, theme: p.theme || shelfTheme }));
+          const id = await createImplementation(user.uid, { ...p, theme: p.theme || shelfTheme });
+          ids.push(id);
+          if (p.details && Object.keys(p.details).length) await writeDetails(id, p.details);
         }
       } catch (e) {
         console.error("[mise] import failed:", e);

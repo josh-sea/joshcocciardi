@@ -118,6 +118,16 @@ service firebase.storage {
       allow delete: if isOwner(userId);
     }
 
+    // ── Mise step attachments ───────────────────────────────────────────
+    // mise/{ownerUid}/{implId}/{nodeId}/{file}. Owner-only: the uid leads the
+    // path, so the check needs no Firestore read. Any file type, since these
+    // are scans, PDFs, and forms; 25MB matches MAX_FILE_BYTES in the client.
+    match /mise/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && request.resource.size < 25 * 1024 * 1024;
+      allow delete: if isOwner(userId);
+    }
+
     // User files path: users/{userId}/**
     match /users/{userId}/{allPaths=**} {
       // Allow read if authenticated user owns the files
