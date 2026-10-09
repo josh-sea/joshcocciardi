@@ -90,7 +90,7 @@ jobs:
 
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx solra whereami; do
+          for app in playball canitwo recipebox psx solra disney-trivia; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
