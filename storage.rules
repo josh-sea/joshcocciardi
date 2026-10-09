@@ -128,6 +128,39 @@ service firebase.storage {
       allow delete: if isOwner(userId);
     }
 
+    // ── Where Am I photo decks ──────────────────────────────────────────
+    // whereami/{deckId}/{file}: the map a deck pins against, and the round
+    // photos themselves.
+    //
+    // Access is a verified sign-in plus the unguessable path, the same shape
+    // as the Collector and Reading Buddy blocks above. deckId is a 20-char
+    // Firestore auto-id that appears in exactly one place a non-member can
+    // reach: nowhere. It lives on the deck document, which the Firestore
+    // rules hand out only to members, so knowing this path means a member
+    // gave it to you. That is the same capability model the password itself
+    // uses, so Storage is not the weak link.
+    //
+    // Cloud Storage rules CAN check Firestore membership directly these days
+    // (firestore.get(), added 2022), and that would be stricter. It is not
+    // used here because it could not be verified: the Storage emulator
+    // returns null for every cross-service read in this setup, so the rule
+    // could only be shipped untested, and its failure mode is that every
+    // upload 403s for everybody. A stricter rule that might brick uploads is
+    // a bad trade against a weaker one that is proven. Worth revisiting with
+    // a newer emulator — the suite in functions/test/ is where it would go.
+    //
+    // Listing is naturally limited: /whereami/ itself matches no rule, so the
+    // prefix cannot be walked without already knowing a deckId.
+    function waSignedIn() {
+      return request.auth != null;
+    }
+
+    match /whereami/{deckId}/{allPaths=**} {
+      allow read: if waSignedIn();
+      allow write: if waSignedIn() && isValidImage();
+      allow delete: if waSignedIn();
+    }
+
     // User files path: users/{userId}/**
     match /users/{userId}/{allPaths=**} {
       // Allow read if authenticated user owns the files

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Where Am I?</title>
+<meta name="description" content="A private photo guessing game. Open a peephole on a photo, three taps to widen it, then drop a pin on the map to say where it was taken." />
+<meta name="theme-color" content="#1A1330" />
+<meta name="robots" content="noindex, nofollow" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<link rel="manifest" href="manifest.json" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Where Am I?" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Karla:ital,wght@0,400;0,600;0,800;1,400&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="masthead">
+      <h1 class="mark">Where am I<span>a private photo hunt</span></h1>
+      <button class="iconbtn" id="leave" hidden aria-label="Leave this deck">Leave</button>
+    </div>
+    <p class="sub" id="sub">Open a deck with its name and password. Nobody can see a deck without both.</p>
+  </header>
+
+  <!-- door ------------------------------------------------------------- -->
+  <section id="door">
+    <div class="card">
+      <div class="tabs" role="tablist">
+        <button class="tab" id="tab-open" role="tab" aria-selected="true">Open a deck</button>
+        <button class="tab" id="tab-make" role="tab" aria-selected="false">Make one</button>
+      </div>
+
+      <form id="form-open" class="pane">
+        <label>Deck name<input id="open-name" autocomplete="off" placeholder="Disney 2026" required /></label>
+        <label>Password<input id="open-pass" type="password" autocomplete="off" required /></label>
+        <button class="btn" type="submit">Open</button>
+        <p class="note" id="open-note" role="status"></p>
+      </form>
+
+      <form id="form-make" class="pane" hidden>
+        <label>Deck name<input id="make-name" autocomplete="off" placeholder="Disney 2026" required /></label>
+        <label>Password<input id="make-pass" type="password" autocomplete="off" required />
+          <small>At least 8 characters. There is no reset: the password is the only way in, for everyone.</small>
+        </label>
+        <label>Map to pin against
+          <input id="make-map" type="file" accept="image/*" required />
+          <small>A photo of the park map works. Everyone guessing will drop their pin on this picture.</small>
+        </label>
+        <button class="btn" type="submit">Create deck</button>
+        <p class="note" id="make-note" role="status"></p>
+      </form>
+    </div>
+
+    <div id="recent" hidden>
+      <h2 class="h2">Decks this browser has opened</h2>
+      <div class="chips" id="recent-list"></div>
+      <p class="fine">Clearing your browser loses this list. The password always gets you back in.</p>
+    </div>
+  </section>
+
+  <!-- deck -------------------------------------------------------------- -->
+  <section id="deck" hidden>
+    <div class="modes" role="tablist">
+      <button class="mode" id="mode-play" role="tab" aria-selected="true">Play</button>
+      <button class="mode" id="mode-add" role="tab" aria-selected="false">Add a photo</button>
+      <button class="mode" id="mode-board" role="tab" aria-selected="false">Scores</button>
+    </div>
+
+    <!-- play -->
+    <div id="pane-play">
+      <div id="play-empty" class="empty" hidden>
+        <p>No photos in this deck yet. Add one and hand the phone over.</p>
+      </div>
+      <div id="play-live" hidden>
+        <div class="stage">
+          <div class="peep" id="peep">
+            <img id="peep-img" alt="A small part of the photo you are trying to place" />
+          </div>
+          <div class="taps" id="taps"></div>
+        </div>
+        <button class="btn" id="widen">Tap to see more</button>
+        <p class="prompt" id="play-prompt">Where was this taken? Drop a pin on the map.</p>
+        <div class="mapwrap" id="mapwrap">
+          <img id="map-img" alt="The deck's map. Tap it to place your guess." />
+          <div class="pin guess" id="pin-guess" hidden></div>
+          <div class="pin answer" id="pin-answer" hidden></div>
+          <div class="ring" id="ring" hidden></div>
+        </div>
+        <button class="btn" id="lockin" disabled>Lock in my pin</button>
+        <div class="verdict" id="verdict" hidden></div>
+        <button class="btn ghost" id="nextround" hidden>Next photo</button>
+      </div>
+      <div id="play-done" class="empty" hidden></div>
+    </div>
+
+    <!-- add -->
+    <div id="pane-add" hidden>
+      <form id="form-add">
+        <label>Photo<input id="add-photo" type="file" accept="image/*" required /></label>
+        <label>Label (shown after the guess)<input id="add-label" autocomplete="off" placeholder="Outside the Haunted Mansion" /></label>
+        <p class="prompt">Tap the map to mark where this was taken.</p>
+        <div class="mapwrap" id="add-mapwrap">
+          <img id="add-map-img" alt="The deck's map. Tap it to mark the answer." />
+          <div class="pin answer" id="add-pin" hidden></div>
+          <div class="ring" id="add-ring" hidden></div>
+        </div>
+        <button class="btn" type="submit" id="add-submit" disabled>Add this round</button>
+        <p class="note" id="add-note" role="status"></p>
+      </form>
+      <h2 class="h2">In this deck</h2>
+      <div id="add-list" class="list"></div>
+    </div>
+
+    <!-- scores -->
+    <div id="pane-board" hidden>
+      <label class="namefield">Your name on the board
+        <input id="me-name" autocomplete="off" maxlength="24" placeholder="Cam" />
+      </label>
+      <div id="board" class="list"></div>
+    </div>
+  </section>
+
+  <p class="fine footer">
+    Photos are shrunk in your browser before upload, which also strips their
+    GPS and camera data. <a href="/projects">All projects</a>
+  </p>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

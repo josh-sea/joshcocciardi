@@ -55,6 +55,13 @@ jobs:
         working-directory: apps/solra
         run: node test/roundtrip.mjs
 
+      # The peephole must never open past its ceiling, and a pin must be
+      # judged the same way on a square map and a panoramic one. Pure maths,
+      # no emulator. The security rules have their own suite that needs the
+      # Firestore emulator — see functions/test/README.md.
+      - name: Test Where Am I
+        run: node apps/portfolio/test/whereami.test.mjs
+
       # Swing Coach's geometry engine is inlined in its static page; the suite
       # lifts it out of the shipped HTML and runs synthetic swings through it.
       # No install needed.
@@ -83,7 +90,7 @@ jobs:
 
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx solra; do
+          for app in playball canitwo recipebox psx solra whereami; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
