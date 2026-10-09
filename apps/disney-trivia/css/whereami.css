@@ -1,0 +1,143 @@
+/* Where Am I: the photo-deck half of the ticket book.
+ *
+ * Only what the ticket book does not already define. The palette, the body
+ * background, .wrap, the masthead, .btn and .chip all live in the page's own
+ * <style> block, and a second copy here would just fight it. Everything below
+ * is scoped to markup that only this mode renders.
+ */
+
+/* door: open a deck, or make one */
+.card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 6px;
+}
+.tabs, .modes { display: flex; gap: 6px; }
+.tab, .mode {
+  flex: 1;
+  font: inherit; font-size: 14px; font-weight: 700;
+  color: #CFC3E8; background: transparent;
+  border: 0; border-radius: 10px;
+  padding: 11px 8px; cursor: pointer;
+}
+.tab[aria-selected="true"], .mode[aria-selected="true"] { background: #EDE7F7; color: var(--ink); }
+.modes { margin-bottom: 18px; }
+.pane { padding: 14px 12px 12px; display: grid; gap: 14px; }
+#wa form { display: grid; gap: 14px; }
+#wa label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: #CFC3E8; }
+#wa label small { font-weight: 400; font-size: 12px; color: #8E80AE; line-height: 1.45; }
+#wa input[type="text"], #wa input[type="password"], #wa input:not([type]) {
+  font: inherit; font-size: 16px; color: #EDE7F7;
+  background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 9px; padding: 11px 12px;
+}
+#wa input[type="file"] { font: inherit; font-size: 13px; color: #B6A9D4; }
+#wa input:focus-visible, .tab:focus-visible, .mode:focus-visible,
+.iconbtn:focus-visible, .mapwrap:focus-visible {
+  outline: 3px solid var(--gold); outline-offset: 3px;
+}
+.iconbtn {
+  font: inherit; font-size: 13px; font-weight: 700; color: #CFC3E8;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px; padding: 8px 14px; cursor: pointer; flex: 0 0 auto;
+}
+.note { margin: 0; font-size: 13px; min-height: 1.2em; color: #B6A9D4; }
+.note.bad { color: var(--bad); }
+.note.good { color: var(--good); }
+.empty { padding: 30px 10px; text-align: center; color: #B6A9D4; font-size: 15px; line-height: 1.5; }
+.h2 { font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #B6A9D4; margin: 22px 0 10px; }
+.fine { font-size: 12px; color: #8E80AE; line-height: 1.5; }
+.fine a { color: #B6A9D4; }
+.deckchips { display: flex; flex-wrap: wrap; gap: 7px; }
+
+/* the peephole */
+.wa-stage { position: relative; }
+.peep {
+  position: relative;
+  width: 100%;
+  /* Set from the photo's own dimensions in JS, so normalised coordinates map
+     one to one onto the box and the peephole maths stays exact. */
+  aspect-ratio: var(--ar, 4 / 3);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #120D22;
+  box-shadow: 0 18px 40px rgba(0,0,0,.45);
+}
+/* `circle` only accepts a LENGTH for its radius — radial-gradient(circle 12%)
+   is invalid and the whole mask is dropped, which would quietly show the
+   entire photo. So this is an ellipse with a radius per axis, and because the
+   box is set to the photo's aspect ratio the two percentages describe a true
+   circle. Both are computed in JS from the same radius. */
+.peep img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: fill;
+  -webkit-mask-image: radial-gradient(ellipse var(--rx, 12%) var(--ry, 16%) at var(--cx, 50%) var(--cy, 50%), #000 0 97%, transparent 100%);
+  mask-image: radial-gradient(ellipse var(--rx, 12%) var(--ry, 16%) at var(--cx, 50%) var(--cy, 50%), #000 0 97%, transparent 100%);
+  transition: -webkit-mask-image 420ms ease, mask-image 420ms ease;
+}
+.peep.revealed img { -webkit-mask-image: none; mask-image: none; }
+.taps { display: flex; gap: 6px; justify-content: center; margin: 12px 0 14px; }
+.taps i { width: 28px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.16); }
+.taps i.spent { background: var(--gold); }
+.wa-prompt { font-size: 15px; font-weight: 700; color: #CFC3E8; margin: 18px 0 10px; }
+
+/* the map */
+.mapwrap {
+  position: relative; width: 100%;
+  border-radius: 14px; overflow: hidden;
+  background: #120D22; cursor: crosshair;
+  touch-action: manipulation;
+}
+.mapwrap img { display: block; width: 100%; height: auto; }
+.pin {
+  position: absolute;
+  width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border-radius: 50%; border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.6);
+  pointer-events: none;
+}
+.pin.guess { background: var(--gold); }
+.pin.answer { background: var(--good); }
+.ring {
+  position: absolute;
+  border: 2px dashed rgba(127,214,162,.85);
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.wa-verdict {
+  margin-top: 16px; padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.wa-verdict h3 { margin: 0 0 6px; font-family: var(--display); font-size: 20px; font-weight: 400; }
+.wa-verdict.hit h3 { color: var(--good); }
+.wa-verdict.miss h3 { color: var(--bad); }
+.wa-verdict p { margin: 0; font-size: 14px; color: #B6A9D4; line-height: 1.5; }
+
+/* lists */
+.list { display: grid; gap: 8px; }
+.row {
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 11px; padding: 10px 12px;
+}
+.row img { width: 46px; height: 46px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; }
+.row .who { flex: 1; font-size: 14px; font-weight: 700; }
+.row .pts { font-family: var(--display); font-size: 18px; color: var(--gold); }
+.row .sub2 { font-size: 12px; color: #8E80AE; font-weight: 400; }
+.row button {
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--bad);
+  background: transparent; border: 1px solid rgba(240,134,127,.4);
+  border-radius: 8px; padding: 6px 10px; cursor: pointer;
+}
+.namefield { margin-bottom: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .peep img { transition: none; }
+}

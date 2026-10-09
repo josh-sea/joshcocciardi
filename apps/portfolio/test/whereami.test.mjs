@@ -10,7 +10,7 @@ import {
   REVEAL_STEPS, MAX_REVEAL, CENTRE_BAND, TAPS_ALLOWED, MAX_POINTS, DEFAULT_TOLERANCE,
   seedFrom, mulberry32, peepholeCentre, radiusForFraction, revealAt,
   visibleFraction, pinDistance, judge, scoreRound,
-} from '../../whereami/js/game.js';
+} from '../../disney-trivia/js/game.js';
 
 let failures = 0;
 const ok = (name, cond, extra = '') => {

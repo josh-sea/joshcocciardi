@@ -10,6 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Karla:ital,wght@0,400;0,600;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/whereami.css">
+<link rel="manifest" href="manifest.json">
 
 <style>
   *, *::before, *::after { box-sizing: border-box; }
@@ -22,6 +24,9 @@
     --gold: #E8B33C;
     --stock: #F2D88F;
     --stock-edge: #d9bd6d;
+    /* the photo game's right/wrong greens and reds */
+    --good: #7FD6A2;
+    --bad: #F0867F;
     --display: "Alfa Slab One", "Rockwell", Georgia, serif;
     --body: "Karla", "Avenir Next", "Segoe UI", system-ui, sans-serif;
   }
@@ -81,6 +86,31 @@
     color: #B6A9D4;
     max-width: 42ch;
   }
+
+  /* ---- which game ---- */
+  .games {
+    display: flex;
+    gap: 6px;
+    margin: 14px 0 2px;
+    padding: 5px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 13px;
+  }
+  .games button {
+    flex: 1;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    color: #CFC3E8;
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
+    padding: 11px 8px;
+    cursor: pointer;
+  }
+  .games button[aria-selected="true"] { background: var(--gold); color: var(--night-deep); }
+  .games button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 
   /* ---- category chips ---- */
   .cats {
@@ -385,9 +415,15 @@
         <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/></svg>
       </button>
     </div>
-    <p class="sub">Tap a ticket to reveal the answer. Every question comes up once, then the book is spent.</p>
+    <p class="sub" id="blurb">Tap a ticket to reveal the answer. Every question comes up once, then the book is spent.</p>
   </header>
 
+  <div class="games" role="tablist" aria-label="Which game">
+    <button id="game-trivia" role="tab" aria-selected="true">Trivia</button>
+    <button id="game-wa" role="tab" aria-selected="false">Where am I?</button>
+  </div>
+
+<section id="tv">
   <div class="cats" id="cats" role="group" aria-label="Choose a shelf"></div>
   <div class="cats subcats" id="subcats" role="group" aria-label="Narrow the round" hidden></div>
 
@@ -406,6 +442,110 @@
     <button class="btn" id="next">Next ticket</button>
     <button class="btn ghost" id="reset">Start a fresh book</button>
   </div>
+</section>
+
+<section id="wa" hidden>
+  <div id="wa-boot" class="empty">Loading…</div>
+
+  <!-- door: open a deck, or make one -->
+  <div id="door" hidden>
+    <div class="card">
+      <div class="tabs" role="tablist">
+        <button class="tab" id="tab-open" role="tab" aria-selected="true">Open a deck</button>
+        <button class="tab" id="tab-make" role="tab" aria-selected="false">Make one</button>
+      </div>
+
+      <form id="form-open" class="pane">
+        <label>Deck name<input id="open-name" autocomplete="off" placeholder="Disney 2026" required></label>
+        <label>Password<input id="open-pass" type="password" autocomplete="off" required></label>
+        <button class="btn" type="submit">Open</button>
+        <p class="note" id="open-note" role="status"></p>
+      </form>
+
+      <form id="form-make" class="pane" hidden>
+        <label>Deck name<input id="make-name" autocomplete="off" placeholder="Disney 2026" required></label>
+        <label>Password<input id="make-pass" type="password" autocomplete="off" required>
+          <small>At least 8 characters. There is no reset: the password is the only way in, for everyone.</small>
+        </label>
+        <label>Map to pin against
+          <input id="make-map" type="file" accept="image/*" required>
+          <small>A photo of the park map works. Everyone guessing drops their pin on this picture.</small>
+        </label>
+        <button class="btn" type="submit">Create deck</button>
+        <p class="note" id="make-note" role="status"></p>
+      </form>
+    </div>
+
+    <div id="recent" hidden>
+      <h2 class="h2">Decks this browser has opened</h2>
+      <div class="deckchips" id="recent-list"></div>
+      <p class="fine">Clearing your browser loses this list. The password always gets you back in.</p>
+    </div>
+  </div>
+
+  <!-- a deck, once you are in it -->
+  <div id="deck" hidden>
+    <div class="modes" role="tablist">
+      <button class="mode" id="mode-play" role="tab" aria-selected="true">Play</button>
+      <button class="mode" id="mode-add" role="tab" aria-selected="false">Add a photo</button>
+      <button class="mode" id="mode-board" role="tab" aria-selected="false">Scores</button>
+    </div>
+
+    <div id="pane-play">
+      <div id="play-empty" class="empty" hidden>
+        <p>No photos in this deck yet. Add one and hand the phone over.</p>
+      </div>
+      <div id="play-live" hidden>
+        <div class="wa-stage">
+          <div class="peep" id="peep"><img id="peep-img" alt="A small part of the photo you are trying to place"></div>
+          <div class="taps" id="taps"></div>
+        </div>
+        <button class="btn" id="widen">Tap to see more</button>
+        <p class="wa-prompt" id="play-prompt">Where was this taken? Drop a pin on the map.</p>
+        <div class="mapwrap" id="mapwrap">
+          <img id="map-img" alt="The deck's map. Tap it to place your guess.">
+          <div class="pin guess" id="pin-guess" hidden></div>
+          <div class="pin answer" id="pin-answer" hidden></div>
+          <div class="ring" id="ring" hidden></div>
+        </div>
+        <button class="btn" id="lockin" disabled>Lock in my pin</button>
+        <div class="wa-verdict" id="verdict" hidden></div>
+        <button class="btn ghost" id="nextround" hidden>Next photo</button>
+      </div>
+      <div id="play-done" class="empty" hidden></div>
+    </div>
+
+    <div id="pane-add" hidden>
+      <form id="form-add">
+        <label>Photo<input id="add-photo" type="file" accept="image/*" required></label>
+        <label>Label (shown after the guess)<input id="add-label" autocomplete="off" placeholder="Outside the Haunted Mansion"></label>
+        <p class="wa-prompt">Tap the map to mark where this was taken.</p>
+        <div class="mapwrap" id="add-mapwrap">
+          <img id="add-map-img" alt="The deck's map. Tap it to mark the answer.">
+          <div class="pin answer" id="add-pin" hidden></div>
+          <div class="ring" id="add-ring" hidden></div>
+        </div>
+        <button class="btn" type="submit" id="add-submit" disabled>Add this round</button>
+        <p class="note" id="add-note" role="status"></p>
+      </form>
+      <h2 class="h2">In this deck</h2>
+      <div id="add-list" class="list"></div>
+    </div>
+
+    <div id="pane-board" hidden>
+      <label class="namefield">Your name on the board
+        <input id="me-name" autocomplete="off" maxlength="24" placeholder="Cam">
+      </label>
+      <div id="board" class="list"></div>
+    </div>
+
+    <button class="btn ghost" id="leave-deck" style="margin-top:18px">Leave this deck</button>
+  </div>
+
+  <p class="fine" style="margin-top:24px">
+    Photos are shrunk in your browser before upload, which also strips their GPS and camera data.
+  </p>
+</section>
 
   <a class="backlink" href="/projects">← Back to all projects</a>
 </div>
@@ -1035,6 +1175,65 @@ nextBtn.onclick = () => { if (spent) startBook(filter); else nextTicket(); };
 document.getElementById("reset").onclick = () => startBook(filter);
 
 startBook("all");
+</script>
+
+<script type="module">
+/* Which game is on screen.
+ *
+ * The ticket book above is a static page: no network, no sign-in, instant.
+ * Where Am I needs Firebase, so it is imported the first time somebody asks
+ * for it and never before. Switching back and forth after that is free.
+ */
+const tv = document.getElementById('tv');
+const wa = document.getElementById('wa');
+const btnTrivia = document.getElementById('game-trivia');
+const btnWa = document.getElementById('game-wa');
+const blurb = document.getElementById('blurb');
+const TRIVIA_BLURB = blurb.textContent;
+
+let mod = null;          // the Where Am I module, once it has been fetched
+let loading = false;
+
+async function pick(which) {
+  const onWa = which === 'wa';
+  btnTrivia.setAttribute('aria-selected', String(!onWa));
+  btnWa.setAttribute('aria-selected', String(onWa));
+  tv.hidden = onWa;
+  wa.hidden = !onWa;
+
+  if (!onWa) { blurb.textContent = TRIVIA_BLURB; return; }
+
+  blurb.textContent = 'Open a deck with its name and password. Nobody can see a deck without both.';
+  if (mod) { mod.onShow(); return; }
+  if (loading) return;
+  loading = true;
+  try {
+    const m = await import('./js/whereami.js');
+    await m.init();
+    mod = m;
+  } catch (err) {
+    document.getElementById('wa-boot').textContent =
+      'Could not load the photo game: ' + err.message;
+  } finally { loading = false; }
+}
+
+btnTrivia.onclick = () => pick('trivia');
+btnWa.onclick = () => pick('wa');
+
+/* A deep link straight to the photo game, so it can be shared on its own.
+ *
+ * Both halves of this matter. The load-time check covers arriving at the URL
+ * cold, including the redirect from the old /projects/whereami address. The
+ * hashchange listener covers changing the hash while already on the page,
+ * which is a same-document navigation: no script re-runs, so without this a
+ * link to #whereami from the page itself would do nothing at all.
+ */
+const fromHash = () => {
+  if (location.hash === '#whereami') pick('wa');
+  else if (location.hash === '#trivia') pick('trivia');
+};
+window.addEventListener('hashchange', fromHash);
+fromHash();
 </script>
 </body>
 </html>

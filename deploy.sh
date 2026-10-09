@@ -13,7 +13,7 @@
 #   ./deploy.sh recipebox    - Copy recipebox (no build), copy to portfolio, deploy hosting
 #   ./deploy.sh psx          - Copy psx station (no build), deploy hosting + rules
 #   ./deploy.sh solra        - Run the Solra tests, copy (no build), deploy hosting
-#   ./deploy.sh whereami     - Run the Where Am I tests, copy (no build), deploy hosting + rules
+#   ./deploy.sh disney       - Run the game tests, copy (no build), deploy hosting + rules
 #   ./deploy.sh gatekeeper   - Deploy Gatekeeper parent app + functions + firestore (igatekeeper.web.app)
 #   ./deploy.sh myreadingbuddy - Build portfolio, deploy hosting + firestore and storage rules
 #   ./deploy.sh mise         - Build portfolio, deploy hosting + firestore and storage rules
@@ -33,7 +33,8 @@
 #                       mirrored at /projects/recipebox
 #   apps/psx/         - PSX Station browser emulator (static) → served at /projects/psx
 #   apps/solra/       - Solra Trainer language practice tool (static) → served at /projects/solra
-#   apps/whereami/    - Where Am I photo hunt (static) → served at /projects/whereami
+#   apps/disney-trivia/ - Ticket Book trivia + Where Am I photo decks (static)
+#                       → served at /projects/disney-trivia
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
 # (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
@@ -52,7 +53,7 @@ CANITWO_DIR="$ROOT_DIR/apps/canitwo"
 RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
 PSX_DIR="$ROOT_DIR/apps/psx"
 SOLRA_DIR="$ROOT_DIR/apps/solra"
-WHEREAMI_DIR="$ROOT_DIR/apps/whereami"
+DISNEY_DIR="$ROOT_DIR/apps/disney-trivia"
 WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
@@ -166,21 +167,21 @@ build_solra() {
     success "solra copied"
 }
 
-build_whereami() {
+build_disney() {
     # No build step, but the game rules carry a dependency-free suite that
     # proves the peephole can never open past its ceiling. Cheap, so always
     # run it. The security rules have their own emulator suite, run by hand:
     # see functions/test/README.md.
-    log "Testing Where Am I..."
+    log "Testing the Disney games..."
     cd "$ROOT_DIR"
     node apps/portfolio/test/whereami.test.mjs || fail "Where Am I tests failed"
 
-    log "Copying whereami to portfolio/public/projects/whereami (no build step)..."
-    mkdir -p "$PORTFOLIO_DIR/public/projects/whereami"
-    rm -rf "$PORTFOLIO_DIR/public/projects/whereami"/*
-    cp -r "$WHEREAMI_DIR"/* "$PORTFOLIO_DIR/public/projects/whereami/"
-    rm -f "$PORTFOLIO_DIR/public/projects/whereami/README.md"
-    success "whereami copied"
+    log "Copying disney-trivia to portfolio/public/projects/disney-trivia (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/disney-trivia"
+    rm -rf "$PORTFOLIO_DIR/public/projects/disney-trivia"/*
+    cp -r "$DISNEY_DIR"/* "$PORTFOLIO_DIR/public/projects/disney-trivia/"
+    rm -f "$PORTFOLIO_DIR/public/projects/disney-trivia/README.md"
+    success "disney-trivia copied"
 }
 
 build_portfolio() {
@@ -224,7 +225,7 @@ deploy_hosting() {
     echo "  Recipe Box:     https://www.joshcocciardi.com/projects/recipebox"
     echo "  PSX Station:    https://www.joshcocciardi.com/projects/psx"
     echo "  Solra Trainer:  https://www.joshcocciardi.com/projects/solra"
-    echo "  Where Am I:     https://www.joshcocciardi.com/projects/whereami"
+    echo "  Disney games:   https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Swing Coach:    https://www.joshcocciardi.com/projects/swing-coach"
@@ -291,7 +292,7 @@ case "${1:-all}" in
         build_recipebox
         build_psx
         build_solra
-        build_whereami
+        build_disney
         build_workbook
         build_portfolio
         deploy_firestore
@@ -375,7 +376,7 @@ case "${1:-all}" in
         echo "========================================"
         echo "  Deploying Where Am I"
         echo "========================================"
-        build_whereami
+        build_disney
         build_portfolio
         deploy_firestore
         deploy_storage

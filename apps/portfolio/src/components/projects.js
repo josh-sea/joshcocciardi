@@ -112,17 +112,10 @@ const playthings = [
     link: "/projects/swing-coach",
   },
   {
-    title: "🔎 Where Am I?",
-    description:
-      "A private photo guessing game. Make a deck, hand out its password, and that pair is the only way in — there are no accounts and nothing is readable without it. Each round opens a small peephole onto a photo; three taps widen it, but never past a third of the picture. Then you drop a pin on the deck's own map to say where it was taken, and score on how close you got and how few looks it took.",
-    tech: ["JavaScript", "Firebase", "Firestore", "Cloud Storage", "PBKDF2", "CSS masks", "PWA"],
-    link: "/projects/whereami",
-  },
-  {
     title: "🎟️ Ticket Book: Disney Trivia",
     description:
-      "A book of 248 Disney trivia tickets on two shelves: films and characters, and a deep Walt Disney World section covering rides, shows, food and park lore. Deal the park questions by what they are about or by which park they live in. Tap a ticket to flip it, call yourself right or wrong, and tear through the book one at a time, with sound effects synthesised in the browser.",
-    tech: ["JavaScript", "CSS 3D transforms", "HTML5"],
+      "Two Disney games behind one switch. Trivia is a book of 248 tickets on two shelves, films and characters plus a deep Walt Disney World section, dealt by topic or by which park they live in; tap a ticket to flip it, with sound effects synthesised in the browser. Where Am I? is a private photo hunt: make a deck, hand out its password, and that pair is the only way in. Each round opens a peephole onto a photo that three taps widen, then you drop a pin on the deck's own map to say where it was taken.",
+    tech: ["JavaScript", "Firebase", "Firestore", "Cloud Storage", "PBKDF2", "Web Audio", "CSS masks"],
     link: "/projects/disney-trivia",
   },
   {
