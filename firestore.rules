@@ -734,6 +734,99 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── Where Am I: password-gated photo decks ──────────────────────────
+    // A deck is a private pile of photo rounds. You get into one by knowing
+    // its name and password, never by being added to a list.
+    //
+    // How the gate actually works: the client derives a key from the deck
+    // name and password (PBKDF2-SHA256, see apps/whereami/js/keys.js) and
+    // that key IS the document id of the pointer below. Knowing the pair
+    // finds the deck id; not knowing it leaves nothing to find, because
+    // `list` is denied on the pointers, so they cannot be paged through, and
+    // the deck itself is readable only by its members. The plaintext
+    // password never leaves the browser and is never stored.
+    //
+    // What this does NOT defend against: a member of a deck can open dev
+    // tools and read the answer pin off a round, because the answer has to
+    // reach the client to be drawn. The boundary enforced here is "are you
+    // in this deck", not "can a family member cheat at a family game". The
+    // fix, if that ever matters, is to judge guesses in a Cloud Function.
+    function waIsMember(deckId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/whereami_decks/$(deckId))
+        && request.auth.uid in get(/databases/$(database)/documents/whereami_decks/$(deckId)).data.memberUids;
+    }
+
+    // Pointer: derived key → deck id. `get` is open to any signed-in caller
+    // because the id is the secret; `list` must stay denied, or anyone could
+    // page the whole collection and walk into every deck without a password.
+    match /whereami_keys/{keyHash} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['deckId'])
+        && waIsMember(request.resource.data.deckId);
+      allow update: if false;
+      allow delete: if request.auth != null && waIsMember(resource.data.deckId);
+    }
+
+    match /whereami_decks/{deckId} {
+      // `resource == null` lets a get() on a deck that isn't there read as
+      // "not found" instead of a permission error, so a wrong password can
+      // be reported as a wrong password.
+      allow get: if request.auth != null
+        && (resource == null || request.auth.uid in resource.data.memberUids);
+      allow list: if false;
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid];
+      allow update: if request.auth != null && (
+        // Housekeeping by a member: ownership cannot move, and you cannot
+        // edit yourself out of the deck in the same breath.
+        (request.auth.uid in resource.data.memberUids
+          && request.auth.uid in request.resource.data.memberUids
+          && request.resource.data.ownerUid == resource.data.ownerUid)
+        ||
+        // Self-join. The only permitted change is adding yourself, and you
+        // must name the pointer you came in through — and it must point at
+        // THIS deck. Without that last clause any signed-in user could add
+        // themselves to a deck id they guessed. The client sends an
+        // arrayUnion, so it never needs to read the member list to join.
+        (request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['memberUids', 'joinedVia'])
+          && request.resource.data.memberUids.removeAll(resource.data.memberUids) == [request.auth.uid]
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && exists(/databases/$(database)/documents/whereami_keys/$(request.resource.data.joinedVia))
+          && get(/databases/$(database)/documents/whereami_keys/$(request.resource.data.joinedVia)).data.deckId == deckId)
+      );
+      allow delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+
+      // A round: one photo, and the point on the deck's map where it was
+      // taken. Members read and write; the author is recorded and cannot be
+      // forged at create time.
+      match /rounds/{roundId} {
+        allow read: if waIsMember(deckId);
+        allow create: if waIsMember(deckId)
+          && request.resource.data.createdByUid == request.auth.uid;
+        allow update, delete: if waIsMember(deckId);
+      }
+
+      // One scorecard per player, readable by the deck so there can be a
+      // leaderboard, writable only by the player it belongs to.
+      match /scores/{uid} {
+        allow read: if waIsMember(deckId);
+        allow write: if waIsMember(deckId) && request.auth.uid == uid;
+      }
+    }
+
+    // Which decks this browser has joined, so the app can list them again
+    // without the password. Private to the one uid; losing it costs nothing,
+    // because the password is the durable way back in.
+    match /whereami_users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Default authenticated access for other collections.
     // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, Seasonal Box HQ, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
@@ -757,6 +850,7 @@ service cloud.firestore {
         && !collection.matches('collector_.*')
         && !collection.matches('workbook_.*')
         && !collection.matches('sbox_.*')
+        && !collection.matches('whereami_.*')
         && collection != 'work_private';
     }
   }

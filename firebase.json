@@ -46,6 +46,10 @@
           "destination": "/projects/solra/index.html"
         },
         {
+          "source": "/projects/whereami/**",
+          "destination": "/projects/whereami/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -123,6 +127,24 @@
             {
               "key": "Cache-Control",
               "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/projects/whereami/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/projects/whereami/**",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow, noarchive"
             }
           ]
         }
