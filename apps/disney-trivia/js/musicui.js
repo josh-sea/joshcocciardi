@@ -114,6 +114,12 @@ export function init() {
   paint();
 }
 
+/* Start playing, for the offer that comes up on arrival. The tap that
+ * answered it is the gesture the browser wanted, so this is the one moment
+ * audio is allowed to begin without anybody opening the panel.
+ */
+export function start() { music.play(); }
+
 export function show(open) {
   const panel = $('music');
   const btn = $('music-btn');

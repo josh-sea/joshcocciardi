@@ -77,6 +77,10 @@
   text-overflow: ellipsis;
 }
 
+/* With one track there is nowhere to skip to, so say so rather than offering
+ * a button that does nothing. */
+#music button[disabled] { opacity: 0.35; cursor: default; }
+
 .music-skip {
   flex: 0 0 auto;
   display: grid;
@@ -164,4 +168,87 @@
 @media (max-width: 380px) {
   #music { padding: 10px; }
   .music-vol span { display: none; }
+}
+
+/* ── the offer ───────────────────────────────────────────────────────────
+ *
+ * Music that starts on its own is rude, and music nobody knows about may as
+ * well not be there. So the page asks once, and the answer is remembered.
+ * A <dialog> rather than a hand-rolled overlay: it gets the focus trap, the
+ * Esc key and the inert background for free.
+ */
+#offer {
+  width: min(380px, calc(100vw - 32px));
+  padding: 22px 20px 18px;
+  color: #EDE7F7;
+  background: linear-gradient(180deg, #31254F 0%, #251C3E 100%);
+  border: 1px solid rgba(232,179,60,0.3);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+#offer::backdrop { background: rgba(14,10,26,0.72); }
+#offer[open] { animation: offer-in 240ms ease-out; }
+@keyframes offer-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #offer[open] { animation: none; }
+}
+
+.offer-mark {
+  display: grid;
+  place-items: center;
+  width: 46px; height: 46px;
+  margin: 0 auto 14px;
+  color: var(--gold);
+  background: rgba(232,179,60,0.14);
+  border: 1px solid rgba(232,179,60,0.35);
+  border-radius: 50%;
+}
+.offer-mark svg { width: 22px; height: 22px; display: block; }
+
+#offer h2 {
+  font-family: var(--display);
+  font-size: 23px;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--gold);
+  margin: 0 0 8px;
+}
+#offer p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: #B6A9D4;
+}
+#offer .offer-small {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: #8E80AE;
+}
+
+.offer-buttons {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+}
+.offer-buttons button {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 13px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+#offer-yes {
+  color: #2B2140;
+  background: var(--gold);
+  border: 1px solid var(--stock-edge);
+}
+#offer-no {
+  color: #CFC3E8;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.16);
 }

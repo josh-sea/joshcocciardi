@@ -24,5 +24,9 @@
  * Formats: mp3 and m4a play everywhere; ogg does not play on iOS.
  */
 export const TRACKS = [
-  // { src: 'music/example.mp3', title: 'Example', credit: 'Artist — CC BY 4.0' },
+  {
+    src: 'music/disney-whimsey.mp3',
+    title: 'Disney Whimsey',
+    credit: 'Fantasyland area loop',
+  },
 ];
