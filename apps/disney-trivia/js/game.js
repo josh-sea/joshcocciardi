@@ -24,34 +24,17 @@ export const MAX_REVEAL = 0.5;
 // get a sliver instead of a clue.
 export const CENTRE_BAND = [0.22, 0.78];
 
-/* Deterministic PRNG (mulberry32). The peephole has to be identical for
- * everyone playing a shared round, so its position comes from the round's own
- * id rather than from Math.random: same round, same puzzle, no extra field to
- * store and no way for two players to get different difficulty.
+/* Where this playing's peephole sits, in normalised photo coordinates.
+ *
+ * Fresh every time a round is dealt, so the same photo can come back around
+ * and still be a puzzle. The cost is that two people playing one deck get
+ * different openings on the same photo, which makes a leaderboard a rough
+ * comparison rather than an exact one. For a family game that trade is worth
+ * it: a photo you have already solved is worth nothing on a second pass.
+ *
+ * `rand` is injectable so tests can pin it.
  */
-export function seedFrom(str) {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h >>> 0;
-}
-
-export function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function () {
-    a = (a + 0x6D2B79F5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// Where this round's peephole sits, in normalised photo coordinates.
-export function peepholeCentre(roundId) {
-  const rand = mulberry32(seedFrom(String(roundId)));
+export function freshCentre(rand = Math.random) {
   const [lo, hi] = CENTRE_BAND;
   return { cx: lo + rand() * (hi - lo), cy: lo + rand() * (hi - lo) };
 }
@@ -73,6 +56,48 @@ export function revealAt(tap, w, h) {
 }
 
 export const TAPS_ALLOWED = REVEAL_STEPS.length - 1;
+
+/* How to lay the photo out behind the peephole.
+ *
+ * The obvious rendering, fitting the whole photo into the box and masking a
+ * circle, is wrong on a phone: a 1400px-wide photo squeezed into a 343px box
+ * shrinks a 142px radius down to 35px, so the player studies a postage stamp
+ * surrounded by dead space.
+ *
+ * Instead the circle is pinned to a constant share of the box and the photo
+ * is scaled to suit. Early taps therefore come up zoomed in and later ones
+ * pull back, which reads as the picture opening up. What is revealed does not
+ * change at all: the mask is still a circle of radius `r` in photo pixels, so
+ * the fraction of the photo on show is exactly what REVEAL_STEPS says.
+ */
+export const PEEP_FILL = 0.84;   // share of the box's short side the circle spans
+
+export function peepLayout(centre, r, photoW, photoH, boxW, boxH, fill = PEEP_FILL) {
+  if (!(r > 0) || !(photoW > 0) || !(photoH > 0) || !(boxW > 0) || !(boxH > 0)) return null;
+  const radius = (Math.min(boxW, boxH) * fill) / 2;
+  const scale = radius / r;
+  const width = photoW * scale;
+  const height = photoH * scale;
+  const width_ = width, height_ = height;
+  return {
+    radius,
+    scale,
+    width: width_,
+    height: height_,
+    // Put the peephole's centre at the centre of the box.
+    left: boxW / 2 - centre.cx * width_,
+    top: boxH / 2 - centre.cy * height_,
+    /* Where to put the mask, in the displayed photo's own coordinates.
+     * This is not the middle of the photo and it is not the middle of the
+     * box either: the mask is painted on the photo, which is bigger than the
+     * box and offset behind it, so a mask at "50% 50%" lands at the photo's
+     * centre and drifts off screen. Returning it here keeps that arithmetic
+     * in one tested place. */
+    maskX: centre.cx * width_,
+    maskY: centre.cy * height_,
+  };
+}
+
 
 /* The area actually on screen, as a fraction of the photo.
  *

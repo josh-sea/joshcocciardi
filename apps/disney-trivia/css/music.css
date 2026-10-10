@@ -1,0 +1,254 @@
+/* The music player.
+ *
+ * Lives in the header, folded away until somebody asks for it. Everything in
+ * here is scoped under #music or .music-btn so it cannot reach the ticket
+ * book's own styles, which are inline in index.html.
+ */
+
+/* The masthead button. Borrows .sound's shape; only the state differs. */
+.music-btn .bars { display: none; }
+.music-btn[data-playing="yes"] { color: var(--gold); border-color: rgba(232,179,60,0.45); }
+.music-btn[data-playing="yes"] .note { display: none; }
+.music-btn[data-playing="yes"] .bars { display: block; }
+
+.masthead .controls {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* The panel */
+#music {
+  margin: 12px 0 0;
+  padding: 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+}
+#music[hidden] { display: none; }
+
+.music-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#music button {
+  font: inherit;
+  color: #CFC3E8;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.music-play {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 44px; height: 44px;
+  padding: 0;
+  border-radius: 50% !important;
+}
+.music-play svg { width: 17px; height: 17px; display: block; }
+.music-play .pause { display: none; }
+.music-play[data-playing="yes"] { color: var(--gold) !important; }
+.music-play[data-playing="yes"] .play { display: none; }
+.music-play[data-playing="yes"] .pause { display: block; }
+
+.music-now {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.music-now strong {
+  display: block;
+  font-size: 14px;
+  color: #EDE7F7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.music-now span {
+  display: block;
+  font-size: 11.5px;
+  color: #9D90BD;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* With one track there is nowhere to skip to, so say so rather than offering
+ * a button that does nothing. */
+#music button[disabled] { opacity: 0.35; cursor: default; }
+
+.music-skip {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  padding: 0;
+}
+.music-skip svg { width: 15px; height: 15px; display: block; }
+
+/* Volume. A native range, restyled only as far as it needs to be: the thumb
+ * stays the platform's own size so it is still easy to hit on a phone.
+ */
+.music-vol {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #9D90BD;
+}
+.music-vol input {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--gold);
+}
+
+/* The track list. Chips, so a long list wraps instead of scrolling. */
+.music-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+.music-list:empty { display: none; }
+.music-list button {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 11px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-list button[aria-current="true"] {
+  color: #2B2140 !important;
+  background: var(--stock) !important;
+  border-color: var(--stock-edge) !important;
+}
+
+/* "Play a file from this device". The input itself is replaced by the label,
+ * which is a real target: a bare file input is tiny and unstyleable.
+ */
+.music-file {
+  display: inline-block;
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #CFC3E8;
+  background: rgba(255,255,255,0.06);
+  border: 1px dashed rgba(255,255,255,0.22);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.music-file input {
+  position: absolute;
+  width: 1px; height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.music-file:focus-within {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.music-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9D90BD;
+}
+.music-note:empty { display: none; }
+.music-note a { color: #CFC3E8; }
+
+@media (max-width: 380px) {
+  #music { padding: 10px; }
+  .music-vol span { display: none; }
+}
+
+/* ── the offer ───────────────────────────────────────────────────────────
+ *
+ * Music that starts on its own is rude, and music nobody knows about may as
+ * well not be there. So the page asks once, and the answer is remembered.
+ * A <dialog> rather than a hand-rolled overlay: it gets the focus trap, the
+ * Esc key and the inert background for free.
+ */
+#offer {
+  width: min(380px, calc(100vw - 32px));
+  padding: 22px 20px 18px;
+  color: #EDE7F7;
+  background: linear-gradient(180deg, #31254F 0%, #251C3E 100%);
+  border: 1px solid rgba(232,179,60,0.3);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+#offer::backdrop { background: rgba(14,10,26,0.72); }
+#offer[open] { animation: offer-in 240ms ease-out; }
+@keyframes offer-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #offer[open] { animation: none; }
+}
+
+.offer-mark {
+  display: grid;
+  place-items: center;
+  width: 46px; height: 46px;
+  margin: 0 auto 14px;
+  color: var(--gold);
+  background: rgba(232,179,60,0.14);
+  border: 1px solid rgba(232,179,60,0.35);
+  border-radius: 50%;
+}
+.offer-mark svg { width: 22px; height: 22px; display: block; }
+
+#offer h2 {
+  font-family: var(--display);
+  font-size: 23px;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--gold);
+  margin: 0 0 8px;
+}
+#offer p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  text-align: center;
+  color: #B6A9D4;
+}
+#offer .offer-small {
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: #8E80AE;
+}
+
+.offer-buttons {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+}
+.offer-buttons button {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  padding: 13px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+#offer-yes {
+  color: #2B2140;
+  background: var(--gold);
+  border: 1px solid var(--stock-edge);
+}
+#offer-no {
+  color: #CFC3E8;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.16);
+}

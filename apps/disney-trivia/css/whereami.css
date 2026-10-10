@@ -33,7 +33,12 @@
   padding: 11px 8px; cursor: pointer;
 }
 .tab[aria-selected="true"], .mode[aria-selected="true"] { background: #EDE7F7; color: var(--ink); }
-.modes { margin-bottom: 18px; }
+/* "Add a photo" wrapped to two lines at 375px and left the row ragged. */
+.modes { margin-bottom: 14px; }
+.mode { white-space: nowrap; }
+@media (max-width: 400px) {
+  .tab, .mode { font-size: 13px; padding: 10px 4px; }
+}
 .pane { padding: 14px 12px 12px; display: grid; gap: 14px; }
 #wa form { display: grid; gap: 14px; }
 #wa label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: #CFC3E8; }
@@ -67,81 +72,97 @@
 .peep {
   position: relative;
   width: 100%;
-  /* Set from the photo's own dimensions in JS, so normalised coordinates map
-     one to one onto the box and the peephole maths stays exact. */
-  aspect-ratio: var(--ar, 4 / 3);
+  /* A square box rather than the photo's own shape. The photo is scaled and
+     offset behind it in JS so the revealed circle always lands in the middle
+     at a readable size, which a letterboxed fit never managed on a phone.
+     Capped against the viewport so the map still fits on screen with it. */
+  aspect-ratio: 1 / 1;
+  max-height: min(52vh, 420px);
+  margin-inline: auto;
   border-radius: 14px;
   overflow: hidden;
   background: #120D22;
-  box-shadow: 0 18px 40px rgba(0,0,0,.45);
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
 }
-/* `circle` only accepts a LENGTH for its radius — radial-gradient(circle 12%)
-   is invalid and the whole mask is dropped, which would quietly show the
-   entire photo. So this is an ellipse with a radius per axis, and because the
-   box is set to the photo's aspect ratio the two percentages describe a true
-   circle. Both are computed in JS from the same radius. */
+/* Size and position come from JS; the mask radius is a real length, so this
+   can use `circle` (percentages are only legal on `ellipse`). */
 .peep img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: fill;
-  -webkit-mask-image: radial-gradient(ellipse var(--rx, 12%) var(--ry, 16%) at var(--cx, 50%) var(--cy, 50%), #000 0 97%, transparent 100%);
-  mask-image: radial-gradient(ellipse var(--rx, 12%) var(--ry, 16%) at var(--cx, 50%) var(--cy, 50%), #000 0 97%, transparent 100%);
-  transition: -webkit-mask-image 420ms ease, mask-image 420ms ease;
+  position: absolute;
+  max-width: none;
+  -webkit-mask-image: radial-gradient(circle var(--r, 80px) at var(--mx, 50%) var(--my, 50%), #000 0 97%, transparent 100%);
+  mask-image: radial-gradient(circle var(--r, 80px) at var(--mx, 50%) var(--my, 50%), #000 0 97%, transparent 100%);
+  transition: -webkit-mask-image 380ms ease, mask-image 380ms ease,
+              width 380ms ease, height 380ms ease, left 380ms ease, top 380ms ease;
 }
-.peep.revealed img { -webkit-mask-image: none; mask-image: none; }
-.taps { display: flex; gap: 6px; justify-content: center; margin: 12px 0 14px; }
+.peep.revealed img {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.taps { display: flex; gap: 6px; justify-content: center; margin: 10px 0 12px; }
 .taps i { width: 28px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.16); }
 .taps i.spent { background: var(--gold); }
-.wa-prompt { font-size: 15px; font-weight: 700; color: #CFC3E8; margin: 18px 0 10px; }
+.wa-prompt { font-size: 15px; font-weight: 700; color: #CFC3E8; margin: 16px 0 9px; }
 
 /* the park picker: four thumbnails of the real park maps */
 .parks {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 7px;
+  margin-bottom: 12px;
 }
 .parks button {
+  position: relative;
   font: inherit;
   padding: 0;
   border: 2px solid rgba(255,255,255,0.14);
-  border-radius: 12px;
+  border-radius: 11px;
   background: #120D22;
-  color: #CFC3E8;
+  color: #EDE7F7;
   cursor: pointer;
   overflow: hidden;
   display: block;
-  text-align: left;
 }
 .parks button img {
   display: block;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  /* Wider than tall, and the label sits on top rather than below: together
+     that halves the height of the picker on a phone. */
+  aspect-ratio: 16 / 11;
   object-fit: cover;
-  /* The maps are bright; dim them until chosen so the selected one pops. */
-  filter: saturate(.55) brightness(.72);
+  filter: saturate(.5) brightness(.6);
   transition: filter 160ms ease;
 }
 .parks button span {
-  display: block;
-  padding: 7px 9px;
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 14px 8px 6px;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: .02em;
+  letter-spacing: .01em;
+  text-align: left;
+  background: linear-gradient(transparent, rgba(10,7,20,.92) 55%);
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
 }
-.parks button[aria-checked="true"] { border-color: var(--gold); color: var(--night-deep); }
-.parks button[aria-checked="true"] span { background: var(--gold); }
+.parks button[aria-checked="true"] { border-color: var(--gold); }
 .parks button[aria-checked="true"] img { filter: none; }
+.parks button[aria-checked="true"] span {
+  background: linear-gradient(transparent, var(--gold) 55%);
+  color: var(--night-deep);
+  text-shadow: none;
+}
 .parks button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 
 /* the map */
 .mapwrap {
   position: relative; width: 100%;
+  max-height: min(58vh, 520px);
   border-radius: 14px; overflow: hidden;
   background: #120D22; cursor: crosshair;
   touch-action: manipulation;
 }
 .mapwrap img { display: block; width: 100%; height: auto; }
+/* Centre a map that is taller than the cap rather than cropping its top. */
+.mapwrap { display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .pin {
   position: absolute;
   width: 18px; height: 18px; margin: -9px 0 0 -9px;

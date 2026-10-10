@@ -8,10 +8,13 @@
  */
 import {
   REVEAL_STEPS, MAX_REVEAL, CENTRE_BAND, TAPS_ALLOWED, MAX_POINTS, DEFAULT_TOLERANCE,
-  PARKS, PARK_ORDER, isPark,
-  seedFrom, mulberry32, peepholeCentre, radiusForFraction, revealAt,
+  PARKS, PARK_ORDER, isPark, PEEP_FILL,
+  freshCentre, peepLayout, radiusForFraction, revealAt,
   visibleFraction, pinDistance, judge, judgeGuess, scoreRound,
 } from '../../disney-trivia/js/game.js';
+import {
+  DEFAULT_VOLUME, clampVolume, trackLabel, nextIndex as nextTrack, orderFor,
+} from '../../disney-trivia/js/music.js';
 
 let failures = 0;
 const ok = (name, cond, extra = '') => {
@@ -43,10 +46,10 @@ console.log('\nthe ceiling holds');
   let worst = 0, worstAt = '';
   for (const [w, h] of shapes) {
     for (let i = 0; i < 400; i++) {
-      const { cx, cy } = peepholeCentre('round-' + i);
+      const { cx, cy } = freshCentre();
       const r = revealAt(TAPS_ALLOWED, w, h);
       const seen = visibleFraction(cx, cy, r, w, h);
-      if (seen > worst) { worst = seen; worstAt = `${w}x${h} round-${i}`; }
+      if (seen > worst) { worst = seen; worstAt = `${w}x${h}`; }
     }
   }
   ok(`worst case ${(worst * 100).toFixed(1)}% stays under ${MAX_REVEAL * 100}%`, worst <= MAX_REVEAL, worstAt);
@@ -64,45 +67,83 @@ console.log('\nthe ceiling holds');
   ok('integrator handles clipping', near(visibleFraction(0, 0, rr, 1000, 1000), 0.05, 1e-3));
 }
 
-console.log('\nsame round, same puzzle');
+console.log('\na fresh opening every time');
 {
-  const a = peepholeCentre('abc123'), b = peepholeCentre('abc123');
-  ok('a round id always yields the same centre', a.cx === b.cx && a.cy === b.cy);
-  ok('different rounds differ', peepholeCentre('abc123').cx !== peepholeCentre('abc124').cx);
+  // The peephole deliberately moves on every deal, so a photo already solved
+  // is still a puzzle when it comes round again.
+  const seen = new Set();
+  for (let i = 0; i < 500; i++) {
+    const c = freshCentre();
+    seen.add(`${c.cx.toFixed(4)},${c.cy.toFixed(4)}`);
+  }
+  ok('centres vary between plays', seen.size > 450, `${seen.size} distinct of 500`);
+
   const [lo, hi] = CENTRE_BAND;
   let inBand = true;
-  for (let i = 0; i < 2000; i++) {
-    const { cx, cy } = peepholeCentre('r' + i);
+  for (let i = 0; i < 5000; i++) {
+    const { cx, cy } = freshCentre();
     if (cx < lo || cx > hi || cy < lo || cy > hi) inBand = false;
   }
-  ok('centres stay inside the band', inBand);
-  ok('seedFrom is stable', seedFrom('hello') === seedFrom('hello'));
-  const rand = mulberry32(42);
-  const vals = [rand(), rand(), rand()];
-  ok('prng stays in [0,1)', vals.every(v => v >= 0 && v < 1));
-  ok('prng is not constant', new Set(vals).size === 3);
+  ok('and still never leave the band', inBand);
+
+  // Injectable randomness, so the extremes can be pinned rather than hoped for.
+  ok('rand=0 lands on the near edge of the band', near(freshCentre(() => 0).cx, lo));
+  const hiC = freshCentre(() => 0.9999999);
+  ok('rand~1 lands on the far edge of the band', hiC.cx > hi - 1e-5 && hiC.cx <= hi);
 }
 
-console.log('\njudging a pin');
+console.log('\nthe patch is shown at a useful size');
 {
-  const ans = { x: 0.5, y: 0.5 };
-  // On a 1000x1000 map, tolerance 0.08 is 80px.
-  ok('dead centre is a bullseye', judge({ x: 0.5, y: 0.5 }, ans, 1000, 1000).bullseye);
-  ok('just inside counts', judge({ x: 0.57, y: 0.5 }, ans, 1000, 1000).within);
-  ok('just outside does not', !judge({ x: 0.59, y: 0.5 }, ans, 1000, 1000).within);
+  // The bug this replaces: fitting a whole photo into a phone-width box
+  // shrank the revealed circle to about a quarter of its useful size.
+  const boxW = 343, boxH = 343;
+  const photoW = 1402, photoH = 1500;
+  const centre = { cx: 0.5, cy: 0.5 };
 
-  // The aspect-ratio trap: on a 2000x500 map the same normalised sideways
-  // step is four times the distance of the same step vertically, so a
-  // normalised-only distance would call both of these the same.
-  const wide = judge({ x: 0.55, y: 0.5 }, ans, 2000, 500);
-  const tall = judge({ x: 0.5, y: 0.55 }, ans, 2000, 500);
-  ok('sideways on a wide map is 100px', near(wide.distance, 100, 1e-9));
-  ok('vertical on a wide map is 25px', near(tall.distance, 25, 1e-9));
-  ok('the two are judged differently', wide.within !== tall.within);
-  ok('tolerance follows the shorter side', near(pinDistance({ x: 0.5, y: 0.55 }, ans, 2000, 500), 25));
-  ok('"off" means the same on any map',
-    near(judge({ x: 0.6, y: 0.5 }, ans, 1000, 1000).off, 0.1, 1e-9));
-  ok('default tolerance is a tenth-ish of the map', DEFAULT_TOLERANCE > 0 && DEFAULT_TOLERANCE < 0.25);
+  for (let tap = 0; tap <= TAPS_ALLOWED; tap++) {
+    const r = revealAt(tap, photoW, photoH);
+    const L = peepLayout(centre, r, photoW, photoH, boxW, boxH);
+    ok(`tap ${tap}: circle spans ${(PEEP_FILL * 100).toFixed(0)}% of the box`,
+      near(L.radius * 2, boxW * PEEP_FILL, 1e-9));
+    ok(`tap ${tap}: the photo still covers the box`,
+      L.width >= boxW - 1e-9 && L.height >= boxH - 1e-9,
+      `${Math.round(L.width)}x${Math.round(L.height)} vs ${boxW}x${boxH}`);
+  }
+
+  // Early taps are zoomed in, later ones pull back. That ordering is the
+  // feel of the thing, so it is worth asserting.
+  const scales = [0, 1, 2, 3].map(t => peepLayout(centre, revealAt(t, photoW, photoH), photoW, photoH, boxW, boxH).scale);
+  ok('each tap pulls further back', scales.every((v, i) => i === 0 || v < scales[i - 1]),
+    scales.map(v => v.toFixed(2)).join(' > '));
+
+  // The peephole centre must land in the middle of the box, whatever corner
+  // of the photo it is in.
+  for (const c of [{ cx: 0.22, cy: 0.22 }, { cx: 0.78, cy: 0.78 }, { cx: 0.5, cy: 0.3 }]) {
+    const r = revealAt(1, photoW, photoH);
+    const L = peepLayout(c, r, photoW, photoH, boxW, boxH);
+    ok(`centre (${c.cx},${c.cy}) sits at the box centre`,
+      near(L.left + c.cx * L.width, boxW / 2, 1e-9) && near(L.top + c.cy * L.height, boxH / 2, 1e-9));
+
+    /* The mask is painted on the photo, not on the box, and the photo is
+     * bigger than the box and offset behind it. A mask at "50% 50%" therefore
+     * lands at the photo's centre and slides off screen, which is exactly the
+     * bug this field exists to stop. maskX/maskY must put it at the box
+     * centre once the photo's own offset is accounted for. */
+    ok(`mask for (${c.cx},${c.cy}) resolves to the box centre`,
+      near(L.left + L.maskX, boxW / 2, 1e-9) && near(L.top + L.maskY, boxH / 2, 1e-9),
+      `mask lands at ${Math.round(L.left + L.maskX)},${Math.round(L.top + L.maskY)} want ${boxW/2},${boxH/2}`);
+    ok(`mask for (${c.cx},${c.cy}) is not simply the photo's middle`,
+      c.cx === 0.5 || !near(L.maskX, L.width / 2, 1));
+  }
+
+  // A wide photo and a tall one both work.
+  for (const [w, h] of [[2000, 1000], [1000, 2000], [1000, 1000]]) {
+    const L = peepLayout(centre, revealAt(2, w, h), w, h, boxW, boxH);
+    ok(`a ${w}x${h} photo still covers the box`, L.width >= boxW - 1e-9 && L.height >= boxH - 1e-9);
+  }
+
+  ok('nonsense input returns nothing rather than NaN', peepLayout(centre, 0, 1, 1, 1, 1) === null);
+  ok('a zero-width box returns nothing', peepLayout(centre, 10, 100, 100, 0, 100) === null);
 }
 
 console.log('\nthe parks');
@@ -160,6 +201,43 @@ console.log('\nscoring');
   ok('taps cost points', scoreRound(close, 0) > scoreRound(close, 1));
   ok('scores never go negative', scoreRound(close, 99) >= 0);
   ok('spending every tap still scores', scoreRound(close, TAPS_ALLOWED) > 0);
+}
+
+console.log('\nbackground music');
+{
+  // Volume comes from a slider, from storage, and from whatever the last
+  // release wrote. Anything unusable must land on the default, because NaN
+  // silences the element with no way back.
+  ok('a sane volume passes through', clampVolume(0.4) === 0.4);
+  ok('too loud is clamped', clampVolume(5) === 1);
+  ok('negative is clamped', clampVolume(-2) === 0);
+  ok('a numeric string works, since storage returns strings', clampVolume('0.25') === 0.25);
+  ok('junk falls back to the default', clampVolume('loud') === DEFAULT_VOLUME);
+  ok('null falls back to the default', clampVolume(null) === DEFAULT_VOLUME);
+  ok('undefined falls back to the default', clampVolume(undefined) === DEFAULT_VOLUME);
+  ok('an empty string falls back too', clampVolume('') === DEFAULT_VOLUME);
+  ok('but a real zero is still zero', clampVolume(0) === 0 && clampVolume('0') === 0);
+  ok('NaN never escapes', !Number.isNaN(clampVolume(NaN)));
+  ok('the default is background, not foreground', DEFAULT_VOLUME > 0 && DEFAULT_VOLUME < 0.6);
+
+  ok('a file name becomes a title', trackLabel('music/main-street_loop.mp3') === 'Main street loop');
+  ok('a bare name works', trackLabel('parade.m4a') === 'Parade');
+  ok('nested paths work', trackLabel('/a/b/c/quiet-night.mp3') === 'Quiet night');
+  ok('a nameless file still gets a label', trackLabel('') === 'Untitled');
+  ok('so does rubbish', trackLabel(null) === 'Untitled');
+
+  ok('the playlist wraps', nextTrack(2, 3) === 0);
+  ok('and steps', nextTrack(0, 3) === 1);
+  ok('from nowhere it starts at the beginning', nextTrack(-1, 3) === 0);
+  ok('an empty playlist has nowhere to go', nextTrack(0, 0) === -1);
+
+  const order = orderFor(6, false);
+  ok('unshuffled order is in order', order.join() === '0,1,2,3,4,5');
+  const shuffled = orderFor(6, true, (() => { let i = 0; const seq = [0.9, 0.1, 0.8, 0.2, 0.7]; return () => seq[i++ % seq.length]; })());
+  ok('a shuffle keeps every track exactly once',
+    [...shuffled].sort().join() === '0,1,2,3,4,5', shuffled.join());
+  ok('an empty list shuffles to nothing', orderFor(0).length === 0);
+  ok('a one-track list is itself', orderFor(1).join() === '0');
 }
 
 console.log(failures ? `\n${failures} failing\n` : '\nall passing\n');
