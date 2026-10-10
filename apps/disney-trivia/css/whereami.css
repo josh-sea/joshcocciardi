@@ -6,6 +6,17 @@
  * is scoped to markup that only this mode renders.
  */
 
+/* The hidden attribute only sets display:none at user-agent-stylesheet
+ * strength, so ANY display rule in this file outranks it. That is how the
+ * "Make one" form ended up rendering underneath "Open a deck": #form-make is
+ * both .pane and `#wa form`, and each of those sets display:grid.
+ *
+ * This one line settles it for everything the photo game hides, now and
+ * later, rather than leaving the next `display:` someone adds to quietly
+ * un-hide something. (The ticket book handles its own with .cats[hidden].)
+ */
+#wa [hidden] { display: none !important; }
+
 /* door: open a deck, or make one */
 .card {
   background: rgba(255,255,255,0.05);
