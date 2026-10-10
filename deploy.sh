@@ -229,6 +229,7 @@ deploy_hosting() {
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Swing Coach:    https://www.joshcocciardi.com/projects/swing-coach"
+    echo "  Boulder Smash:  https://www.joshcocciardi.com/projects/boulder-smash"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
     echo "  Reading Buddy:  https://www.joshcocciardi.com/tools/myreadingbuddy"
     echo "  Tools:          https://www.joshcocciardi.com/tools"

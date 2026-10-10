@@ -4,7 +4,6 @@ import { BrowserRouter as Router, Route, Routes, Link, Outlet, Navigate } from "
 import About from "./components/about";
 import Projects from "./components/projects";
 import Contact from "./components/contact";
-import HulkGame from "./components/HulkGame";
 import DoomLifeGame from "./components/DoomLifeGame";
 import ExpenseAnalyzer from "./components/ExpenseAnalyzer";
 import ToolsIndex from "./tools/ToolsIndex";
@@ -40,7 +39,6 @@ const App = () => {
           <Route path="/" element={<About />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/contact" element={<Contact />} />
-          <Route path="/hulk-game" element={<HulkGame />} />
           <Route path="/doom-life-game" element={<DoomLifeGame />} />
           <Route path="/expense-analyzer" element={<ExpenseAnalyzer />} />
           <Route path="/tools" element={<ToolsIndex />} />

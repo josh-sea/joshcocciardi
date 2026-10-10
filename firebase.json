@@ -168,6 +168,11 @@
       ],
       "redirects": [
         {
+          "source": "/hulk-game",
+          "destination": "/projects/boulder-smash/",
+          "type": 301
+        },
+        {
           "source": "/projects/whereami{,/**}",
           "destination": "/projects/disney-trivia/#whereami",
           "type": 301
