@@ -120,13 +120,11 @@ export async function forget(deckId) {
  * if you forget the password there is no reset, because there is nothing on
  * the server that knows it.
  */
-export async function createDeck({ name, password, mapFile, tolerance }) {
+export async function createDeck({ name, password, tolerance }) {
   const key = await deriveKey(name, password);
   const existing = await getDoc(keyRef(key));
   if (existing.exists()) throw new Error('A deck already uses that name and password. Pick a different password.');
 
-  // The deck has to exist before its photos can be written, because the
-  // Storage rules check membership against it.
   const made = await addDoc(collection(db, 'whereami_decks'), {
     name: String(name).trim(),
     nameKey: normaliseName(name),
@@ -136,14 +134,9 @@ export async function createDeck({ name, password, mapFile, tolerance }) {
     createdAt: serverTimestamp(),
   });
 
-  let map = null;
-  if (mapFile) {
-    map = await putImage(`whereami/${made.id}/map.jpg`, mapFile);
-    await updateDoc(deckRef(made.id), { map });
-  }
   await setDoc(keyRef(key), { deckId: made.id });
   await remember(made.id, String(name).trim());
-  return { id: made.id, name: String(name).trim(), map };
+  return { id: made.id, name: String(name).trim() };
 }
 
 /* Open a deck by name and password. A wrong pair is indistinguishable from a
@@ -181,26 +174,30 @@ export async function getDeck(deckId) {
   return { id: deckId, ...snap.data() };
 }
 
-export async function setDeckMap(deckId, mapFile) {
-  const map = await putImage(`whereami/${deckId}/map.jpg`, mapFile);
-  await updateDoc(deckRef(deckId), { map });
-  return map;
-}
-
 export async function setTolerance(deckId, tolerance) {
   await updateDoc(deckRef(deckId), { tolerance });
 }
 
 /* ── rounds ────────────────────────────────────────────────────────────── */
 
-export async function addRound(deckId, { photoFile, answer, label }) {
+/* A round is a photo, the park it was taken in, and the point on that park's
+ * map. `answer` carries the park as well as the coordinates so a guess can be
+ * judged in one piece, and so a round stays self-describing if the deck's
+ * settings ever change underneath it.
+ */
+export async function addRound(deckId, { photoFile, park, answer, label }) {
   const id = doc(collection(db, 'whereami_decks', deckId, 'rounds')).id;
   const photo = await putImage(`whereami/${deckId}/rounds/${id}.jpg`, photoFile);
-  await setDoc(doc(db, 'whereami_decks', deckId, 'rounds', id), {
-    photo, answer, label: String(label || '').trim(),
-    createdByUid: uid, createdAt: serverTimestamp(),
-  });
-  return { id, photo, answer, label };
+  const round = {
+    photo,
+    park,
+    answer: { park, x: answer.x, y: answer.y },
+    label: String(label || '').trim(),
+    createdByUid: uid,
+    createdAt: serverTimestamp(),
+  };
+  await setDoc(doc(db, 'whereami_decks', deckId, 'rounds', id), round);
+  return { id, ...round };
 }
 
 export async function listRounds(deckId) {

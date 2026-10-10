@@ -138,6 +138,19 @@
               "value": "no-cache"
             }
           ]
+        },
+        {
+          "source": "/projects/disney-trivia/maps/**",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, noimageindex"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=604800"
+            }
+          ]
         }
       ],
       "redirects": [

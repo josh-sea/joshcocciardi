@@ -94,6 +94,46 @@
 .taps i.spent { background: var(--gold); }
 .wa-prompt { font-size: 15px; font-weight: 700; color: #CFC3E8; margin: 18px 0 10px; }
 
+/* the park picker: four thumbnails of the real park maps */
+.parks {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.parks button {
+  font: inherit;
+  padding: 0;
+  border: 2px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  background: #120D22;
+  color: #CFC3E8;
+  cursor: pointer;
+  overflow: hidden;
+  display: block;
+  text-align: left;
+}
+.parks button img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  /* The maps are bright; dim them until chosen so the selected one pops. */
+  filter: saturate(.55) brightness(.72);
+  transition: filter 160ms ease;
+}
+.parks button span {
+  display: block;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.parks button[aria-checked="true"] { border-color: var(--gold); color: var(--night-deep); }
+.parks button[aria-checked="true"] span { background: var(--gold); }
+.parks button[aria-checked="true"] img { filter: none; }
+.parks button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
 /* the map */
 .mapwrap {
   position: relative; width: 100%;
