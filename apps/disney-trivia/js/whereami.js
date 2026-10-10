@@ -10,7 +10,8 @@
  * password derivation in keys.js. This file only decides what is on screen.
  */
 import {
-  TAPS_ALLOWED, DEFAULT_TOLERANCE, peepholeCentre, revealAt, judge, scoreRound,
+  TAPS_ALLOWED, DEFAULT_TOLERANCE, PARKS, PARK_ORDER, isPark,
+  peepholeCentre, revealAt, judgeGuess, scoreRound,
 } from './game.js';
 
 const $ = (id) => document.getElementById(id);
@@ -22,8 +23,8 @@ let deck = null;
 let rounds = [], queue = [], round = null;
 let taps = 0, guess = null, settled = false;
 let points = 0, played = 0;
-let mapURL = null;
-let answerDraft = null;
+let pickedPark = null;     // the park being guessed this round
+let answerDraft = null;    // {park, x, y} being set on the Add tab
 let started = false;
 
 const DOOR_BLURB = 'Open a deck with its name and password. Nobody can see a deck without both.';
@@ -52,6 +53,28 @@ export async function init() {
 // Called by the page when you switch away to the trivia half and back.
 export function onShow() {
   blurb(deck ? deck.name : DOOR_BLURB);
+}
+
+/* ── the park picker ───────────────────────────────────────────────────────
+ *
+ * The four maps ship with the app, so this is just a radio group of
+ * thumbnails. It is used twice: to say which park a photo was taken in, and
+ * to guess which park a photo is in. Thumbnails are ~25KB each; the full map
+ * is only fetched once a park is chosen.
+ */
+function drawParks(box, selected, onPick) {
+  box.innerHTML = '';
+  PARK_ORDER.forEach(key => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(key === selected));
+    b.innerHTML =
+      `<img src="maps/${key}-thumb.webp" alt="" loading="lazy">` +
+      `<span>${PARKS[key].name}</span>`;
+    b.onclick = () => onPick(key);
+    box.appendChild(b);
+  });
 }
 
 /* ── door ──────────────────────────────────────────────────────────────── */
@@ -90,15 +113,13 @@ async function enterDeck(d) {
   show($('door'), false);
   show($('deck'), true);
   blurb(d.name);
-  mapURL = d.map ? await S.urlFor(d.map.path) : null;
-  $('map-img').src = mapURL || '';
-  $('add-map-img').src = mapURL || '';
   await refreshRounds();
   pickMode('play');
 }
 
 function leaveDeck() {
   deck = null; rounds = []; queue = []; round = null; points = 0; played = 0;
+  pickedPark = null; answerDraft = null;
   show($('deck'), false);
   show($('door'), true);
   blurb(DOOR_BLURB);
@@ -113,16 +134,21 @@ function pickMode(which) {
     show($(pane), on);
   }
   if (which === 'board') drawBoard();
-  if (which === 'add') drawRoundList();
+  if (which === 'add') { if (!addPark) resetAddForm(); drawRoundList(); }
 }
+
+const playable = (r) => r && r.answer && isPark(r.answer.park);
 
 async function refreshRounds() {
   rounds = await S.listRounds(deck.id);
-  queue = rounds.slice();
-  show($('play-empty'), rounds.length === 0);
+  // Rounds made before the built-in park maps pinned against a map that is no
+  // longer there. They stay listed on the Add tab so they can be removed, but
+  // they cannot be dealt.
+  queue = rounds.filter(playable);
+  show($('play-empty'), queue.length === 0);
   show($('play-live'), false);
   show($('play-done'), false);
-  if (rounds.length) nextRound();
+  if (queue.length) nextRound();
 }
 
 /* ── a round ───────────────────────────────────────────────────────────── */
@@ -138,13 +164,13 @@ function nextRound() {
     show($('play-done'), true);
     $('play-done').appendChild(Object.assign(document.createElement('button'), {
       className: 'btn ghost', textContent: 'Play again',
-      onclick: () => { queue = rounds.slice(); points = 0; played = 0; nextRound(); },
+      onclick: () => { queue = rounds.filter(playable); points = 0; played = 0; nextRound(); },
     }));
     saveMyScore();
     return;
   }
   round = queue.splice(Math.floor(Math.random() * queue.length), 1)[0];
-  taps = 0; guess = null; settled = false;
+  taps = 0; guess = null; settled = false; pickedPark = null;
 
   show($('play-live'), true);
   show($('verdict'), false);
@@ -155,7 +181,9 @@ function nextRound() {
   $('peep').classList.remove('revealed');
   $('widen').disabled = false;
   $('lockin').disabled = true;
-  $('play-prompt').textContent = 'Where was this taken? Drop a pin on the map.';
+  $('play-prompt').textContent = 'Which park is this?';
+  show($('mapwrap'), false);
+  drawParks($('park-pick'), null, choosePark);
 
   S.urlFor(round.photo.path).then(url => { $('peep-img').src = url; });
   paintPeep();
@@ -190,6 +218,21 @@ function paintTaps() {
   $('widen').disabled = left === 0 || settled;
 }
 
+/* Pick a park: redraw the radio group, swap in that park's map, and clear any
+ * pin already dropped, because a point on one map means nothing on another.
+ */
+function choosePark(key) {
+  if (settled) return;
+  pickedPark = key;
+  guess = null;
+  drawParks($('park-pick'), key, choosePark);
+  $('map-img').src = `maps/${key}.webp`;
+  show($('mapwrap'), true);
+  show($('pin-guess'), false);
+  $('play-prompt').textContent = `Where in ${PARKS[key].name}? Tap the map.`;
+  $('lockin').disabled = true;
+}
+
 // A tap anywhere on the map is a guess, in normalised coordinates so it means
 // the same thing at any display size.
 function mapPoint(e, el) {
@@ -207,10 +250,9 @@ function placePin(el, pt) {
   show(el, true);
 }
 
-function drawRing(ring, box, at) {
-  const mw = (deck.map && deck.map.w) || 1000;
-  const mh = (deck.map && deck.map.h) || 1000;
-  const tol = deck.tolerance || DEFAULT_TOLERANCE;
+function drawRing(ring, box, at, parkKey) {
+  const { w: mw, h: mh } = PARKS[parkKey];
+  const tol = (deck && deck.tolerance) || DEFAULT_TOLERANCE;
   const radiusPx = tol * Math.min(mw, mh) / mw * box.width;
   ring.style.left = (at.x * 100) + '%';
   ring.style.top = (at.y * 100) + '%';
@@ -220,33 +262,46 @@ function drawRing(ring, box, at) {
 }
 
 function lockIn() {
-  if (!guess || settled) return;
+  if (!guess || !pickedPark || settled) return;
   settled = true;
   $('lockin').disabled = true;
   $('widen').disabled = true;
 
-  const mw = (deck.map && deck.map.w) || 1000;
-  const mh = (deck.map && deck.map.h) || 1000;
-  const tol = deck.tolerance || DEFAULT_TOLERANCE;
-  const verdict = judge(guess, round.answer, mw, mh, tol);
+  const answer = round.answer;
+  const verdict = judgeGuess({ park: pickedPark, ...guess }, answer,
+    (deck && deck.tolerance) || DEFAULT_TOLERANCE);
   const got = scoreRound(verdict, taps);
   points += got;
   played += 1;
 
-  placePin($('pin-answer'), round.answer);
-  drawRing($('ring'), $('mapwrap').getBoundingClientRect(), round.answer);
+  // Show the answer on the park it was actually in, which may not be the one
+  // being looked at. Swapping the map is the clearest way to say "wrong park".
+  drawParks($('park-pick'), answer.park, () => {});
+  if (pickedPark !== answer.park) {
+    $('map-img').src = `maps/${answer.park}.webp`;
+    show($('pin-guess'), false);
+  }
+  show($('mapwrap'), true);
+  placePin($('pin-answer'), answer);
+  drawRing($('ring'), $('mapwrap').getBoundingClientRect(), answer, answer.park);
   $('peep').classList.add('revealed');
 
-  const off = Math.round(verdict.off * 100);
   const v = $('verdict');
   v.className = 'wa-verdict ' + (verdict.within ? 'hit' : 'miss');
+  const head = verdict.bullseye ? 'Nailed it'
+    : verdict.within ? 'Close enough'
+    : verdict.rightPark ? 'Right park, wrong spot'
+    : 'Wrong park';
+  const detail = verdict.rightPark
+    ? `you were ${Math.round(verdict.off * 100)}% of the map away`
+    : `it was ${PARKS[answer.park].name}`;
   v.innerHTML =
-    `<h3>${verdict.bullseye ? 'Nailed it' : verdict.within ? 'Close enough' : 'Not quite'}</h3>` +
-    `<p>${verdict.within ? `+${got} points` : 'No points'} · you were ${off}% of the map away` +
+    `<h3>${head}</h3>` +
+    `<p>${verdict.within ? `+${got} points` : 'No points'} · ${detail}` +
     (round.label ? ` · <strong>${esc(round.label)}</strong>` : '') + '</p>';
   show(v, true);
   show($('nextround'), true);
-  $('play-prompt').textContent = 'The green pin is the real spot.';
+  $('play-prompt').textContent = `The green pin is the real spot, in ${PARKS[answer.park].name}.`;
   paintTaps();
 }
 
@@ -257,6 +312,35 @@ async function saveMyScore() {
 }
 
 /* ── adding a round ────────────────────────────────────────────────────── */
+
+let addPark = null;
+
+function refreshAddSubmit() {
+  $('add-submit').disabled = !addPark || !answerDraft || !$('add-photo').files[0];
+}
+
+function chooseAddPark(key) {
+  addPark = key;
+  answerDraft = null;
+  drawParks($('add-park-pick'), key, chooseAddPark);
+  $('add-map-img').src = `maps/${key}.webp`;
+  show($('add-map-prompt'), true);
+  show($('add-mapwrap'), true);
+  show($('add-pin'), false);
+  show($('add-ring'), false);
+  refreshAddSubmit();
+}
+
+function resetAddForm() {
+  addPark = null;
+  answerDraft = null;
+  drawParks($('add-park-pick'), null, chooseAddPark);
+  show($('add-map-prompt'), false);
+  show($('add-mapwrap'), false);
+  show($('add-pin'), false);
+  show($('add-ring'), false);
+  refreshAddSubmit();
+}
 
 async function drawRoundList() {
   const box = $('add-list');
@@ -270,8 +354,9 @@ async function drawRoundList() {
     S.urlFor(r.photo.path).then(u => { img.src = u; });
     const who = document.createElement('div');
     who.className = 'who';
+    const where = playable(r) ? PARKS[r.answer.park].name : 'added before the park maps — remove and re-add';
     who.innerHTML = esc(r.label || 'Untitled') +
-      `<div class="sub2">${r.createdByUid === S.currentUid() ? 'added by you' : 'added by someone in the deck'}</div>`;
+      `<div class="sub2">${esc(where)} · ${r.createdByUid === S.currentUid() ? 'added by you' : 'added by someone in the deck'}</div>`;
     const del = document.createElement('button');
     del.textContent = 'Remove';
     del.onclick = async () => {
@@ -331,14 +416,12 @@ function wire() {
     const { passwordProblem } = await import('./keys.js');
     const problem = passwordProblem($('make-pass').value);
     if (problem) { say($('make-note'), problem, 'bad'); return; }
-    const file = $('make-map').files[0];
-    if (!file) { say($('make-note'), 'Pick a map image first.', 'bad'); return; }
     const btn = e.target.querySelector('button');
     btn.disabled = true;
     say($('make-note'), 'Creating…');
     try {
       const made = await S.createDeck({
-        name: $('make-name').value, password: $('make-pass').value, mapFile: file,
+        name: $('make-name').value, password: $('make-pass').value,
       });
       $('make-pass').value = '';
       await enterDeck(await S.getDeck(made.id));
@@ -369,28 +452,30 @@ function wire() {
   $('nextround').onclick = nextRound;
 
   $('add-mapwrap').onclick = (e) => {
-    answerDraft = mapPoint(e, $('add-mapwrap'));
+    if (!addPark) return;
+    const pt = mapPoint(e, $('add-mapwrap'));
+    answerDraft = { park: addPark, x: pt.x, y: pt.y };
     placePin($('add-pin'), answerDraft);
-    drawRing($('add-ring'), $('add-mapwrap').getBoundingClientRect(), answerDraft);
-    $('add-submit').disabled = !$('add-photo').files[0];
+    drawRing($('add-ring'), $('add-mapwrap').getBoundingClientRect(), answerDraft, addPark);
+    refreshAddSubmit();
   };
-  $('add-photo').onchange = () => {
-    $('add-submit').disabled = !answerDraft || !$('add-photo').files[0];
-  };
+  $('add-photo').onchange = refreshAddSubmit;
 
   $('form-add').onsubmit = async (e) => {
     e.preventDefault();
-    if (!answerDraft) { say($('add-note'), 'Tap the map to mark where it was taken.', 'bad'); return; }
+    if (!addPark) { say($('add-note'), 'Pick the park it was taken in.', 'bad'); return; }
+    if (!answerDraft) { say($('add-note'), 'Tap the map to mark the spot.', 'bad'); return; }
     $('add-submit').disabled = true;
     say($('add-note'), 'Uploading…');
     try {
       await S.addRound(deck.id, {
-        photoFile: $('add-photo').files[0], answer: answerDraft, label: $('add-label').value,
+        photoFile: $('add-photo').files[0],
+        park: addPark,
+        answer: answerDraft,
+        label: $('add-label').value,
       });
       $('form-add').reset();
-      answerDraft = null;
-      show($('add-pin'), false);
-      show($('add-ring'), false);
+      resetAddForm();
       say($('add-note'), 'Added.', 'good');
       await refreshRounds();
       drawRoundList();

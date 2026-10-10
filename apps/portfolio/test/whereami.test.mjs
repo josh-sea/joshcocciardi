@@ -8,8 +8,9 @@
  */
 import {
   REVEAL_STEPS, MAX_REVEAL, CENTRE_BAND, TAPS_ALLOWED, MAX_POINTS, DEFAULT_TOLERANCE,
+  PARKS, PARK_ORDER, isPark,
   seedFrom, mulberry32, peepholeCentre, radiusForFraction, revealAt,
-  visibleFraction, pinDistance, judge, scoreRound,
+  visibleFraction, pinDistance, judge, judgeGuess, scoreRound,
 } from '../../disney-trivia/js/game.js';
 
 let failures = 0;
@@ -104,11 +105,55 @@ console.log('\njudging a pin');
   ok('default tolerance is a tenth-ish of the map', DEFAULT_TOLERANCE > 0 && DEFAULT_TOLERANCE < 0.25);
 }
 
+console.log('\nthe parks');
+{
+  ok('four parks ship with the app', PARK_ORDER.length === 4);
+  ok('every ordered key has a map', PARK_ORDER.every(k => PARKS[k] && PARKS[k].w > 0 && PARKS[k].h > 0));
+  ok('every park has a name', PARK_ORDER.every(k => typeof PARKS[k].name === 'string' && PARKS[k].name));
+  ok('isPark accepts a real one', isPark('mk'));
+  ok('isPark rejects nonsense', !isPark('xx') && !isPark('toString'));
+  // The four maps are genuinely different shapes, which is the whole reason
+  // distance is measured per park rather than in normalised units.
+  const shapes = new Set(PARK_ORDER.map(k => (PARKS[k].w / PARKS[k].h).toFixed(3)));
+  ok('the maps are not all the same shape', shapes.size > 1);
+}
+
+console.log('\nguessing the park as well as the spot');
+{
+  const answer = { park: 'mk', x: 0.5, y: 0.5 };
+  ok('right park, dead on',       judgeGuess({ park: 'mk', x: 0.5,  y: 0.5 }, answer).bullseye);
+  ok('right park, close enough',  judgeGuess({ park: 'mk', x: 0.54, y: 0.5 }, answer).within);
+  const nearMiss = judgeGuess({ park: 'mk', x: 0.85, y: 0.5 }, answer);
+  ok('right park, wrong corner is still a miss', nearMiss.rightPark && !nearMiss.within);
+
+  // The same coordinates in the wrong park must never score, however close
+  // the numbers happen to look.
+  const wrongPark = judgeGuess({ park: 'ak', x: 0.5, y: 0.5 }, answer);
+  ok('identical coordinates in the wrong park miss', !wrongPark.within);
+  ok('wrong park is flagged as such', !wrongPark.rightPark);
+  ok('wrong park reports no distance', wrongPark.distance === null,
+    'a distance across two different maps would be meaningless');
+  ok('wrong park can never be a bullseye', !wrongPark.bullseye);
+
+  ok('a junk park key misses safely', !judgeGuess({ park: 'nope', x: .5, y: .5 }, answer).within);
+  ok('a junk answer park misses safely', !judgeGuess({ park: 'mk', x: .5, y: .5 }, { park: 'nope', x: .5, y: .5 }).within);
+  ok('a missing guess misses safely', !judgeGuess(null, answer).within);
+
+  // Tolerance must follow each park's own map, not one shared number.
+  const inMk = judgeGuess({ park: 'mk', x: 0.57, y: 0.5 }, { park: 'mk', x: 0.5, y: 0.5 });
+  const inAk = judgeGuess({ park: 'ak', x: 0.57, y: 0.5 }, { park: 'ak', x: 0.5, y: 0.5 });
+  ok('judged against each park\'s own dimensions',
+    inMk.distance !== inAk.distance,
+    `mk ${inMk.distance} vs ak ${inAk.distance}`);
+}
+
 console.log('\nscoring');
 {
   const hit = judge({ x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 }, 1000, 1000);
   const close = judge({ x: 0.55, y: 0.5 }, { x: 0.5, y: 0.5 }, 1000, 1000);
   const miss = judge({ x: 0.9, y: 0.9 }, { x: 0.5, y: 0.5 }, 1000, 1000);
+  const wrongPark = judgeGuess({ park: 'ep', x: 0.5, y: 0.5 }, { park: 'mk', x: 0.5, y: 0.5 });
+  ok('the wrong park scores nothing, even on the first look', scoreRound(wrongPark, 0) === 0);
   ok('a miss scores nothing', scoreRound(miss, 0) === 0);
   ok('a miss scores nothing however few taps', scoreRound(miss, 3) === 0);
   ok('first-look bullseye is the top score', scoreRound(hit, 0) === MAX_POINTS + 20);

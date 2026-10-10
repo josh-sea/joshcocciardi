@@ -96,6 +96,27 @@ export function visibleFraction(cx, cy, r, w, h, slices = 2000) {
   return area / (w * h);
 }
 
+/* ── the parks ─────────────────────────────────────────────────────────────
+ *
+ * Four fixed maps ship with the app, so a deck is just a name and a password
+ * and nobody has to find a map to upload. Each round names the park it was
+ * taken in, and the guesser has to work that out too: picking the right park
+ * is half the puzzle, which is why the answer carries it.
+ *
+ * The dimensions are the shipped images' own, because distance has to be
+ * measured in a map's pixels rather than in normalised units.
+ */
+export const PARKS = {
+  mk: { name: "Magic Kingdom",     short: "Magic Kingdom",  w: 915,  h: 896  },
+  ep: { name: "EPCOT",             short: "EPCOT",          w: 1292, h: 1500 },
+  hs: { name: "Hollywood Studios", short: "Hollywood",      w: 1167, h: 1344 },
+  ak: { name: "Animal Kingdom",    short: "Animal Kingdom", w: 1402, h: 1500 },
+};
+
+export const PARK_ORDER = ["mk", "ep", "hs", "ak"];
+
+export function isPark(key) { return Object.prototype.hasOwnProperty.call(PARKS, key); }
+
 /* ── the pin ───────────────────────────────────────────────────────────────
  *
  * The answer is a point on the deck's map image, and so is the guess. Both
@@ -133,6 +154,25 @@ export function judge(guess, answer, mapW, mapH, tolerance = DEFAULT_TOLERANCE) 
     within: dist <= tol,
     bullseye: dist <= tol * 0.34,
   };
+}
+
+/* Judge a whole guess: which park, and where in it.
+ *
+ * The wrong park is simply wrong. There is no sense in measuring how far a
+ * pin in EPCOT is from an answer in Animal Kingdom, and the two maps are not
+ * even the same shape, so `distance` is null rather than a misleading number.
+ * The verdict still says which mistake was made, because "right park, wrong
+ * corner" and "wrong park entirely" deserve different faces.
+ */
+export function judgeGuess(guess, answer, tolerance = DEFAULT_TOLERANCE) {
+  if (!guess || !answer || !isPark(answer.park)) {
+    return { rightPark: false, within: false, bullseye: false, distance: null, off: null };
+  }
+  if (guess.park !== answer.park) {
+    return { rightPark: false, within: false, bullseye: false, distance: null, off: null };
+  }
+  const { w, h } = PARKS[answer.park];
+  return { rightPark: true, ...judge(guess, answer, w, h, tolerance) };
 }
 
 /* Score a finished round. Guessing early is worth more, so the player who

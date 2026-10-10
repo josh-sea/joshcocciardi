@@ -467,10 +467,8 @@
         <label>Password<input id="make-pass" type="password" autocomplete="off" required>
           <small>At least 8 characters. There is no reset: the password is the only way in, for everyone.</small>
         </label>
-        <label>Map to pin against
-          <input id="make-map" type="file" accept="image/*" required>
-          <small>A photo of the park map works. Everyone guessing drops their pin on this picture.</small>
-        </label>
+        <p class="fine">All four park maps are built in. Each photo you add says
+        which park it is in, and whoever is guessing has to work that out too.</p>
         <button class="btn" type="submit">Create deck</button>
         <p class="note" id="make-note" role="status"></p>
       </form>
@@ -501,9 +499,10 @@
           <div class="taps" id="taps"></div>
         </div>
         <button class="btn" id="widen">Tap to see more</button>
-        <p class="wa-prompt" id="play-prompt">Where was this taken? Drop a pin on the map.</p>
-        <div class="mapwrap" id="mapwrap">
-          <img id="map-img" alt="The deck's map. Tap it to place your guess.">
+        <p class="wa-prompt" id="play-prompt">Which park is this?</p>
+        <div class="parks" id="park-pick" role="radiogroup" aria-label="Which park"></div>
+        <div class="mapwrap" id="mapwrap" hidden>
+          <img id="map-img" alt="The park map. Tap it to place your guess.">
           <div class="pin guess" id="pin-guess" hidden></div>
           <div class="pin answer" id="pin-answer" hidden></div>
           <div class="ring" id="ring" hidden></div>
@@ -519,9 +518,11 @@
       <form id="form-add">
         <label>Photo<input id="add-photo" type="file" accept="image/*" required></label>
         <label>Label (shown after the guess)<input id="add-label" autocomplete="off" placeholder="Outside the Haunted Mansion"></label>
-        <p class="wa-prompt">Tap the map to mark where this was taken.</p>
-        <div class="mapwrap" id="add-mapwrap">
-          <img id="add-map-img" alt="The deck's map. Tap it to mark the answer.">
+        <p class="wa-prompt">Which park was it taken in?</p>
+        <div class="parks" id="add-park-pick" role="radiogroup" aria-label="Which park"></div>
+        <p class="wa-prompt" id="add-map-prompt" hidden>Now tap the map to mark the spot.</p>
+        <div class="mapwrap" id="add-mapwrap" hidden>
+          <img id="add-map-img" alt="The park map. Tap it to mark the answer.">
           <div class="pin answer" id="add-pin" hidden></div>
           <div class="ring" id="add-ring" hidden></div>
         </div>
