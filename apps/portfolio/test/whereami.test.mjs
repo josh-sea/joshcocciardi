@@ -12,6 +12,9 @@ import {
   freshCentre, peepLayout, radiusForFraction, revealAt,
   visibleFraction, pinDistance, judge, judgeGuess, scoreRound,
 } from '../../disney-trivia/js/game.js';
+import {
+  DEFAULT_VOLUME, clampVolume, trackLabel, nextIndex as nextTrack, orderFor,
+} from '../../disney-trivia/js/music.js';
 
 let failures = 0;
 const ok = (name, cond, extra = '') => {
@@ -198,6 +201,43 @@ console.log('\nscoring');
   ok('taps cost points', scoreRound(close, 0) > scoreRound(close, 1));
   ok('scores never go negative', scoreRound(close, 99) >= 0);
   ok('spending every tap still scores', scoreRound(close, TAPS_ALLOWED) > 0);
+}
+
+console.log('\nbackground music');
+{
+  // Volume comes from a slider, from storage, and from whatever the last
+  // release wrote. Anything unusable must land on the default, because NaN
+  // silences the element with no way back.
+  ok('a sane volume passes through', clampVolume(0.4) === 0.4);
+  ok('too loud is clamped', clampVolume(5) === 1);
+  ok('negative is clamped', clampVolume(-2) === 0);
+  ok('a numeric string works, since storage returns strings', clampVolume('0.25') === 0.25);
+  ok('junk falls back to the default', clampVolume('loud') === DEFAULT_VOLUME);
+  ok('null falls back to the default', clampVolume(null) === DEFAULT_VOLUME);
+  ok('undefined falls back to the default', clampVolume(undefined) === DEFAULT_VOLUME);
+  ok('an empty string falls back too', clampVolume('') === DEFAULT_VOLUME);
+  ok('but a real zero is still zero', clampVolume(0) === 0 && clampVolume('0') === 0);
+  ok('NaN never escapes', !Number.isNaN(clampVolume(NaN)));
+  ok('the default is background, not foreground', DEFAULT_VOLUME > 0 && DEFAULT_VOLUME < 0.6);
+
+  ok('a file name becomes a title', trackLabel('music/main-street_loop.mp3') === 'Main street loop');
+  ok('a bare name works', trackLabel('parade.m4a') === 'Parade');
+  ok('nested paths work', trackLabel('/a/b/c/quiet-night.mp3') === 'Quiet night');
+  ok('a nameless file still gets a label', trackLabel('') === 'Untitled');
+  ok('so does rubbish', trackLabel(null) === 'Untitled');
+
+  ok('the playlist wraps', nextTrack(2, 3) === 0);
+  ok('and steps', nextTrack(0, 3) === 1);
+  ok('from nowhere it starts at the beginning', nextTrack(-1, 3) === 0);
+  ok('an empty playlist has nowhere to go', nextTrack(0, 0) === -1);
+
+  const order = orderFor(6, false);
+  ok('unshuffled order is in order', order.join() === '0,1,2,3,4,5');
+  const shuffled = orderFor(6, true, (() => { let i = 0; const seq = [0.9, 0.1, 0.8, 0.2, 0.7]; return () => seq[i++ % seq.length]; })());
+  ok('a shuffle keeps every track exactly once',
+    [...shuffled].sort().join() === '0,1,2,3,4,5', shuffled.join());
+  ok('an empty list shuffles to nothing', orderFor(0).length === 0);
+  ok('a one-track list is itself', orderFor(1).join() === '0');
 }
 
 console.log(failures ? `\n${failures} failing\n` : '\nall passing\n');

@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Karla:ital,wght@0,400;0,600;0,800;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/whereami.css">
+<link rel="stylesheet" href="css/music.css">
 <link rel="manifest" href="manifest.json">
 
 <style>
@@ -410,12 +411,46 @@
   <header>
     <div class="masthead">
       <h1 class="mark">Ticket book<span>Disney trivia</span></h1>
+      <div class="controls">
+      <button class="sound music-btn" id="music-btn" type="button" aria-expanded="false" aria-controls="music" aria-label="Music" data-playing="no">
+        <svg class="note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        <svg class="bars" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 14v-4"/><path d="M10 19V5"/><path d="M15 17V7"/><path d="M20 13v-2"/></svg>
+      </button>
       <button class="sound" id="sound" aria-pressed="true" aria-label="Turn sound off">
         <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
         <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/></svg>
       </button>
+      </div>
     </div>
     <p class="sub" id="blurb">Tap a ticket to reveal the answer. Every question comes up once, then the book is spent.</p>
+
+    <!-- Music. Folded away until the button above is tapped, and nothing in
+         here is fetched until then either. -->
+    <div class="music" id="music" hidden>
+      <div class="music-row">
+        <button class="music-play" id="music-play" type="button" aria-label="Play music" data-playing="no">
+          <svg class="play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          <svg class="pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+        </button>
+        <div class="music-now">
+          <strong id="music-title">Loading</strong>
+          <span id="music-credit"></span>
+        </div>
+        <button class="music-skip" id="music-skip" type="button" aria-label="Next track">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5v14l10-7zM17 5h2v14h-2z"/></svg>
+        </button>
+      </div>
+      <label class="music-vol">
+        <span>Volume</span>
+        <input type="range" id="music-vol" min="0" max="1" step="0.01" aria-label="Music volume">
+      </label>
+      <div class="music-list" id="music-list" role="group" aria-label="Tracks"></div>
+      <label class="music-file">
+        <input type="file" id="music-file" accept="audio/*" multiple>
+        <span>Play a file from this device</span>
+      </label>
+      <p class="music-note" id="music-note"></p>
+    </div>
   </header>
 
   <div class="games" role="tablist" aria-label="Which game">
@@ -1235,6 +1270,34 @@ const fromHash = () => {
 };
 window.addEventListener('hashchange', fromHash);
 fromHash();
+
+/* Music, on the same deal as the photo game: nothing is fetched until the
+ * button is tapped. The tap is also the gesture a browser wants before it
+ * will let any audio start, so loading it here rather than up front costs
+ * nothing and saves two requests for everybody who never asks for music.
+ */
+const musicBtn = document.getElementById('music-btn');
+let musicMod = null;
+let musicLoading = false;
+
+musicBtn.onclick = async () => {
+  if (musicMod) {
+    musicMod.show(musicBtn.getAttribute('aria-expanded') !== 'true');
+    return;
+  }
+  if (musicLoading) return;
+  musicLoading = true;
+  try {
+    const m = await import('./js/musicui.js');
+    m.init();
+    m.show(true);
+    musicMod = m;
+  } catch (err) {
+    document.getElementById('music').hidden = false;
+    document.getElementById('music-title').textContent = 'Could not load the music player';
+    document.getElementById('music-note').textContent = err.message;
+  } finally { musicLoading = false; }
+};
 </script>
 </body>
 </html>
