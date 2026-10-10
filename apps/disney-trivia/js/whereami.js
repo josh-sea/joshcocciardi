@@ -11,7 +11,7 @@
  */
 import {
   TAPS_ALLOWED, DEFAULT_TOLERANCE, PARKS, PARK_ORDER, isPark,
-  peepholeCentre, revealAt, judgeGuess, scoreRound,
+  freshCentre, peepLayout, revealAt, judgeGuess, scoreRound,
 } from './game.js';
 
 const $ = (id) => document.getElementById(id);
@@ -23,6 +23,7 @@ let deck = null;
 let rounds = [], queue = [], round = null;
 let taps = 0, guess = null, settled = false;
 let points = 0, played = 0;
+let centre = null;         // this playing's peephole, fresh on every deal
 let pickedPark = null;     // the park being guessed this round
 let answerDraft = null;    // {park, x, y} being set on the Add tab
 let started = false;
@@ -171,6 +172,9 @@ function nextRound() {
   }
   round = queue.splice(Math.floor(Math.random() * queue.length), 1)[0];
   taps = 0; guess = null; settled = false; pickedPark = null;
+  // A new opening every time, so a photo that comes round again is still a
+  // puzzle rather than a memory test.
+  centre = freshCentre();
 
   show($('play-live'), true);
   show($('verdict'), false);
@@ -185,26 +189,45 @@ function nextRound() {
   show($('mapwrap'), false);
   drawParks($('park-pick'), null, choosePark);
 
-  S.urlFor(round.photo.path).then(url => { $('peep-img').src = url; });
+  S.urlFor(round.photo.path).then(url => { $('peep-img').src = url; paintPeep(); });
   paintPeep();
   paintTaps();
 }
 
-/* The box is given the photo's own aspect ratio, so a point 40% across the
- * photo is 40% across the box and the radius can be a percentage of each
- * axis. Two percentages on an ellipse describe a true circle exactly because
- * the box and the photo are the same shape. */
+/* Draw the peephole.
+ *
+ * The photo is positioned and scaled so the revealed circle always lands in
+ * the middle of the box at a readable size (see peepLayout in game.js). That
+ * makes the geometry depend on the box's measured size, so this runs again on
+ * resize and rotation, and again once the photo itself has loaded.
+ *
+ * The mask radius is a real length now, which is why it can go back to
+ * `circle`: percentages are only ever legal on `ellipse`.
+ */
 function paintPeep() {
-  const { cx, cy } = peepholeCentre(round.id);
-  const { w, h } = round.photo;
-  const r = revealAt(taps, w, h);
+  if (!round || !centre) return;
   const el = $('peep');
-  el.style.setProperty('--ar', w + ' / ' + h);
-  el.style.setProperty('--cx', (cx * 100).toFixed(3) + '%');
-  el.style.setProperty('--cy', (cy * 100).toFixed(3) + '%');
-  el.style.setProperty('--rx', ((r / w) * 100).toFixed(3) + '%');
-  el.style.setProperty('--ry', ((r / h) * 100).toFixed(3) + '%');
+  const img = $('peep-img');
+  const box = el.getBoundingClientRect();
+  const { w, h } = round.photo;
+  const L = peepLayout(centre, revealAt(taps, w, h), w, h, box.width, box.height);
+  if (!L) return;
+  img.style.width = L.width + 'px';
+  img.style.height = L.height + 'px';
+  img.style.left = L.left + 'px';
+  img.style.top = L.top + 'px';
+  // The mask lives on the photo, so its centre is in the photo's coordinates.
+  img.style.setProperty('--r', L.radius + 'px');
+  img.style.setProperty('--mx', L.maskX + 'px');
+  img.style.setProperty('--my', L.maskY + 'px');
 }
+
+// Rotating a phone changes the box, and the layout is measured from it.
+let relayoutTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(relayoutTimer);
+  relayoutTimer = setTimeout(paintPeep, 120);
+});
 
 function paintTaps() {
   $('taps').innerHTML = '';
