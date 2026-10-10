@@ -12,7 +12,7 @@ import "../App.css";
 // separately built static app, so it needs a real page load rather than a
 // client-side route.
 const isSpaRoute = (link) =>
-  ["/tools/", "/expense-analyzer", "/hulk-game", "/doom-life-game"].some((p) => link.startsWith(p));
+  ["/tools/", "/expense-analyzer", "/doom-life-game"].some((p) => link.startsWith(p));
 
 // ── Apps: real accounts, real users, live data ───────────────────────────────
 const apps = [
@@ -148,12 +148,11 @@ const playthings = [
     images: [{ src: require("../assets/writersImage.png"), alt: "Spelling Detective app screenshot" }],
   },
   {
-    title: "🟢 Hulk Smash: 8-Bit!",
+    title: "🪨 Boulder Smash",
     description:
-      "An 8-bit style platformer where you play as the Hulk. Smash objects, defeat enemies, and navigate retro-inspired levels.",
-    tech: ["JavaScript", "Canvas API"],
-    link: "/hulk-game",
-    images: [{ src: require("../assets/hulkGameImage.png"), alt: "Hulk Smash 8-bit game screenshot" }],
+      "A 3D smash-em-up built for kids. Boulder the stone giant stomps through three cities: punch buildings until they wobble and crash, bonk Dr. Fizzle's gang into the sky, grab rubble or a whole building and throw it, and take down the giants who show up when the city falls. Aim assist and an on-screen controller make it playable on a phone, and a laptop can steer the stick with the trackpad.",
+    tech: ["JavaScript", "Three.js", "WebGL", "Web Audio", "Pointer Lock API"],
+    link: "/projects/boulder-smash",
   },
   {
     title: "👾 Conway's DOOM",
