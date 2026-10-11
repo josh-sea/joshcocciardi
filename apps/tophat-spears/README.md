@@ -31,6 +31,29 @@ No accounts. Each tab signs in anonymously, so two tabs on one laptop are two
 players and a reload keeps your seat. **Practice solo** runs offline with the
 prototype's Tab swap between seats.
 
+## Units
+
+Soldiers (Spears can hop into any of them, and play its weapon):
+
+| Unit | HP | Weapon | Notes |
+|---|---|---|---|
+| Marine | 100 | Machine gun, 4-round bursts | Stims |
+| Torch | 130 | Flamethrower, burns every bug in a short cone | Stims |
+| Shade | 70 | Sniper rifle, one heavy shot | Sees burrowed bugs; right-click to scope |
+| Strider | 320 | Twin cannons | Walker mech, slow, tall eye line |
+
+**Stim** (Tophat: T or the Stim button; Spear: F or the Stim button) costs 10 HP
+and gives 8 s of 1.5x fire rate and 1.4x speed. Marines and Torches only.
+
+Swarm: **Lings** (fast melee), **Brutes** (tanky melee), **Spitters** (stop
+at range and spit acid, from wave 2) and **Burrowers** (dig in, then send a
+line of spikes through every soldier in front of them, from wave 4).
+
+Squads start mixed (Alpha: 3 Marines and a Torch; Bravo: 2 Marines, a
+Torch and a Shade; Charlie: 2 Marines, a Shade and a Strider) and
+reinforcements rotate through the types. All the numbers are in
+`js/config.js` (`MTYPES`, `BUGT`, `STIM`).
+
 ## How the multiplayer works
 
 The handoff plan suggested Colyseus on Fly.io. We went with Firebase instead,
@@ -101,4 +124,4 @@ cd apps/tophat-spears && python3 -m http.server 8765
 - Spears can't walk up ground steeper than about 42 degrees.
 - Tuning is set by the host in the lobby and locked during the match.
 
-Still open from the handoff: pathfinding, sound, nicer models.
+Still open from the handoff: pathfinding, sound, nicer models, reloads, and balance (AI soldiers alone currently win every match).

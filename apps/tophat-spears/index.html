@@ -24,7 +24,7 @@
     <div class="mission"><span>Op</span>Hold the Ridge</div>
     <div class="stat"><span class="k">Wave</span><span id="sWave" class="num">0/6</span><span id="sNext" class="sub num"></span></div>
     <div class="stat"><span class="k">Relay</span><span class="meter"><i id="sRelay"></i></span></div>
-    <div class="stat"><span class="k">Marines</span><span id="sMar" class="num">0</span></div>
+    <div class="stat"><span class="k">Soldiers</span><span id="sMar" class="num">0</span></div>
     <div class="stat"><span class="k">Swarm</span><span id="sBug" class="num">0</span></div>
     <div class="spacer"></div>
     <span class="you-chip" id="youChip"></span>
@@ -40,6 +40,7 @@
       <span id="selInfo">Nothing selected</span>
       <button id="cPatrol">Patrol <kbd>P</kbd></button>
       <button id="cHold">Hold <kbd>X</kbd></button>
+      <button id="cStim">Stim <kbd>T</kbd></button>
       <span class="k">Right-click to move · Drag to select · <kbd>WASD</kbd> pan<span id="tabHint" hidden> · <kbd>Tab</kbd> swap view</span></span>
     </div>
   </section>
@@ -50,9 +51,10 @@
     <div id="hopTag"></div>
     <div id="leash" hidden><div class="t" id="leashT">Orders</div><div class="v num" id="leashV">--</div></div>
     <div class="hero">
-      <div class="who"><b id="hName">--</b><span class="tag">Spear</span></div>
+      <div class="who"><b id="hName">--</b><span class="tag" id="hTag">Marine</span></div>
       <div class="hpbar"><i id="hHp"></i></div>
       <div class="row"><span id="hHpTxt" class="num">0 / 0</span><span id="hBuff"></span></div>
+      <div class="row"><span id="hHint"></span></div>
     </div>
     <div class="hop" id="hop">Hop ready</div>
     <div id="lockhint" hidden>Click to take control</div>
@@ -85,18 +87,18 @@
           <li>Tap marines or a squad to select them</li>
           <li>Tap the ground to send them there</li>
           <li>Drag to move the map, pinch to zoom</li>
-          <li>Patrol or Hold, then tap; Box for a drag-select</li></ul><ul class="mse">
+          <li>Patrol, Hold or Stim the selection; Box for a drag-select</li></ul><ul class="mse">
           <li>Drag to select, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> squads, <kbd>Q</kbd> all</li>
           <li>Right-click to move, <kbd>P</kbd> then click to patrol</li>
-          <li><kbd>X</kbd> hold position, <kbd>WASD</kbd> pan, wheel zoom</li>
+          <li><kbd>X</kbd> hold, <kbd>T</kbd> stim, <kbd>WASD</kbd> pan, wheel zoom</li>
           <li>Ordering a Spear's body starts their leash clock</li></ul></div>
         <div class="role sp"><h4>Spear</h4><ul class="tch">
           <li>Left thumb moves, right thumb looks</li>
           <li>Hold Fire to shoot; drag it to keep aiming</li>
-          <li>Aim at a marine and tap Hop to jump bodies</li>
+          <li>Aim at a soldier and tap Hop to jump bodies; Stim for speed</li>
           <li>Miss the leash and you bleed. Die early and you wait out the hop cooldown</li></ul><ul class="mse">
           <li><kbd>WASD</kbd> move, mouse aim, click fire, <kbd>Shift</kbd> sprint</li>
-          <li>Aim at a marine and press <kbd>E</kbd> to hop</li>
+          <li>Aim at a soldier and press <kbd>E</kbd> to hop, <kbd>F</kbd> to stim</li>
           <li>Small buffs only: a bit more HP and damage</li>
           <li>Miss the leash and you bleed. Die early and you wait out the hop cooldown</li></ul></div>
       </div>

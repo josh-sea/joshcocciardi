@@ -7,11 +7,11 @@
  *
  * Run: node apps/portfolio/test/tophat-spears.test.mjs
  */
-import { DEFAULTS, cleanConfig, MAX_SLOPE } from '../../tophat-spears/js/config.js';
+import { DEFAULTS, cleanConfig, MAX_SLOPE, MTYPES, STIM, SHOT } from '../../tophat-spears/js/config.js';
 import { H, PROPS, losClear, seeded } from '../../tophat-spears/js/map.js';
 import {
   setRandom, waveComposition, deathWait, leashStatus, rankBodies, moveSpear,
-  newMatch, step, addSpear, removeSpear, setDriven, hop, redeploy, spearPose, spearShot, order,
+  newMatch, step, addSpear, removeSpear, setDriven, hop, redeploy, spearPose, spearShot, order, stim, spearStim, weaponCycle,
   snapshot, decode, interpolate, serialize, restore,
 } from '../../tophat-spears/js/sim.js';
 import { seatFor, tophatAction, applyRole, pickHost, canBeSpear, cleanName } from '../../tophat-spears/js/lobby.js';
@@ -40,7 +40,9 @@ console.log('\nmap');
 
 console.log('\nrules');
 {
-  ok('wave 1 is 12 lings, no brutes', JSON.stringify(waveComposition(1)) === '{"lings":12,"brutes":0}');
+  const w1 = waveComposition(1), w4 = waveComposition(4);
+  ok('wave 1 is 12 lings and nothing else', w1.lings === 12 && w1.brutes === 0 && w1.spitters === 0 && w1.burrowers === 0);
+  ok('spitters arrive from wave 2, burrowers from wave 4', waveComposition(2).spitters === 2 && waveComposition(3).burrowers === 0 && w4.burrowers === 1);
   ok('the last wave brings 2 extra brutes', waveComposition(6).brutes === 6);
   const C = { ...DEFAULTS };
   ok('normal death waits the respawn time', deathWait(C, 100, 90).wait === C.respawn);
@@ -123,8 +125,63 @@ console.log('\nshots');
   const m = s.marines[0]; redeploy(s, 'p1', m.id);
   s.now = 13; s.bugs.push({ id: 999, team: 's', type: 'ling', x: m.x, z: m.z - 10, y: 0, hp: 30, maxHp: 30, r: 0.55, speed: 0, atkCd: 9, face: 0, dead: false, deathT: 0, wob: 0 });
   ok('a Spear shot hits the bug it names', spearShot(s, 'p1', { bug: 999, a: [m.x, 1, m.z], b: [m.x, 1, m.z - 10] }));
-  ok('shots faster than the gun can fire are dropped', !spearShot(s, 'p1', { bug: 999 }));
+  const hpBefore = s.bugs.find(b => b.id === 999).hp;
+  for (let i = 0; i < 4; i++) spearShot(s, 'p1', { bug: 999 });
+  const hpAfter = s.bugs.find(b => b.id === 999).hp;
+  ok('the rifle fires a whole 4-round burst at once', hpAfter < hpBefore && s.shots.filter(x => x[6] === 'p1').length === 5);
+  ok('more rounds than the gun can fire are dropped', !spearShot(s, 'p1', { bug: 999 }) && !spearShot(s, 'p1', { bug: 999 }));
+  s.now += 0.7;
+  ok('after the pause the next burst fires', spearShot(s, 'p1', { bug: 999 }) !== undefined && s.shots.filter(x => x[6] === 'p1').length >= 6);
   ok('the shot is broadcast with its shooter', s.shots.some(x => x[6] === 'p1'));
+}
+
+console.log('\nunit types');
+{
+  const s = newMatch(DEFAULTS);
+  const count = t => s.marines.filter(m => m.type === t).length;
+  ok('squads start mixed: 7 marines, 2 torches, 2 shades, 1 strider', count('marine') === 7 && count('torch') === 2 && count('shade') === 2 && count('strider') === 1);
+  const strider = s.marines.find(m => m.type === 'strider');
+  ok('a strider has the most armor', strider.maxHp === MTYPES.strider.hp && strider.maxHp > 300);
+  ok('a burst of 4 plus the pause is the rifle cadence', near(weaponCycle(MTYPES.marine.w, false), 3 * 0.08 + 0.45));
+  ok('stim fires half again as fast', near(weaponCycle(MTYPES.marine.w, true), (3 * 0.08 + 0.45) / STIM.rate));
+
+  // Stim
+  const marine = s.marines.find(m => m.type === 'marine'), shade = s.marines.find(m => m.type === 'shade');
+  const weak = s.marines.filter(m => m.type === 'marine')[1]; weak.hp = 8;
+  const n = stim(s, [marine.id, shade.id, weak.id]);
+  ok('stim costs a marine 10 HP', n === 1 && marine.hp === 90 && marine.stimUntil > s.now);
+  ok('shades cannot stim, and nobody stims themselves to death', shade.stimUntil === 0 && weak.hp === 8);
+  addSpear(s, 'p1', 'Ash'); redeploy(s, 'p1', weak.id); weak.hp = 50;
+  ok('a Spear can stim their own body', spearStim(s, 'p1') === 1 && weak.stimUntil > s.now);
+}
+{
+  // A Spear in a Torch burns every bug in the cone it names.
+  const s = newMatch(DEFAULTS); s.now = 13;
+  const torch = s.marines.find(m => m.type === 'torch');
+  addSpear(s, 'p1', 'Bo'); redeploy(s, 'p1', torch.id);
+  const bug = (id, dz) => ({ id, team: 's', type: 'ling', x: torch.x, z: torch.z - dz, y: 0, hp: 30, maxHp: 30, r: 0.55, speed: 0, atkCd: 9, face: 0, dead: false, deathT: 0, wob: 0, burrowed: false, bT: 0, uT: 0, lost: 0 });
+  s.bugs.push(bug(901, 3), bug(902, 5), bug(903, 40));
+  spearShot(s, 'p1', { bugs: [901, 902, 903] });
+  const hp = id => s.bugs.find(b => b.id === id).hp;
+  ok('flame hits every bug in reach', hp(901) < 30 && hp(902) < 30);
+  ok('flame does not reach a bug 40m away', hp(903) === 30);
+  ok('the flame is broadcast as a flame', s.shots.some(x => x[7] === SHOT.flame));
+}
+{
+  // A dug-in Burrower's spike line hits soldiers on the line and misses the rest.
+  const s = newMatch(DEFAULTS);
+  s.marines = s.marines.slice(0, 3);
+  const [onLine, behind, aside] = s.marines;
+  const bx = 0, bz = 0;
+  Object.assign(onLine, { x: 0, z: 8 }); Object.assign(behind, { x: 0, z: 13 }); Object.assign(aside, { x: 6, z: 9 });
+  s.marines.forEach(m => { m.order = { type: 'hold', x: m.x, z: m.z }; m.hp = 1000; m.maxHp = 1000; });
+  s.bugs.push({ id: 950, team: 's', type: 'burrower', x: bx, z: bz, y: 0, hp: 9999, maxHp: 9999, r: 0.9, speed: 4, atkCd: 0, face: 0, dead: false, deathT: 0, wob: 0, burrowed: false, bT: 0, uT: 0, lost: 0 });
+  s.nextWaveAt = 9999; s.reinforceAt = 9999;
+  for (let i = 0; i < 30 * 3; i++) { step(s, 1 / 30); s.marines.forEach(m => { m.x = m.order.x; m.z = m.order.z; }); }
+  const lurk = s.bugs.find(b => b.id === 950);
+  ok('the burrower digs in once a soldier is in range', lurk.burrowed);
+  ok('the spike line hits soldiers along it', onLine.hp < 1000 && behind.hp < 1000);
+  ok('and misses a soldier off to the side', aside.hp === 1000);
 }
 
 console.log('\nwire format');
@@ -138,6 +195,8 @@ console.log('\nwire format');
   ok('every unit survives the trip', v.units.size === s.marines.length + s.bugs.length);
   ok('spear state survives the trip', v.spears.p1.unitId === s.marines.find(m => m.owner === 'p1').id && v.spears.p1.name === 'Ash');
   ok('no nulls inside arrays', !JSON.stringify(snap.m).includes('null') && !JSON.stringify(snap.b).includes('null'));
+  const vm = [...v.units.values()];
+  ok('unit types survive the trip', vm.some(u => u.type === 'strider') && vm.filter(u => u.team === 'm').every(u => u.type));
   ok('a database-mangled array decodes too', decode({ ...snap, m: Object.assign({}, snap.m) }).units.size === v.units.size);
   const s2 = JSON.parse(JSON.stringify(snap)); s2.n += 0.1; s2.m[0][3] += 1;
   const mid = interpolate(decode(snap), decode(s2), 0.5);

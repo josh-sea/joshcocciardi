@@ -8,7 +8,7 @@
  * leash, hops, deaths and redeploys.
  */
 
-import { BASE, BUGT, WAVES, MAXMAR, SQUADS, RELAY_MAX, SHOT_RANGE, MAX_SLOPE, SPRINT, cleanConfig } from './config.js';
+import { MTYPES, MTYPE_LIST, mtype, STIM, SHOT, BUGT, BTYPE_LIST, WAVES, MAXMAR, SQUADS, RELAY_MAX, MAX_SLOPE, SPRINT, cleanConfig } from './config.js';
 import { H, RELAY, SPAWNS, clampM, collide, losClear } from './map.js';
 
 let rnd = Math.random;
@@ -21,7 +21,26 @@ const NET_SLACK = 0.25;
 // ---------- pure rules (tested directly) ----------
 
 export function waveComposition(n) {
-  return { lings: 6 + n * 6, brutes: Math.max(0, n - 2) + (n === WAVES ? 2 : 0) };
+  return {
+    lings: 6 + n * 6,
+    brutes: Math.max(0, n - 2) + (n === WAVES ? 2 : 0),
+    spitters: n >= 2 ? 2 + (n - 2) * 2 : 0,
+    burrowers: n >= 4 ? n - 3 : 0,
+  };
+}
+
+// Who each squad starts with, and the order reinforcements arrive in.
+export const START_SQUADS = {
+  Alpha: ['marine', 'marine', 'marine', 'torch'],
+  Bravo: ['marine', 'marine', 'torch', 'shade'],
+  Charlie: ['marine', 'marine', 'shade', 'strider'],
+};
+const REINFORCE = ['marine', 'marine', 'torch', 'marine', 'shade', 'marine', 'strider'];
+const MAX_STRIDERS = 2;
+
+// Seconds a weapon takes for one full burst, with or without stim.
+export function weaponCycle(w, stimmed) {
+  return ((w.n - 1) * w.gap + w.pause) / (stimmed ? STIM.rate : 1);
 }
 
 // A Spear who dies before their hop cooldown is up waits out the rest of it.
@@ -68,8 +87,9 @@ export function rankBodies(units) {
  * Ground steeper than MAX_SLOPE can't be walked up: the move is retried
  * along each axis alone so you slide along a slope instead of sticking.
  */
-export function moveSpear(pose, inp, dt) {
-  const sp = BASE.mSpeed * (inp.sprint ? SPRINT : 1);
+export function moveSpear(pose, inp, dt, type = 'marine', stimmed = false) {
+  const T = mtype(type);
+  const sp = T.speed * (inp.sprint ? SPRINT : 1) * (stimmed ? STIM.speed : 1);
   const sy = Math.sin(pose.yaw), cy = Math.cos(pose.yaw);
   let mx = -sy * inp.f + cy * inp.s, mz = -cy * inp.f - sy * inp.s;
   const len = Math.hypot(mx, mz);
@@ -77,7 +97,7 @@ export function moveSpear(pose, inp, dt) {
   const g0 = H(pose.x, pose.z), grounded0 = pose.y <= g0 + 0.001;
   const tryMove = (dx, dz) => {
     if (!dx && !dz) return false;
-    const c = { x: pose.x + dx, z: pose.z + dz, r: 0.45 };
+    const c = { x: pose.x + dx, z: pose.z + dz, r: T.r };
     collide(c);
     const run = Math.hypot(c.x - pose.x, c.z - pose.z);
     if (run < 1e-6) return false;
@@ -100,25 +120,26 @@ export function moveSpear(pose, inp, dt) {
 export function newMatch(config) {
   const s = {
     C: cleanConfig(config), now: 0, waveN: 0, waveActive: false, nextWaveAt: 12, queue: [], reinforceAt: 14,
-    lost: 0, relayHp: RELAY_MAX, phase: 'play', win: null, uid: 0, sqN: { Alpha: 0, Bravo: 0, Charlie: 0 },
+    lost: 0, relayHp: RELAY_MAX, phase: 'play', win: null, uid: 0, sqN: { Alpha: 0, Bravo: 0, Charlie: 0 }, reinforceN: 0,
     marines: [], bugs: [], spears: {}, shots: [], events: [],
   };
-  SQUADS.forEach((sq, si) => { for (let i = 0; i < 4; i++) spawnMarine(s, -9 + si * 9 + (i % 2) * 2 - 1, 46 + Math.floor(i / 2) * 2, sq); });
+  SQUADS.forEach((sq, si) => START_SQUADS[sq].forEach((type, i) => spawnMarine(s, -10 + si * 10 + (i % 2) * 2.4 - 1.2, 45 + Math.floor(i / 2) * 2.4, sq, type)));
   event(s, 'First wave in 12s. Get into position.');
   return s;
 }
 
-function spawnMarine(s, x, z, squad) {
+function spawnMarine(s, x, z, squad, type = 'marine') {
+  const T = mtype(type);
   const m = {
-    id: ++s.uid, team: 'm', x, z, y: H(x, z), face: Math.PI, hp: BASE.mHp, maxHp: BASE.mHp, r: 0.45, fireCd: rnd() * 0.4,
-    squad, name: squad + '-' + (++s.sqN[squad]), order: { type: 'hold', x, z }, dead: false, deathT: 0, owner: '', pose: null,
+    id: ++s.uid, team: 'm', type, x, z, y: H(x, z), face: Math.PI, hp: T.hp, maxHp: T.hp, r: T.r, fireCd: rnd() * 0.4, burst: 0,
+    squad, name: squad + '-' + (++s.sqN[squad]), order: { type: 'hold', x, z }, dead: false, deathT: 0, owner: '', pose: null, stimUntil: 0,
   };
   s.marines.push(m); return m;
 }
 function spawnBug(s, type, x, z) {
   const t = BUGT[type];
   const b = { id: ++s.uid, team: 's', type, x, z, y: H(x, z), hp: t.hp, maxHp: t.hp, r: t.r, speed: t.speed * (0.9 + rnd() * 0.2),
-    atkCd: 0, face: 0, dead: false, deathT: 0, wob: rnd() * 10 };
+    atkCd: 0, face: 0, dead: false, deathT: 0, wob: rnd() * 10, burrowed: false, bT: 0, uT: 0, lost: 0 };
   s.bugs.push(b); return b;
 }
 
@@ -162,8 +183,8 @@ export function removeSpear(s, pid) {
 // but stay reserved for their Spear.
 export function setDriven(s, pid, v) { if (s.spears[pid]) s.spears[pid].driven = !!v; }
 
-function buff(s, m) { const k = 1 + s.C.heroHp; m.maxHp = BASE.mHp * k; m.hp = Math.min(m.maxHp, m.hp * k); }
-function release(m) { const f = m.hp / m.maxHp; m.maxHp = BASE.mHp; m.hp = f * BASE.mHp; m.owner = ''; m.pose = null; m.y = H(m.x, m.z); }
+function buff(s, m) { const k = 1 + s.C.heroHp; m.maxHp = mtype(m.type).hp * k; m.hp = Math.min(m.maxHp, m.hp * k); }
+function release(m) { const base = mtype(m.type).hp, f = m.hp / m.maxHp; m.maxHp = base; m.hp = f * base; m.owner = ''; m.pose = null; m.y = H(m.x, m.z); }
 
 function setLeash(s, sp, m) { sp.leash = Object.assign(zoneOf(m), { deadline: s.now + s.C.leashT }); sp.outsideSince = null; }
 
@@ -192,7 +213,7 @@ export function hop(s, pid, targetId) {
   if (!u || !t || t.dead) return { ok: false, why: 'That marine is gone' };
   if (t.owner) return { ok: false, why: 'Another Spear has that body' };
   if (Math.hypot(t.x - u.x, t.z - u.z) > s.C.hopRange + 2) return { ok: false, why: 'Out of hop range' };
-  if (!losClear(u.x, u.y + 1.62, u.z, t.x, t.y + 1.2, t.z)) return { ok: false, why: 'No line of sight' };
+  if (!losClear(u.x, u.y + mtype(u.type).eye, u.z, t.x, t.y + 1.2, t.z)) return { ok: false, why: 'No line of sight' };
   possess(s, pid, t, true);
   return { ok: true, name: t.name };
 }
@@ -221,23 +242,47 @@ export function spearPose(s, pid, p) {
 }
 
 // A Spear fired. The shooter's machine did the raycast against what it saw;
-// the host checks rate, range and that the bug is still alive.
+// the host checks the fire rate for that weapon, the range, and that each
+// bug is still alive. A flamethrower names every bug in its cone.
 export function spearShot(s, pid, shot) {
   const sp = s.spears[pid];
   if (!sp || sp.state !== 'active' || !shot) return false;
-  if (s.now - sp.lastShot < BASE.mFire * 0.7) return false;
   const u = marineById(s, sp.unitId); if (!u || u.dead) return false;
+  const T = mtype(u.type), w = T.w;
+  // Rounds refill at exactly the weapon's rate (a little faster, for network
+  // jitter), up to one burst plus one in hand.
+  const rate = w.n / weaponCycle(w, stimmed(s, u)) * 1.15;
+  sp.ammo = Math.min(w.n + 1, (sp.ammo ?? w.n) + Math.max(0, s.now - sp.lastShot) * rate);
   sp.lastShot = s.now;
-  const a = Array.isArray(shot.a) && shot.a.length === 3 && shot.a.every(fin) ? shot.a : [u.x, u.y + 1.5, u.z];
+  if (sp.ammo < 1) return false;
+  sp.ammo -= 1;
+  const a = Array.isArray(shot.a) && shot.a.length === 3 && shot.a.every(fin) ? shot.a : [u.x, u.y + T.eye - 0.1, u.z];
   const b = Array.isArray(shot.b) && shot.b.length === 3 && shot.b.every(fin) ? shot.b : a;
-  s.shots.push([...a, ...b, pid]);
-  const bug = shot.bug ? s.bugs.find(x => x.id === shot.bug) : null;
-  if (bug && !bug.dead && Math.hypot(bug.x - u.x, bug.z - u.z) <= SHOT_RANGE + 4) {
-    damage(s, bug, BASE.mDmg * (1 + s.C.heroDmg), pid);
-    return true;
+  s.shots.push([...a, ...b, pid, SHOT[w.kind]]);
+  const ids = w.kind === 'flame' ? (Array.isArray(shot.bugs) ? shot.bugs.slice(0, 12) : []) : shot.bug ? [shot.bug] : [];
+  const dmg = w.dmg * (1 + s.C.heroDmg);
+  let hit = false;
+  for (const id of ids) {
+    const bug = s.bugs.find(x => x.id === id);
+    if (bug && !bug.dead && Math.hypot(bug.x - u.x, bug.z - u.z) <= w.reach + bug.r + 2) { damage(s, bug, dmg, pid); hit = true; }
   }
-  return false;
+  return hit;
 }
+
+// Stim the given soldiers (Marines and Torches with health to spare).
+export function stim(s, ids) {
+  let n = 0;
+  for (const m of s.marines) {
+    if (m.dead || !ids.includes(m.id) || !mtype(m.type).stim || m.hp <= STIM.hp + 1) continue;
+    m.hp -= STIM.hp; m.stimUntil = s.now + STIM.dur; n++;
+  }
+  return n;
+}
+export function spearStim(s, pid) {
+  const sp = s.spears[pid];
+  return sp && sp.state === 'active' ? stim(s, [sp.unitId]) : 0;
+}
+const stimmed = (s, m) => m.stimUntil > s.now;
 
 // ---------- tophat orders ----------
 
@@ -266,9 +311,11 @@ export function order(s, kind, ids, p) {
 
 function startWave(s) {
   s.waveN++; s.waveActive = true;
-  const { lings, brutes } = waveComposition(s.waveN), q = [];
-  for (let i = 0; i < lings; i++) q.push({ type: 'ling', at: s.now + rnd() * 10 });
-  for (let i = 0; i < brutes; i++) q.push({ type: 'brute', at: s.now + 2 + rnd() * 8 });
+  const c = waveComposition(s.waveN), q = [];
+  for (let i = 0; i < c.lings; i++) q.push({ type: 'ling', at: s.now + rnd() * 10 });
+  for (let i = 0; i < c.brutes; i++) q.push({ type: 'brute', at: s.now + 2 + rnd() * 8 });
+  for (let i = 0; i < c.spitters; i++) q.push({ type: 'spitter', at: s.now + 3 + rnd() * 8 });
+  for (let i = 0; i < c.burrowers; i++) q.push({ type: 'burrower', at: s.now + 4 + rnd() * 6 });
   s.queue = q.sort((a, b) => a.at - b.at);
   event(s, `Wave ${s.waveN} incoming from the north`, '#d0479b');
 }
@@ -289,8 +336,10 @@ function waves(s) {
     if (alive.length < MAXMAR) {
       const counts = SQUADS.map(q => alive.filter(m => m.squad === q).length);
       const q = SQUADS[counts.indexOf(Math.min(...counts))];
-      const m = spawnMarine(s, RELAY.x + (rnd() - 0.5) * 6, RELAY.z - 6, q);
-      event(s, 'Reinforcement: ' + m.name, '#8fb3d6');
+      let type = REINFORCE[s.reinforceN++ % REINFORCE.length];
+      if (type === 'strider' && alive.filter(m => m.type === 'strider').length >= MAX_STRIDERS) type = 'marine';
+      const m = spawnMarine(s, RELAY.x + (rnd() - 0.5) * 6, RELAY.z - 6, q, type);
+      event(s, `Reinforcement: ${m.name} (${mtype(type).label})`, '#8fb3d6');
     }
   }
 }
@@ -304,6 +353,7 @@ export { lerpAng };
 
 function updateMarine(s, m, dt) {
   if (m.dead) return;
+  const T = mtype(m.type), w = T.w, stim = stimmed(s, m);
   if (driven(s, m)) {
     if (m.pose) {
       const dx = m.pose.x - m.x, dz = m.pose.z - m.z, d = Math.hypot(dx, dz);
@@ -313,50 +363,126 @@ function updateMarine(s, m, dt) {
     }
     return;
   }
-  let best = null, bd = BASE.mRange;
-  for (const b of s.bugs) { if (b.dead) continue; const d = Math.hypot(b.x - m.x, b.z - m.z); if (d < bd) { bd = d; best = b; } }
+  let best = null, bd = T.range;
+  for (const b of s.bugs) { if (b.dead) continue; const d = Math.hypot(b.x - m.x, b.z - m.z) - b.r; if (d < bd) { bd = d; best = b; } }
   let tx = null, tz = null; const o = m.order;
   if (o.type === 'move') { if (Math.hypot(o.x - m.x, o.z - m.z) < 0.7) m.order = { type: 'hold', x: o.x, z: o.z }; else { tx = o.x; tz = o.z; } }
   else if (o.type === 'patrol') {
     const px = o.leg ? o.bx : o.ax, pz = o.leg ? o.bz : o.az;
     if (Math.hypot(px - m.x, pz - m.z) < 0.8) o.leg = 1 - o.leg;
-    if (!(best && bd < BASE.mRange * 0.85)) { tx = px; tz = pz; }
+    if (!(best && bd < T.range * 0.85)) { tx = px; tz = pz; }
   } else if (Math.hypot(o.x - m.x, o.z - m.z) > 1.6) { tx = o.x; tz = o.z; }
   if (tx !== null) {
-    const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz) || 1, sp = BASE.mSpeed * (best ? 0.8 : 1);
+    const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz) || 1, sp = T.speed * (best ? 0.8 : 1) * (stim ? STIM.speed : 1);
     m.x += dx / d * sp * dt; m.z += dz / d * sp * dt;
     if (!best) m.face = lerpAng(m.face, angTo(dx, dz), dt * 10);
   }
   m.fireCd -= dt;
-  if (best) {
-    m.face = lerpAng(m.face, angTo(best.x - m.x, best.z - m.z), dt * 14);
-    if (m.fireCd <= 0) {
-      // AI marines only shoot what they can see. A blocked shot retries soon.
-      if (!losClear(m.x, m.y + 1.4, m.z, best.x, best.y + 0.6, best.z)) { m.fireCd = 0.15; return; }
-      m.fireCd = BASE.mFire * (0.85 + rnd() * 0.3);
-      const hit = rnd() < BASE.mAcc;
-      s.shots.push([m.x, m.y + 1.2, m.z, best.x + (hit ? 0 : (rnd() - 0.5) * 3), best.y + 0.6, best.z + (hit ? 0 : (rnd() - 0.5) * 3), '']);
-      if (hit) damage(s, best, BASE.mDmg * (m.owner ? 1 + s.C.heroDmg : 1), null);
-    }
-  }
+  if (!best) { m.burst = 0; return; }
+  m.face = lerpAng(m.face, angTo(best.x - m.x, best.z - m.z), dt * 14);
+  if (m.fireCd > 0) return;
+  // AI soldiers only shoot what they can see. A blocked shot retries soon.
+  if (w.kind !== 'flame' && !losClear(m.x, m.y + T.eye - 0.2, m.z, best.x, best.y + 0.6, best.z)) { m.fireCd = 0.15; m.burst = 0; return; }
+  if (m.burst <= 0) m.burst = w.n;
+  m.burst--;
+  const rate = stim ? STIM.rate : 1;
+  m.fireCd = (m.burst > 0 ? w.gap : w.pause * (0.9 + rnd() * 0.2)) / rate;
+  aiFire(s, m, T, best);
 }
+
+// One AI shot (or one flame puff) from soldier `m` at bug `t`.
+function aiFire(s, m, T, t) {
+  const w = T.w, dmg = w.dmg * (m.owner ? 1 + s.C.heroDmg : 1), ay = m.y + T.eye - 0.4;
+  if (w.kind === 'flame') {
+    const fx = Math.sin(m.face + Math.PI), fz = Math.cos(m.face + Math.PI);
+    for (const b of s.bugs) {
+      if (b.dead) continue;
+      const dx = b.x - m.x, dz = b.z - m.z, d = Math.hypot(dx, dz);
+      if (d - b.r > w.reach) continue;
+      if (d > 1 && (dx * fx + dz * fz) / d < Math.cos(w.cone)) continue;
+      damage(s, b, dmg, null);
+    }
+    s.shots.push([m.x, ay, m.z, m.x + fx * w.reach, ay - 0.3, m.z + fz * w.reach, '', SHOT.flame]);
+    return;
+  }
+  let acc = w.acc;
+  if (t.burrowed && !T.detect) acc *= 0.5;
+  const hit = rnd() < acc, miss = hit ? 0 : 3;
+  s.shots.push([m.x, ay, m.z, t.x + (rnd() - 0.5) * miss, t.y + 0.6, t.z + (rnd() - 0.5) * miss, '', SHOT[w.kind]]);
+  if (hit) damage(s, t, dmg, null);
+}
+
+function nearestMarine(s, b, within) {
+  let t = null, td = within;
+  for (const m of s.marines) { if (m.dead) continue; const d = Math.hypot(m.x - b.x, m.z - b.z); if (d < td) { td = d; t = m; } }
+  return t;
+}
+
 function updateBug(s, b, dt) {
   if (b.dead) return;
-  let t = null, td = 34;
-  for (const m of s.marines) { if (m.dead) continue; const d = Math.hypot(m.x - b.x, m.z - b.z); if (d < td) { td = d; t = m; } }
-  const T = BUGT[b.type];
-  const tx = t ? t.x : RELAY.x, tz = t ? t.z : RELAY.z, reach = t ? b.r + t.r + 0.45 : b.r + 3.9;
+  if (b.type === 'burrower') return updateBurrower(s, b, dt);
+  const T = BUGT[b.type], t = nearestMarine(s, b, 34);
+  const tx = t ? t.x : RELAY.x, tz = t ? t.z : RELAY.z;
+  const reach = T.range ? T.range + (t ? 0 : 3.6) : t ? b.r + t.r + 0.45 : b.r + 3.9;
   const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz) || 1;
   b.atkCd -= dt;
   if (d > reach) {
     const w = Math.sin(s.now * 1.3 + b.wob) * 0.45 * Math.min(1, d / 15), ca = Math.cos(w), sa = Math.sin(w);
     const ux = dx / d, uz = dz / d, vx = ux * ca - uz * sa, vz = ux * sa + uz * ca;
     b.x += vx * b.speed * dt; b.z += vz * b.speed * dt; b.face = lerpAng(b.face, angTo(vx, vz), dt * 8);
-  } else {
-    b.face = lerpAng(b.face, angTo(dx, dz), dt * 10);
-    if (b.atkCd <= 0) { b.atkCd = T.atk; if (t) damage(s, t, T.dmg, null); else s.relayHp -= T.dmg; }
+    return;
   }
+  b.face = lerpAng(b.face, angTo(dx, dz), dt * 10);
+  if (b.atkCd > 0) return;
+  b.atkCd = T.atk * (0.9 + rnd() * 0.2);
+  if (!T.range) { if (t) damage(s, t, T.dmg, null); else s.relayHp -= T.dmg; return; }
+  // Spitter: an acid spine. Needs a clear line to the target.
+  const ty = t ? t.y + 1 : H(RELAY.x, RELAY.z) + 3;
+  if (t && !losClear(b.x, b.y + 1.3, b.z, t.x, ty, t.z)) { b.atkCd = 0.3; return; }
+  const hit = rnd() < (T.acc || 1), miss = hit ? 0 : 2.5;
+  s.shots.push([b.x, b.y + 1.3, b.z, tx + (rnd() - 0.5) * miss, ty, tz + (rnd() - 0.5) * miss, '', SHOT.spine]);
+  if (hit) { if (t) damage(s, t, T.dmg, null); else s.relayHp -= T.dmg; }
 }
+
+/* Burrower: walks in, digs in once something is in range, then sends a line
+ * of spikes through the ground every couple of seconds, hitting every
+ * soldier standing along it. Digs back out if nothing is in reach for a bit.
+ */
+function updateBurrower(s, b, dt) {
+  const T = BUGT.burrower, t = nearestMarine(s, b, 34);
+  const tx = t ? t.x : RELAY.x, tz = t ? t.z : RELAY.z;
+  const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz) || 1;
+  const gap = t ? d : d - 3.6;
+  if (!b.burrowed) {
+    if (b.bT > 0) { b.bT -= dt; if (b.bT <= 0) { b.burrowed = true; b.atkCd = 0.5; b.lost = 0; } return; }
+    if (gap <= T.range) { b.bT = 0.8; return; }
+    const w = Math.sin(s.now * 1.1 + b.wob) * 0.3, ca = Math.cos(w), sa = Math.sin(w);
+    const ux = dx / d, uz = dz / d, vx = ux * ca - uz * sa, vz = ux * sa + uz * ca;
+    b.x += vx * b.speed * dt; b.z += vz * b.speed * dt; b.face = lerpAng(b.face, angTo(vx, vz), dt * 6);
+    return;
+  }
+  if (b.uT > 0) { b.uT -= dt; if (b.uT <= 0) b.burrowed = false; return; }
+  if (gap > T.range + 2) { b.lost += dt; if (b.lost > 2) b.uT = 0.6; return; }
+  b.lost = 0;
+  b.face = lerpAng(b.face, angTo(dx, dz), dt * 8);
+  b.atkCd -= dt;
+  if (b.atkCd > 0) return;
+  b.atkCd = T.atk;
+  const ux = dx / d, uz = dz / d, ex = b.x + ux * T.range, ez = b.z + uz * T.range;
+  for (const m of s.marines) {
+    if (m.dead) continue;
+    const along = (m.x - b.x) * ux + (m.z - b.z) * uz;
+    if (along < 0 || along > T.range) continue;
+    const off = Math.abs((m.x - b.x) * uz - (m.z - b.z) * ux);
+    if (off <= T.width + m.r * 0.5) damage(s, m, T.dmg, null);
+  }
+  if (!t) s.relayHp -= T.dmg;
+  s.shots.push([b.x, H(b.x, b.z), b.z, ex, H(ex, ez), ez, '', SHOT.lurk]);
+}
+
+// Bodies that separation and collisions must not shove: a Spear's body and a
+// dug-in Burrower.
+const fixed = (s, u) => (u.team === 'm' ? driven(s, u) : u.burrowed || u.bT > 0);
 function separate(s, list, strength) {
   for (let i = 0; i < list.length; i++) {
     const a = list[i]; if (a.dead) continue;
@@ -366,14 +492,14 @@ function separate(s, list, strength) {
       if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
       const d = Math.hypot(dx, dz) || 0.01; if (d >= min) continue;
       const push = (min - d) * 0.5 * strength, ux = dx / d, uz = dz / d;
-      const pa = a.team === 'm' && driven(s, a) ? 0 : 1, pb = b.team === 'm' && driven(s, b) ? 0 : 1;
+      const pa = fixed(s, a) ? 0 : 1, pb = fixed(s, b) ? 0 : 1;
       a.x -= ux * push * pa; a.z -= uz * push * pa; b.x += ux * push * pb; b.z += uz * push * pb;
     }
   }
 }
 function pushBugsFromMarines(s) {
   for (const m of s.marines) { if (m.dead) continue;
-    for (const b of s.bugs) { if (b.dead) continue;
+    for (const b of s.bugs) { if (b.dead || fixed(s, b)) continue;
       const dx = b.x - m.x, dz = b.z - m.z, min = m.r + b.r; if (Math.abs(dx) > min || Math.abs(dz) > min) continue;
       const d = Math.hypot(dx, dz) || 0.01; if (d < min) { b.x = m.x + dx / d * min; b.z = m.z + dz / d * min; } } }
 }
@@ -434,8 +560,9 @@ export function snapshot(s) {
   return {
     n: r2(s.now), w: s.waveN, a: s.waveActive ? 1 : 0, nw: r1(s.nextWaveAt), q: s.queue.length, rh: Math.round(s.relayHp), ph: s.phase,
     win: s.win === null ? -1 : s.win ? 1 : 0, lost: s.lost, C: s.C,
-    m: s.marines.map(m => [m.id, SQUADS.indexOf(m.squad), m.name, r2(m.x), r2(m.y), r2(m.z), r2(m.face), r1(m.hp), r1(m.maxHp), m.dead ? 1 : 0, orderArr(m.order), m.owner || '']),
-    b: s.bugs.map(b => [b.id, b.type === 'brute' ? 1 : 0, r2(b.x), r2(b.y), r2(b.z), r2(b.face), r1(b.hp), b.maxHp, b.dead ? 1 : 0]),
+    m: s.marines.map(m => [m.id, SQUADS.indexOf(m.squad), m.name, r2(m.x), r2(m.y), r2(m.z), r2(m.face), r1(m.hp), r1(m.maxHp), m.dead ? 1 : 0, orderArr(m.order), m.owner || '',
+      Math.max(0, MTYPE_LIST.indexOf(m.type)), m.stimUntil > s.now ? r1(m.stimUntil - s.now) : 0]),
+    b: s.bugs.map(b => [b.id, Math.max(0, BTYPE_LIST.indexOf(b.type)), r2(b.x), r2(b.y), r2(b.z), r2(b.face), r1(b.hp), b.maxHp, b.dead ? 1 : 0, b.burrowed || b.bT > 0 ? 1 : 0]),
     sp,
   };
 }
@@ -445,10 +572,11 @@ const arr = v => Array.isArray(v) ? v : v && typeof v === 'object' ? Object.valu
 export function decode(snap) {
   const units = new Map();
   for (const a of arr(snap.m)) {
-    units.set(a[0], { id: a[0], team: 'm', squad: SQUADS[a[1]], name: a[2], x: a[3], y: a[4], z: a[5], face: a[6], hp: a[7], maxHp: a[8], dead: !!a[9], order: orderObj(arr(a[10])), owner: a[11] || '' });
+    units.set(a[0], { id: a[0], team: 'm', squad: SQUADS[a[1]], name: a[2], x: a[3], y: a[4], z: a[5], face: a[6], hp: a[7], maxHp: a[8], dead: !!a[9], order: orderObj(arr(a[10])), owner: a[11] || '',
+      type: MTYPE_LIST[a[12]] || 'marine', stim: a[13] || 0 });
   }
   for (const a of arr(snap.b)) {
-    units.set(a[0], { id: a[0], team: 's', type: a[1] ? 'brute' : 'ling', x: a[2], y: a[3], z: a[4], face: a[5], hp: a[6], maxHp: a[7], dead: !!a[8] });
+    units.set(a[0], { id: a[0], team: 's', type: BTYPE_LIST[a[1]] || 'ling', x: a[2], y: a[3], z: a[4], face: a[5], hp: a[6], maxHp: a[7], dead: !!a[8], burrowed: !!a[9] });
   }
   const spears = {};
   for (const [pid, v] of Object.entries(snap.sp || {})) {
@@ -483,7 +611,9 @@ export function restore(data) {
   s.C = cleanConfig(s.C);
   s.marines = arr(s.marines); s.bugs = arr(s.bugs); s.queue = arr(s.queue); s.shots = []; s.events = [];
   s.spears = s.spears || {};
-  for (const m of s.marines) { m.order = m.order || { type: 'hold', x: m.x, z: m.z }; m.owner = m.owner || ''; m.pose = null; }
+  for (const m of s.marines) { m.order = m.order || { type: 'hold', x: m.x, z: m.z }; m.owner = m.owner || ''; m.pose = null; m.type = m.type || 'marine'; m.stimUntil = m.stimUntil || 0; m.burst = m.burst || 0; }
+  for (const b of s.bugs) { b.burrowed = !!b.burrowed; b.bT = b.bT || 0; b.uT = b.uT || 0; b.lost = b.lost || 0; }
+  s.reinforceN = s.reinforceN || 0;
   for (const sp of Object.values(s.spears)) { if (sp.outsideSince === undefined) sp.outsideSince = null; if (!sp.leash) sp.leash = null; }
   if (s.win === undefined) s.win = null;
   return s;

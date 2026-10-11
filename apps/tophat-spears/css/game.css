@@ -213,3 +213,10 @@ body.touch #toasts{top:164px}
 body.touch #thHud{left:calc(12px + env(safe-area-inset-left,0px));right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px))}
 @media (max-width:900px){body.touch .mission,body.touch .you-chip,body.touch .stat:has(#sMar),body.touch .stat:has(#sBug){display:none}body.touch .stat{font-size:13px}body.touch .meter{width:60px}body.touch #topbar .ghost,body.touch .seg button{padding:5px 9px}}
 @media (max-height:440px){body.touch .squads .sq span{display:none}body.touch #leash{top:52px;padding:4px 12px;min-width:0}body.touch #leash .v{font-size:16px}}
+
+/* ---------- unit types ---------- */
+.dep b .ty{font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-left:4px}
+#selInfo .mix{color:var(--dim);font-size:12px}
+#hBuff.stim{color:var(--bad);font-weight:700;letter-spacing:.08em}
+#hHint{font-size:11px;letter-spacing:.08em;color:var(--dim)}
+#tStim{right:178px;bottom:20px;width:54px;height:54px;font-size:11px;border-color:var(--bad);color:var(--bad)}
