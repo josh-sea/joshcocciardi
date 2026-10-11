@@ -256,6 +256,7 @@ export function spearShot(s, pid, shot) {
   sp.lastShot = s.now;
   if (sp.ammo < 1) return false;
   sp.ammo -= 1;
+  u.lastFire = s.now;
   const a = Array.isArray(shot.a) && shot.a.length === 3 && shot.a.every(fin) ? shot.a : [u.x, u.y + T.eye - 0.1, u.z];
   const b = Array.isArray(shot.b) && shot.b.length === 3 && shot.b.every(fin) ? shot.b : a;
   s.shots.push([...a, ...b, pid, SHOT[w.kind]]);
@@ -269,18 +270,21 @@ export function spearShot(s, pid, shot) {
   return hit;
 }
 
-// Stim the given soldiers (Marines and Torches with health to spare).
-export function stim(s, ids) {
+// Stim the given soldiers (Marines and Torches with health to spare). The
+// Tophat can stim any of them, Spears included, without asking; a Spear who
+// gets stimmed that way is told.
+export function stim(s, ids, by = 'tophat') {
   let n = 0;
   for (const m of s.marines) {
     if (m.dead || !ids.includes(m.id) || !mtype(m.type).stim || m.hp <= STIM.hp + 1) continue;
     m.hp -= STIM.hp; m.stimUntil = s.now + STIM.dur; n++;
+    if (m.owner && m.owner !== by) event(s, `Tophat stimmed you: ${STIM.dur}s of speed, -${STIM.hp} HP`, '#ff5a4f', m.owner);
   }
   return n;
 }
 export function spearStim(s, pid) {
   const sp = s.spears[pid];
-  return sp && sp.state === 'active' ? stim(s, [sp.unitId]) : 0;
+  return sp && sp.state === 'active' ? stim(s, [sp.unitId], pid) : 0;
 }
 const stimmed = (s, m) => m.stimUntil > s.now;
 
@@ -387,6 +391,7 @@ function updateMarine(s, m, dt) {
   m.burst--;
   const rate = stim ? STIM.rate : 1;
   m.fireCd = (m.burst > 0 ? w.gap : w.pause * (0.9 + rnd() * 0.2)) / rate;
+  m.lastFire = s.now;
   aiFire(s, m, T, best);
 }
 
@@ -435,6 +440,7 @@ function updateBug(s, b, dt) {
   b.face = lerpAng(b.face, angTo(dx, dz), dt * 10);
   if (b.atkCd > 0) return;
   b.atkCd = T.atk * (0.9 + rnd() * 0.2);
+  b.lastAtk = s.now;
   if (!T.range) { if (t) damage(s, t, T.dmg, null); else s.relayHp -= T.dmg; return; }
   // Spitter: an acid spine. Needs a clear line to the target.
   const ty = t ? t.y + 1 : H(RELAY.x, RELAY.z) + 3;
@@ -468,6 +474,7 @@ function updateBurrower(s, b, dt) {
   b.atkCd -= dt;
   if (b.atkCd > 0) return;
   b.atkCd = T.atk;
+  b.lastAtk = s.now;
   const ux = dx / d, uz = dz / d, ex = b.x + ux * T.range, ez = b.z + uz * T.range;
   for (const m of s.marines) {
     if (m.dead) continue;
@@ -530,8 +537,8 @@ export function step(s, dt) {
   if (s.relayHp <= 0) { s.relayHp = 0; endMatch(s, false); }
   for (const m of s.marines) if (m.dead) m.deathT += dt;
   for (const b of s.bugs) if (b.dead) b.deathT += dt;
-  s.marines = s.marines.filter(m => !(m.dead && m.deathT > 1.6));
-  s.bugs = s.bugs.filter(b => !(b.dead && b.deathT > 0.45));
+  s.marines = s.marines.filter(m => !(m.dead && m.deathT > 2.6));
+  s.bugs = s.bugs.filter(b => !(b.dead && b.deathT > 1.1));
 }
 
 // ---------- wire format ----------
@@ -561,8 +568,8 @@ export function snapshot(s) {
     n: r2(s.now), w: s.waveN, a: s.waveActive ? 1 : 0, nw: r1(s.nextWaveAt), q: s.queue.length, rh: Math.round(s.relayHp), ph: s.phase,
     win: s.win === null ? -1 : s.win ? 1 : 0, lost: s.lost, C: s.C,
     m: s.marines.map(m => [m.id, SQUADS.indexOf(m.squad), m.name, r2(m.x), r2(m.y), r2(m.z), r2(m.face), r1(m.hp), r1(m.maxHp), m.dead ? 1 : 0, orderArr(m.order), m.owner || '',
-      Math.max(0, MTYPE_LIST.indexOf(m.type)), m.stimUntil > s.now ? r1(m.stimUntil - s.now) : 0]),
-    b: s.bugs.map(b => [b.id, Math.max(0, BTYPE_LIST.indexOf(b.type)), r2(b.x), r2(b.y), r2(b.z), r2(b.face), r1(b.hp), b.maxHp, b.dead ? 1 : 0, b.burrowed || b.bT > 0 ? 1 : 0]),
+      Math.max(0, MTYPE_LIST.indexOf(m.type)), m.stimUntil > s.now ? r1(m.stimUntil - s.now) : 0, s.now - (m.lastFire ?? -9) < 0.6 ? 1 : 0]),
+    b: s.bugs.map(b => [b.id, Math.max(0, BTYPE_LIST.indexOf(b.type)), r2(b.x), r2(b.y), r2(b.z), r2(b.face), r1(b.hp), b.maxHp, b.dead ? 1 : 0, b.burrowed || b.bT > 0 ? 1 : 0, s.now - (b.lastAtk ?? -9) < 0.5 ? 1 : 0]),
     sp,
   };
 }
@@ -573,10 +580,10 @@ export function decode(snap) {
   const units = new Map();
   for (const a of arr(snap.m)) {
     units.set(a[0], { id: a[0], team: 'm', squad: SQUADS[a[1]], name: a[2], x: a[3], y: a[4], z: a[5], face: a[6], hp: a[7], maxHp: a[8], dead: !!a[9], order: orderObj(arr(a[10])), owner: a[11] || '',
-      type: MTYPE_LIST[a[12]] || 'marine', stim: a[13] || 0 });
+      type: MTYPE_LIST[a[12]] || 'marine', stim: a[13] || 0, act: !!a[14] });
   }
   for (const a of arr(snap.b)) {
-    units.set(a[0], { id: a[0], team: 's', type: BTYPE_LIST[a[1]] || 'ling', x: a[2], y: a[3], z: a[4], face: a[5], hp: a[6], maxHp: a[7], dead: !!a[8], burrowed: !!a[9] });
+    units.set(a[0], { id: a[0], team: 's', type: BTYPE_LIST[a[1]] || 'ling', x: a[2], y: a[3], z: a[4], face: a[5], hp: a[6], maxHp: a[7], dead: !!a[8], burrowed: !!a[9], act: !!a[10] });
   }
   const spears = {};
   for (const [pid, v] of Object.entries(snap.sp || {})) {

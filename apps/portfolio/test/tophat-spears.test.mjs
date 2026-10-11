@@ -153,6 +153,10 @@ console.log('\nunit types');
   ok('shades cannot stim, and nobody stims themselves to death', shade.stimUntil === 0 && weak.hp === 8);
   addSpear(s, 'p1', 'Ash'); redeploy(s, 'p1', weak.id); weak.hp = 50;
   ok('a Spear can stim their own body', spearStim(s, 'p1') === 1 && weak.stimUntil > s.now);
+  ok('stimming yourself sends no alert', !s.events.some(e => e.to === 'p1' && /stimmed you/.test(e.m)));
+  weak.stimUntil = 0; weak.hp = 50;
+  stim(s, [weak.id]);
+  ok('the Tophat can stim a Spear, and the Spear is told', weak.stimUntil > s.now && s.events.some(e => e.to === 'p1' && /stimmed you/.test(e.m)));
 }
 {
   // A Spear in a Torch burns every bug in the cone it names.

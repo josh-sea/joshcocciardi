@@ -1,10 +1,15 @@
-/* Three.js scene: terrain, props, unit meshes, tracers and the leash
- * pillars. It only draws what it's given; the match lives in sim.js.
- * Three.js r128 is loaded as a global from cdnjs (see index.html).
+/* Three.js scene: terrain, props, unit meshes, weapon effects and the
+ * leash pillars. It only draws what it's given; the match lives in sim.js.
+ * Three.js comes from jsDelivr through the import map in index.html.
  */
-/* global THREE */
-
+import * as THREE from 'three';
 import { H, RELAY, SPAWNS, PROPS, seeded } from './map.js';
+import * as U from './units.js';
+import { createFx } from './fx.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#view'), antialias: true });
 // Phones get a lighter load: fewer pixels and a smaller shadow map.
@@ -17,8 +22,12 @@ const SKY = 0x24303f;
 export const scene = new THREE.Scene();
 scene.background = new THREE.Color(SKY);
 scene.fog = new THREE.Fog(SKY, 120, 320);
-scene.add(new THREE.HemisphereLight(0xb9c8e0, 0x5a3a2a, 0.75));
-const sun = new THREE.DirectionalLight(0xffe0bd, 1.05);
+// Light units are physical since three r155; these match the old look (x pi),
+// a little dimmer and warmer for a harsher, grittier light.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+scene.add(new THREE.HemisphereLight(0xb9c8e0, 0x5a3a2a, 0.75 * Math.PI));
+const sun = new THREE.DirectionalLight(0xffe0bd, 1.25 * Math.PI);
 sun.position.set(-50, 80, 30);
 sun.castShadow = true;
 sun.shadow.mapSize.set(LIGHT ? 1024 : 2048, LIGHT ? 1024 : 2048);
@@ -220,63 +229,74 @@ function bugMesh(type) {
  */
 const meshes = new Map();
 export function meshFor(id) { const e = meshes.get(id); return e ? e.g : null; }
+
+// Swap the simple shapes for the animated models as soon as they arrive.
+export const modelsReady = U.loadModels().then(ok => { if (ok) clearUnits(); return ok; });
+
+function newEntry(u) {
+  const e = U.makeModel(u) || (u.team === 'm' ? soldierMesh(u.type) : bugMesh(u.type));
+  if (u.team === 'm' && !e.ring) {
+    const ring = new THREE.Mesh(G.ring, ringMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.08; ring.visible = false;
+    const k = (RADIUS[u.type] || 0.45) / 0.45; ring.scale.set(k, k, 1); e.g.add(ring); e.ring = ring;
+  }
+  e.g.userData.unitId = u.id; e.team = u.team; e.type = u.type; e.deathT = 0; e.hitT = 0; e.lastHp = u.hp; e.wob = (u.id * 1.37) % 10; e.sink = 0;
+  e.px = u.x; e.pz = u.z; e.spd = 0; e.wasDead = u.dead;
+  scene.add(e.g); meshes.set(u.id, e);
+  return e;
+}
+
 export function sync(view, opts, dt) {
   const seen = new Set();
   for (const u of view.units.values()) {
     seen.add(u.id);
     let e = meshes.get(u.id);
     if (e && e.type !== u.type) { scene.remove(e.g); meshes.delete(u.id); e = null; }
-    if (!e) {
-      e = u.team === 'm' ? soldierMesh(u.type) : bugMesh(u.type);
-      e.g.userData.unitId = u.id; e.team = u.team; e.type = u.type; e.deathT = 0; e.hitT = 0; e.lastHp = u.hp; e.wob = (u.id * 1.37) % 10; e.sink = 0;
-      e.baseScale = e.g.scale.clone();
-      scene.add(e.g); meshes.set(u.id, e);
-    }
+    if (!e) e = newEntry(u);
     if (u.dead) e.deathT += dt;
+    if (u.dead && !e.wasDead) { e.wasDead = true; if (onDeath) onDeath(u, e); }
     if (u.hp < e.lastHp) e.hitT = 0.1;
     e.lastHp = u.hp; e.hitT -= dt;
+    // Ground speed, smoothed, for picking walk or run.
+    const moved = Math.hypot(u.x - e.px, u.z - e.pz) / Math.max(dt, 1e-3);
+    e.spd += (Math.min(moved, 20) - e.spd) * Math.min(1, dt * 8); e.px = u.x; e.pz = u.z;
+    if (e.mixer) U.animate(e, u, e.spd, dt);
     if (u.team === 'm') {
       e.g.position.set(u.x, u.y, u.z); e.g.rotation.y = u.face;
-      e.band.visible = !!u.owner && !u.dead;
+      if (e.band) e.band.visible = !!u.owner && !u.dead;
       e.ring.visible = !u.dead && opts.tophat && (opts.selected.has(u.id) || !!u.owner);
       e.ring.material = u.owner ? heroRingMat : ringMat;
-      e.visor.material = u.stim > 0 && !u.dead ? MAT.stim : e.visorMat;
+      if (e.visor && e.visorMat) e.visor.material = u.stim > 0 && !u.dead ? MAT.stim : e.visorMat;
       e.g.visible = u.id !== opts.hideId;
-      if (u.dead) { e.g.rotation.x = -Math.min(1, e.deathT / 0.35) * Math.PI / 2; e.g.position.y = u.y - Math.max(0, e.deathT - 0.8) * 1.5; }
+      if (e.mixer) { if (u.dead) e.g.position.y = u.y - Math.max(0, e.deathT - 1.8) * 1.4; }
+      else if (u.dead) { e.g.rotation.x = -Math.min(1, e.deathT / 0.35) * Math.PI / 2; e.g.position.y = u.y - Math.max(0, e.deathT - 0.8) * 1.5; }
       else e.g.rotation.x = 0;
     } else {
-      e.g.position.set(u.x, u.y + (u.dead || u.burrowed ? 0 : Math.abs(Math.sin(view.now * 12 + e.wob)) * 0.08), u.z); e.g.rotation.y = u.face;
+      e.g.position.set(u.x, u.y + (u.dead || u.burrowed || e.mixer ? 0 : Math.abs(Math.sin(view.now * 12 + e.wob)) * 0.08), u.z); e.g.rotation.y = u.face;
       e.sink += ((u.burrowed ? 1 : 0) - e.sink) * Math.min(1, dt * 3);
-      e.inner.position.y = -0.95 * e.sink;
-      if (u.dead) { const k = Math.max(0.01, 1 - e.deathT / 0.45); e.g.scale.set(1.2 - k * 0.2, k, 1.2 - k * 0.2); }
+      e.inner.position.y = -(e.mixer ? 0.75 * e.height : 0.95) * e.sink;
+      if (e.mixer) { if (u.dead) e.g.position.y = u.y - Math.max(0, e.deathT - 0.6) * 1.2; else e.g.scale.setScalar(e.hitT > 0 ? 1.08 : 1); }
+      else if (u.dead) { const k = Math.max(0.01, 1 - e.deathT / 0.45); e.g.scale.set(1.2 - k * 0.2, k, 1.2 - k * 0.2); }
       else e.g.scale.setScalar(e.hitT > 0 ? 1.15 : 1);
     }
   }
   for (const [id, e] of meshes) if (!seen.has(id)) { scene.remove(e.g); meshes.delete(id); }
   relayCore.rotation.y += dt * 1.5; relayCore.position.y = 8 + Math.sin(view.now * 2) * 0.2;
 }
+let onDeath = null;
+export function setOnDeath(fn) { onDeath = fn; }
 export function clearUnits() { for (const e of meshes.values()) scene.remove(e.g); meshes.clear(); }
 export function unitIdOf(o) { while (o && o.userData.unitId === undefined) o = o.parent; return o ? o.userData.unitId : null; }
-export function unitMeshes(filter) { const out = []; for (const [id, e] of meshes) if (filter(id, e)) out.push(e.g); return out; }
+// What raycasts should test: the invisible hitbox on animated models, the mesh itself otherwise.
+export function unitMeshes(filter) { const out = []; for (const [id, e] of meshes) if (filter(id, e)) out.push(e.hitbox || e.g); return out; }
 
 // ---------- shots ----------
-// Kinds match SHOT in config.js: 0 rifle, 2 flame, 3 snipe, 4 spine, 5 spike line, 6 cannon.
-const lineMat = c => new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: 0.9 });
-const LINE = { 0: lineMat(0xffd38a), p0: lineMat(0xfff1c2), 3: lineMat(0x9ff0ff), 4: lineMat(0xa8f060), 6: lineMat(0xffb347) };
-const LIFE = { 0: 0.06, 3: 0.2, 4: 0.1, 6: 0.08 };
-const flameMat = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
-const flameGeo = new THREE.ConeGeometry(1, 1, 10, 1, true).translate(0, -0.5, 0).rotateX(-Math.PI / 2);
+// Shots are drawn by fx.js; the Burrower's spike line also gets real spikes here.
 const spikeMat = std(0x3a1a35);
 const spikeGeo = new THREE.ConeGeometry(0.22, 1.3, 4).translate(0, 0.65, 0);
 let tracers = [];
 const _d = new THREE.Vector3();
 export function tracer(a, b, kind = 0, player = false) {
-  if (kind === 2) {
-    // Flame: a translucent cone from the nozzle, flaring out.
-    const m = new THREE.Mesh(flameGeo, flameMat), len = a.distanceTo(b);
-    m.position.copy(a); m.lookAt(b); m.scale.set(len * 0.32, len * 0.32, len);
-    scene.add(m); tracers.push({ o: m, life: 0.14, grow: true }); return;
-  }
+  fx.shot(a, b, kind, player);
   if (kind === 5) {
     // Spike line: spikes burst out of the ground along the line, then sink.
     const g = new THREE.Group(); _d.subVectors(b, a);
@@ -285,23 +305,36 @@ export function tracer(a, b, kind = 0, player = false) {
       sp.position.set(a.x + _d.x * t, H(a.x + _d.x * t, a.z + _d.z * t) - 0.2, a.z + _d.z * t);
       sp.rotation.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4); g.add(sp);
     }
-    scene.add(g); tracers.push({ o: g, life: 0.45, spikes: true }); return;
+    scene.add(g); tracers.push({ o: g, life: 0.45, spikes: true });
   }
-  const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-  const l = new THREE.Line(geo, kind === 0 && player ? LINE.p0 : LINE[kind] || LINE[0]);
-  scene.add(l); tracers.push({ o: l, life: LIFE[kind] || 0.07, line: true });
 }
 export function tickTracers(dt) {
-  for (const t of tracers) {
-    t.life -= dt;
-    if (t.grow) t.o.scale.multiplyScalar(1 + dt * 2);
-    if (t.spikes) t.o.position.y = t.life < 0.2 ? -(0.2 - t.life) * 6 : 0;
-  }
-  tracers = tracers.filter(t => {
-    if (t.life > 0) return true;
-    scene.remove(t.o); if (t.line) t.o.geometry.dispose();
-    return false;
-  });
+  for (const t of tracers) { t.life -= dt; t.o.position.y = t.life < 0.2 ? -(0.2 - t.life) * 6 : 0; }
+  tracers = tracers.filter(t => { if (t.life > 0) return true; scene.remove(t.o); return false; });
+}
+
+// ---------- effects and post ----------
+const fx = createFx(scene, H, (p, r) => {
+  for (const e of meshes.values()) if (e.team === 's' && Math.hypot(e.g.position.x - p.x, e.g.position.z - p.z) < r) return e;
+  return null;
+});
+setOnDeath((u, e) => fx.death(new THREE.Vector3(u.x, u.y + 0.6, u.z), u.team, u.type === 'brute' || u.type === 'burrower' || u.type === 'strider'));
+
+// Bloom makes muzzle flashes, tracers, fire and visors glow. Desktop only:
+// it costs a few full-screen passes that phones can't spare.
+let composer = null, bloom = null;
+if (!LIGHT) {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, rtsCam));
+  bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.4, 0.92);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+}
+let viewH = 800;
+export function draw(cam, dt) {
+  fx.tick(dt, cam, viewH);
+  if (composer) { composer.passes[0].camera = cam; composer.render(dt); }
+  else renderer.render(scene, cam);
 }
 
 // ---------- first-person weapons ----------
@@ -324,14 +357,40 @@ VIEW.rifle.g.add(box(0.11, 0.14, 0.75, MAT.gun, 0, 0, -0.2), box(0.07, 0.18, 0.1
 }
 VIEW.snipe.g.add(box(0.07, 0.1, 1.2, MAT.gun, 0, 0, -0.42), box(0.06, 0.06, 0.28, MAT.teal, 0, 0.1, -0.25),
   box(0.14, 0.14, 0.4, MAT.shade, 0.02, -0.12, 0.15));
-VIEW.cannon.g.add(box(0.18, 0.18, 1.0, MAT.gun, 0, 0, -0.35), box(0.3, 0.26, 0.4, MAT.armor, 0.02, -0.08, 0.15),
-  box(0.12, 0.12, 0.12, MAT.visor, 0, 0.14, -0.1));
+{
+  // Strider: twin autocannon barrels with heat shrouds, on a heavy housing.
+  const metal = std(0x2a2d31, { metalness: 0.6, roughness: 0.45 }), dark = std(0x16181a, { metalness: 0.5, roughness: 0.6 });
+  const barrel = (x) => {
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 1.0, 10).rotateX(Math.PI / 2), metal); b.position.set(x, 0, -0.45);
+    const shroud = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.4, 8).rotateX(Math.PI / 2), dark); shroud.position.set(x, 0, -0.2);
+    return [b, shroud];
+  };
+  VIEW.cannon.g.add(...barrel(-0.09), ...barrel(0.09), box(0.36, 0.24, 0.42, std(0x4a4136, { roughness: 0.8, metalness: 0.3 }), 0, -0.06, 0.12),
+    box(0.1, 0.05, 0.12, MAT.visor, 0, 0.1, 0.0));
+}
 for (const v of Object.values(VIEW)) { v.g.visible = false; viewGun.add(v.g); }
 VIEW.rifle.g.visible = true;
 export const flash = new THREE.Mesh(new THREE.OctahedronGeometry(0.07, 0), new THREE.MeshBasicMaterial({ color: 0xfff1c2 }));
 flash.position.set(0, 0.03, -0.64); flash.visible = false; viewGun.add(flash);
 viewGun.position.set(0.26, -0.25, -0.45); fpsCam.add(viewGun);
+// Once the models load, the rifle, sniper and flamer use the real gun models.
+const VIEW_LEN = { rifle: 0.78, snipe: 1.2, flame: 0.8 };
+let viewKind = 'rifle';
+modelsReady.then(ok => {
+  if (!ok) return;
+  for (const [kind, len] of Object.entries(VIEW_LEN)) {
+    const m = U.viewModel(kind); if (!m) continue;
+    const g = new THREE.Group(); m.rotation.y = Math.PI; m.position.set(0, -0.02, -len / 2 + 0.12); g.add(m);
+    g.traverse(o => { if (o.isMesh) o.castShadow = false; });
+    g.visible = false; viewGun.add(g);
+    if (VIEW[kind]) viewGun.remove(VIEW[kind].g);
+    VIEW[kind] = { g, muzzle: [0, 0.0, -len + 0.1] };
+    if (kind === 'flame') VIEW[kind].muzzle = [0, 0.0, -len + 0.08];
+  }
+  setViewWeapon(viewKind);
+});
 export function setViewWeapon(kind) {
+  viewKind = kind;
   const v = VIEW[kind] || VIEW.rifle;
   for (const x of Object.values(VIEW)) x.g.visible = x === v;
   flash.position.set(...v.muzzle);
@@ -341,5 +400,7 @@ export function setViewWeapon(kind) {
 export function setFog(fps) { scene.fog.near = fps ? 45 : 120; scene.fog.far = fps ? 170 : 320; }
 export function resize(W, Hh) {
   renderer.setSize(W, Hh, false);
+  viewH = Hh;
+  if (composer) composer.setSize(W, Hh);
   rtsCam.aspect = fpsCam.aspect = W / Hh; rtsCam.updateProjectionMatrix(); fpsCam.updateProjectionMatrix();
 }
