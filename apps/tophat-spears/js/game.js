@@ -23,6 +23,7 @@ import {
 import { tophatAction, tophatOf, spearsOf, canBeSpear, pickHost, cleanName } from './lobby.js';
 import { roomKey, passwordProblem } from './keys.js';
 import * as R from './render.js';
+import { initTouch } from './touch.js';
 
 const $ = s => document.querySelector(s);
 const canvas = $('#view');
@@ -38,6 +39,7 @@ const S = {
   phase: 'lobby',
 };
 const toastSeen = new Set();
+let touch = null; // set up once the page is ready; see touch.js
 
 // ---------- toasts ----------
 function toast(msg, color) {
@@ -58,7 +60,6 @@ try { $('#fName').value = localStorage.getItem(NAME_KEY) || ''; } catch (e) { /*
   const m = location.hash.match(/(?:^#|&)pw=([^&]+)/);
   if (m) { $('#fPw').value = decodeURIComponent(m[1]); history.replaceState(null, '', location.pathname + location.search); }
 }
-if (matchMedia('(pointer: coarse)').matches) $('#mobileNote').hidden = false;
 
 $('#joinForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -478,8 +479,10 @@ function spearFrame(dt) {
     if (!u) return;
     Object.assign(pose, { u: me.unitId, x: u.x, z: u.z, y: H(u.x, u.z), vy: 0, yaw: u.face, pitch: -0.05 });
   }
-  const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
-  const s = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+  const tm = touch ? touch.move : { f: 0, s: 0 };
+  const f = clamp1((keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) + tm.f);
+  const s = clamp1((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + tm.s);
+  if (touch && touch.on) aimAssist(dt);
   const mv = moveSpear(pose, { f, s, sprint: keys.ShiftLeft || keys.ShiftRight, jump: keys.Space }, dt);
   const bob = mv.moving && mv.grounded ? Math.sin(performance.now() / 1000 * 11) * 0.04 : 0;
   R.fpsCam.position.set(pose.x, pose.y + 1.62 + bob, pose.z);
@@ -506,7 +509,7 @@ function spearFrame(dt) {
   aimEnemy = !!(hu && hu.team === 's');
 
   fireCd -= dt;
-  if (mouseFire && fireCd <= 0 && (document.pointerLockElement === canvas || lockFailed)) {
+  if (mouseFire && fireCd <= 0 && (document.pointerLockElement === canvas || lockFailed || (touch && touch.on))) {
     fireCd = BASE.mFire; recoil = 1;
     const spread = 0.012;
     ray.setFromCamera(new THREE.Vector2((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread), R.fpsCam); ray.far = SHOT_RANGE;
@@ -521,6 +524,28 @@ function spearFrame(dt) {
   }
 }
 const r2 = v => Math.round(v * 100) / 100;
+const clamp1 = v => Math.max(-1, Math.min(1, v));
+
+/* Thumbs are less precise than a mouse, so on touch the crosshair drifts
+ * gently onto a bug that is already close to it. Small window, slow pull:
+ * it helps you stay on target, it doesn't aim for you.
+ */
+function aimAssist(dt) {
+  const ex = pose.x, ey = pose.y + 1.62, ez = pose.z;
+  let best = null, bestErr = 0.11;
+  for (const u of S.view.units.values()) {
+    if (u.team !== 's' || u.dead) continue;
+    const dx = u.x - ex, dz = u.z - ez, dy = u.y + 0.7 - ey, h = Math.hypot(dx, dz);
+    if (h > 60 || h < 1) continue;
+    const yaw = Math.atan2(-dx, -dz), pitch = Math.atan2(dy, h);
+    const dyaw = Math.atan2(Math.sin(yaw - pose.yaw), Math.cos(yaw - pose.yaw)), dp = pitch - pose.pitch;
+    const err = Math.hypot(dyaw, dp);
+    if (err < bestErr) { bestErr = err; best = { dyaw, dp }; }
+  }
+  if (!best) return;
+  const k = Math.min(1, 3 * dt);
+  pose.yaw += best.dyaw * k; pose.pitch += best.dp * k;
+}
 
 // ---------- input ----------
 let drag = null;
@@ -534,8 +559,39 @@ function requestLock() {
 document.addEventListener('pointerlockerror', () => { lockFailed = true; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 $('#mini').addEventListener('contextmenu', e => e.preventDefault());
+// Nearest live marine to a screen point, within `radius` pixels.
+function marineAt(clientX, clientY, radius) {
+  const r = canvas.getBoundingClientRect();
+  let best = null, bd = radius;
+  for (const m of aliveMarines()) { const s = proj(m.x, m.y + 1, m.z, R.rtsCam); if (!s) continue;
+    const dd = Math.hypot(s.x - (clientX - r.left), s.y - (clientY - r.top)); if (dd < bd) { bd = dd; best = m; } }
+  return best;
+}
+function boxSelect(ax, ay, bx, by) {
+  const r = canvas.getBoundingClientRect();
+  const x0 = Math.min(ax, bx) - r.left, x1 = Math.max(ax, bx) - r.left, y0 = Math.min(ay, by) - r.top, y1 = Math.max(ay, by) - r.top;
+  for (const m of aliveMarines()) { const s = proj(m.x, m.y + 1, m.z, R.rtsCam); if (s && s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) selected.add(m.id); }
+}
+function drawSelBox(ax, ay, bx, by) {
+  const b = $('#selbox');
+  if (Math.abs(bx - ax) + Math.abs(by - ay) <= 6) { b.hidden = true; return; }
+  b.hidden = false;
+  Object.assign(b.style, { left: Math.min(ax, bx) + 'px', top: Math.min(ay, by) + 'px', width: Math.abs(bx - ax) + 'px', height: Math.abs(by - ay) + 'px' });
+}
+// A tap as the Tophat: tap a marine to add or drop it from the selection,
+// tap the ground to send the selection there (or patrol, if armed).
+function tophatTap(clientX, clientY) {
+  const m = marineAt(clientX, clientY, 34);
+  if (m) { if (selected.has(m.id)) selected.delete(m.id); else selected.add(m.id); return; }
+  if (!selected.size) { toast('Tap marines or a squad first'); return; }
+  const p = groundAt({ clientX, clientY });
+  if (p) issue(patrolArmed ? 'patrol' : 'move', p);
+  setPatrol(false);
+}
+
+// Mouse and pen. Touch is handled in touch.js.
 canvas.addEventListener('pointerdown', e => {
-  if (!inMatch() || !S.view) return;
+  if (e.pointerType === 'touch' || !inMatch() || !S.view) return;
   if (S.role === 'tophat') {
     if (e.button === 0) {
       if (patrolArmed) { const p = groundAt(e); if (p) issue('patrol', p); setPatrol(false); return; }
@@ -547,26 +603,20 @@ canvas.addEventListener('pointerdown', e => {
   }
 });
 canvas.addEventListener('pointermove', e => {
-  if (!drag) return;
+  if (!drag || e.pointerType === 'touch') return;
   drag.x1 = e.clientX; drag.y1 = e.clientY;
-  const b = $('#selbox'), x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
-  if (Math.abs(drag.x1 - drag.x0) + Math.abs(drag.y1 - drag.y0) > 6) { b.hidden = false; Object.assign(b.style, { left: x + 'px', top: y + 'px', width: Math.abs(drag.x1 - drag.x0) + 'px', height: Math.abs(drag.y1 - drag.y0) + 'px' }); }
+  drawSelBox(drag.x0, drag.y0, drag.x1, drag.y1);
 });
 window.addEventListener('pointerup', e => {
+  if (e.pointerType === 'touch') return;
   if (e.button === 0) mouseFire = false;
   if (!drag) return;
   const d = drag; drag = null; $('#selbox').hidden = true;
-  const r = canvas.getBoundingClientRect();
   if (!d.shift) selected.clear();
   if (Math.abs(d.x1 - d.x0) + Math.abs(d.y1 - d.y0) <= 6) {
-    let best = null, bd = 24;
-    for (const m of aliveMarines()) { const s = proj(m.x, m.y + 1, m.z, R.rtsCam); if (!s) continue;
-      const dd = Math.hypot(s.x - (d.x0 - r.left), s.y - (d.y0 - r.top)); if (dd < bd) { bd = dd; best = m; } }
+    const best = marineAt(d.x0, d.y0, 24);
     if (best) { if (d.shift && selected.has(best.id)) selected.delete(best.id); else selected.add(best.id); }
-  } else {
-    const x0 = Math.min(d.x0, d.x1) - r.left, x1 = Math.max(d.x0, d.x1) - r.left, y0 = Math.min(d.y0, d.y1) - r.top, y1 = Math.max(d.y0, d.y1) - r.top;
-    for (const m of aliveMarines()) { const s = proj(m.x, m.y + 1, m.z, R.rtsCam); if (s && s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) selected.add(m.id); }
-  }
+  } else boxSelect(d.x0, d.y0, d.x1, d.y1);
 });
 document.addEventListener('mousemove', e => {
   if (!inMatch() || !spearActive()) return;
@@ -649,6 +699,7 @@ function syncHud() {
   $('#bTop').classList.toggle('on', S.role === 'tophat'); $('#bSpear').classList.toggle('on', S.role === 'spear');
   $('#youChip').textContent = S.solo ? '' : (S.role === 'tophat' ? 'You · Tophat' : 'You · Spear') + (S.isHost ? ' · host' : '');
   R.setFog(active);
+  if (touch) touch.sync({ playing, tophat: playing && S.role === 'tophat', spearActive: active && S.phase === 'playing' });
   if (S.screen === 'game' && !S.view && !S.isHost) showBanner('Joining the match…'); else if (!$('#banner').textContent.startsWith('The host')) $('#banner').hidden = true;
 }
 
@@ -663,7 +714,7 @@ function hud(dt) {
     $('#hopTag').textContent = hc ? `${hc.name} · ${Math.round(Math.hypot(hc.x - pose.x, hc.z - pose.z))}m · ${cd > 0 ? 'hop in ' + Math.ceil(cd) + 's' : 'E to hop'}` : '';
     $('#hitm').style.opacity = hitFlash;
     $('#vignette').style.opacity = vign;
-    const show = document.pointerLockElement !== canvas && S.phase === 'playing';
+    const show = document.pointerLockElement !== canvas && S.phase === 'playing' && !(touch && touch.on);
     $('#lockhint').hidden = !show;
     $('#lockhint').textContent = lockFailed ? 'Hold right mouse to look around. Left click fires.' : 'Click to take control. Esc releases the mouse.';
     if (u) R.drawLeash(me.leash, v.C.leashR, leashStatus(u, me.leash, v.C, now).s); else R.drawLeash(null);
@@ -856,6 +907,25 @@ function frame(ts) {
 }
 requestAnimationFrame(frame);
 
+touch = initTouch({
+  canvas, cam, inMatch,
+  role: () => S.role,
+  spearActive: () => !!spearActive(),
+  onChange: () => syncHud(),
+  setFire: v => { mouseFire = v; },
+  look: (dx, dy) => { pose.yaw -= dx; pose.pitch = Math.max(-1.45, Math.min(1.45, pose.pitch - dy)); },
+  hop: tryHop,
+  key: (k, v) => { keys[k] = v; },
+  selectAll: () => { selected.clear(); aliveMarines().forEach(m => selected.add(m.id)); },
+  clearSel: () => { selected.clear(); setPatrol(false); },
+  tap: tophatTap, drawBox: drawSelBox, boxSelect,
+  pan: (dx, dy) => {
+    const k = cam.dist / Math.max(300, innerHeight) * 1.3;
+    cam.fx = Math.max(-80, Math.min(80, cam.fx - dx * k)); cam.fz = Math.max(-80, Math.min(85, cam.fz - dy * k));
+  },
+  zoomTo: d => { cam.dist = Math.max(28, Math.min(120, d)); },
+});
+
 /* Browsers stop animation frames in a hidden tab. If the host alt-tabs, a
  * worker's timer keeps the match ticking for everyone else. (Solo just
  * pauses, which is what you want.)
@@ -870,4 +940,4 @@ try {
 } catch (e) { /* no workers: the match pauses while the host's tab is hidden */ }
 
 // Handy for poking at things from the console while testing.
-window.__ts = { S, pose };
+window.__ts = { S, pose, cam };

@@ -16,6 +16,17 @@ Live at `/projects/tophat-spears` (short link: `/tophat`).
 4. **Copy invite link** puts the password in the link's `#hash`, which the
    browser never sends to a server. Only send it to friends.
 
+Phones and tablets work too (landscape is best). See `js/touch.js`:
+
+- **Tophat:** tap marines or a squad button to select, tap the ground to send
+  them. One finger drags the map, two fingers pinch to zoom. Patrol or Hold
+  then tap; Box turns the next drag into a selection box. All and Clear do
+  what they say.
+- **Spear:** left thumb is a floating joystick, right thumb drags to look.
+  Hold Fire to shoot (drag it to keep aiming), tap Hop while aiming at a
+  marine. Jump, and Sprint as a toggle. A light aim assist pulls the
+  crosshair onto a bug that's already very close to it.
+
 No accounts. Each tab signs in anonymously, so two tabs on one laptop are two
 players and a reload keeps your seat. **Practice solo** runs offline with the
 prototype's Tab swap between seats.
@@ -61,6 +72,7 @@ See the header of `js/net.js` for the shape of each node.
 | `js/net.js` | Firebase: sign-in, presence, seats, commands, state |
 | `js/render.js` | Three.js scene and meshes (r128 global from cdnjs) |
 | `js/game.js` | Screens, input, HUD, host loop, client interpolation |
+| `js/touch.js` | Touch controls: Tophat gestures, Spear joystick and buttons |
 | `prototype.html` | The original single-player prototype, kept for reference (not deployed) |
 
 ## Testing
@@ -89,4 +101,4 @@ cd apps/tophat-spears && python3 -m http.server 8765
 - Spears can't walk up ground steeper than about 42 degrees.
 - Tuning is set by the host in the lobby and locked during the match.
 
-Still open from the handoff: pathfinding, sound, mobile, nicer models.
+Still open from the handoff: pathfinding, sound, nicer models.

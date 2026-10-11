@@ -7,7 +7,9 @@
 import { H, RELAY, SPAWNS, PROPS, seeded } from './map.js';
 
 export const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#view'), antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// Phones get a lighter load: fewer pixels and a smaller shadow map.
+const LIGHT = matchMedia('(pointer: coarse)').matches;
+renderer.setPixelRatio(Math.min(devicePixelRatio, LIGHT ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -19,7 +21,7 @@ scene.add(new THREE.HemisphereLight(0xb9c8e0, 0x5a3a2a, 0.75));
 const sun = new THREE.DirectionalLight(0xffe0bd, 1.05);
 sun.position.set(-50, 80, 30);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(LIGHT ? 1024 : 2048, LIGHT ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -90, right: 90, top: 90, bottom: -90, near: 10, far: 220 });
 sun.shadow.bias = -0.0008;
 scene.add(sun);
