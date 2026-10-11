@@ -12,7 +12,7 @@
  * Practice solo runs the same host code with no room at all, and keeps the
  * prototype's Tab swap between the two seats.
  */
-/* global THREE */
+import * as THREE from 'three';
 
 import { DEFAULTS, TUNE, MTYPES, mtype, STIM, BUGT, WAVES, SQUADS, RELAY_MAX, cleanConfig } from './config.js';
 import { H, RELAY, SPAWNS, PROPS, clampM } from './map.js';
@@ -511,6 +511,9 @@ function spearFrame(dt) {
   if (R.fpsCam.fov !== fov) { R.fpsCam.fov = fov; R.fpsCam.updateProjectionMatrix(); }
   if (u) { u.x = pose.x; u.y = pose.y; u.z = pose.z; u.face = pose.yaw; }
   if (u && lastHp !== null && u.hp < lastHp) vign = Math.min(1, vign + (lastHp - u.hp) / 30);
+  // Stim kicking in (yours or the Tophat's): a hard red pulse.
+  if (u && u.stim > 0 && !lastStim) vign = Math.max(vign, 0.85);
+  lastStim = !!(u && u.stim > 0);
   lastHp = u ? u.hp : null;
 
   if (!S.isHost) {
@@ -542,7 +545,7 @@ function spearFrame(dt) {
   }
 }
 
-let burstLeft = 0, ammoCycle = 0, scoped = false;
+let burstLeft = 0, ammoCycle = 0, scoped = false, lastStim = false;
 const SPREAD = { rifle: 0.018, cannon: 0.022, snipe: 0, flame: 0 };
 function fireWeapon(w, myId) {
   recoil = w.kind === 'snipe' ? 2.2 : w.kind === 'cannon' ? 1.4 : w.kind === 'flame' ? 0.3 : 1;
@@ -972,7 +975,7 @@ function frame(ts) {
     const a = 0.98; R.rtsCam.position.set(cam.fx, cam.dist * Math.sin(a), cam.fz + cam.dist * Math.cos(a)); R.rtsCam.lookAt(cam.fx, 0, cam.fz);
   }
   const c = active ? R.fpsCam : R.rtsCam;
-  R.renderer.render(R.scene, c);
+  R.draw(c, dt);
   drawOverlay(c);
   if (hasView) { drawMini(); hud(dt); }
 }
@@ -1012,4 +1015,4 @@ try {
 } catch (e) { /* no workers: the match pauses while the host's tab is hidden */ }
 
 // Handy for poking at things from the console while testing.
-window.__ts = { S, pose, cam };
+window.__ts = { S, pose, cam, R, fire: v => { mouseFire = v; lockFailed = true; } };

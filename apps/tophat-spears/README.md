@@ -54,6 +54,27 @@ Torch and a Shade; Charlie: 2 Marines, a Shade and a Strider) and
 reinforcements rotate through the types. All the numbers are in
 `js/config.js` (`MTYPES`, `BUGT`, `STIM`).
 
+## Graphics
+
+- **Three.js 0.169** as ES modules from jsDelivr (import map in `index.html`),
+  with ACES tone mapping. Bloom on desktop only.
+- **Animated models** (`models/`, all CC0 by Quaternius, see `models/CREDITS.md`):
+  armored troopers for Marines, Torches and Shades (one rig, different paint,
+  helmets, plates, tanks and guns), a rusty walker for the Strider, and two
+  alien crawlers tinted and scaled into the four swarm types. They were
+  trimmed to the animations the game uses and compressed with glTF-Transform
+  (meshopt + WebP), about 1.35 MB together. Until they load, or if they
+  can't, the old low-poly shapes stand in.
+- **Effects** (`js/fx.js`): pooled particles for the flamethrower (a rolling
+  fireball that turns to smoke), muzzle flashes, sparks, dust, smoke, acid
+  and bug ichor; moving tracers, sniper beams and cannon rounds with small
+  explosions; a few reusable lights for flashes and fire. Phones get fewer
+  particles, no bloom and no unit shadows.
+
+To refresh a model: convert with three.js FBXLoader/GLTFLoader + GLTFExporter
+(height 1, feet at 0), then `npx @gltf-transform/cli optimize in.glb out.glb
+--compress meshopt --texture-compress webp --texture-size 1024`.
+
 ## How the multiplayer works
 
 The handoff plan suggested Colyseus on Fly.io. We went with Firebase instead,
@@ -93,7 +114,9 @@ See the header of `js/net.js` for the shape of each node.
 | `js/lobby.js` | Seat rules: Spears first, Tophat swaps, host takeover |
 | `js/keys.js` | Password to room key |
 | `js/net.js` | Firebase: sign-in, presence, seats, commands, state |
-| `js/render.js` | Three.js scene and meshes (r128 global from cdnjs) |
+| `js/render.js` | Three.js scene, terrain, unit meshes, bloom |
+| `js/units.js` | Animated unit models: dressing, held weapons, animation states |
+| `js/fx.js` | Particles, tracers, beams and flash lights |
 | `js/game.js` | Screens, input, HUD, host loop, client interpolation |
 | `js/touch.js` | Touch controls: Tophat gestures, Spear joystick and buttons |
 | `prototype.html` | The original single-player prototype, kept for reference (not deployed) |
@@ -124,4 +147,4 @@ cd apps/tophat-spears && python3 -m http.server 8765
 - Spears can't walk up ground steeper than about 42 degrees.
 - Tuning is set by the host in the lobby and locked during the match.
 
-Still open from the handoff: pathfinding, sound, nicer models, reloads, and balance (AI soldiers alone currently win every match).
+Still open from the handoff: pathfinding, sound, terrain textures, reloads, and balance (AI soldiers alone currently win every match).
