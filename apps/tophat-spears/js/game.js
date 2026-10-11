@@ -15,9 +15,9 @@
 import * as THREE from 'three';
 
 import { DEFAULTS, TUNE, MTYPES, mtype, STIM, BUGT, WAVES, SQUADS, RELAY_MAX, cleanConfig } from './config.js';
-import { H, RELAY, SPAWNS, PROPS, clampM } from './map.js';
+import { H, RELAY, SPAWNS, PROPS, BUNKERS, BKIND, BLUFFS, clampM } from './map.js';
 import {
-  newMatch, step, addSpear, removeSpear, setDriven, hop, redeploy, spearPose, spearShot, order,
+  newMatch, step, addSpear, removeSpear, setDriven, hop, redeploy, spearPose, spearShot, order, spearGarrison,
   snapshot, decode, interpolate, serialize, restore, rankBodies, leashStatus, moveSpear, stim, spearStim,
 } from './sim.js';
 import { tophatAction, tophatOf, spearsOf, canBeSpear, pickHost, cleanName } from './lobby.js';
@@ -217,6 +217,9 @@ function handleCmd(pid, c) {
     sim.events.push(r.ok ? { m: (c.t === 'hop' ? 'Hopped into ' : 'Dropped into ') + r.name, c: '#7fe0ff', to: pid } : { m: r.why, c: '', to: pid });
   } else if (c.t === 'shot') {
     spearShot(sim, pid, { bug: c.bug, bugs: c.bugs ? Object.values(c.bugs) : null, a: c.a ? Object.values(c.a) : null, b: c.b ? Object.values(c.b) : null });
+  } else if (c.t === 'garrison') {
+    const r = spearGarrison(sim, pid);
+    if (r.why) sim.events.push({ m: r.why, c: r.ok ? '#7fe0ff' : '', to: pid });
   } else if (c.t === 'stim') {
     if (c.ids) { if (S.solo || (p && p.role === 'tophat')) stim(sim, Object.values(c.ids)); }
     else if (!spearStim(sim, pid)) sim.events.push({ m: 'Can\u2019t stim: not enough health, or this body has no stims', c: '', to: pid });
@@ -445,7 +448,7 @@ const keys = {};
 const selected = new Set();
 let patrolArmed = false, mouseFire = false, lockFailed = false, hopCand = null, aimEnemy = false;
 let markers = [], vign = 0, hitFlash = 0, recoil = 0, flashT = 0, fireCd = 0, poseSendT = 0, lastHp = null;
-const pose = { u: 0, x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.05 };
+const pose = { u: 0, x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: -0.05, g: -1 };
 function resetPose() { pose.u = 0; lastHp = null; }
 
 const mySpear = () => (S.view && S.view.spears[S.uid]) || null;
@@ -475,6 +478,18 @@ function spearStimNow() {
   cmd({ t: 'stim' });
 }
 
+// The building a Spear standing at (x, y, z) could go into, or null.
+function bunkerNear(x, y, z) {
+  if (!S.view) return null;
+  for (const k of BUNKERS) {
+    if (!(S.view.bunkers[k.i] > 0)) continue;
+    const d = Math.min(Math.hypot(x - k.dx, z - k.dz), Math.hypot(x - k.x, z - k.z) - k.r);
+    if (d < 3.5 && Math.abs(y - H(k.dx, k.dz)) < 2.5) return k;
+  }
+  return null;
+}
+function tryGarrison() { if (spearActive()) cmd({ t: 'garrison' }); }
+
 function tryHop() {
   const me = mySpear(); if (!spearActive()) return;
   const cd = me.hopReadyAt - hostNow();
@@ -486,14 +501,14 @@ function tryHop() {
 // ---------- spear frame ----------
 const ray = new THREE.Raycaster();
 const CENTER = new THREE.Vector2(0, 0);
-const occluders = [R.terrain, R.rockGroup, R.relayMesh];
+const occluders = [R.terrain, R.rockGroup, R.relayMesh, R.bunkerGroup];
 
 function spearFrame(dt) {
   const me = mySpear(), u = S.view.units.get(me.unitId);
   if (pose.u !== me.unitId) {
     // New body: start from wherever it is now, holding its weapon.
     if (!u) return;
-    Object.assign(pose, { u: me.unitId, x: u.x, z: u.z, y: H(u.x, u.z), vy: 0, yaw: u.face, pitch: -0.05 });
+    Object.assign(pose, { u: me.unitId, x: u.x, z: u.z, y: u.inB >= 0 ? u.y : H(u.x, u.z), vy: 0, yaw: u.face, pitch: -0.05, g: u.inB });
     burstLeft = 0; fireCd = 0; ammoCycle = 0;
     R.setViewWeapon(mtype(u.type).w.kind);
     syncHud();
@@ -503,7 +518,11 @@ function spearFrame(dt) {
   const f = clamp1((keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) + tm.f);
   const s = clamp1((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + tm.s);
   if (touch && touch.on) aimAssist(dt, T.eye);
-  const mv = moveSpear(pose, { f, s, sprint: keys.ShiftLeft || keys.ShiftRight, jump: keys.Space }, dt, u ? u.type : 'marine', stimOn);
+  // Into or out of a building: the host moved the body, so follow it.
+  if (u && u.inB !== pose.g) { Object.assign(pose, { x: u.x, z: u.z, y: u.inB >= 0 ? u.y : H(u.x, u.z), vy: 0, g: u.inB }); syncHud(); }
+  // Inside, you hold your firing slot: look and shoot, no walking.
+  const mv = u && u.inB >= 0 ? (Object.assign(pose, { x: u.x, y: u.y, z: u.z }), { moving: false, grounded: true })
+    : moveSpear(pose, { f, s, sprint: keys.ShiftLeft || keys.ShiftRight, jump: keys.Space }, dt, u ? u.type : 'marine', stimOn);
   const bob = mv.moving && mv.grounded ? Math.sin(performance.now() / 1000 * (T.eye > 2 ? 6 : 11)) * (T.eye > 2 ? 0.08 : 0.04) : 0;
   R.fpsCam.position.set(pose.x, pose.y + T.eye + bob, pose.z);
   R.fpsCam.rotation.set(pose.pitch + recoil * 0.04, pose.yaw, 0);
@@ -520,7 +539,7 @@ function spearFrame(dt) {
     poseSendT += dt;
     if (poseSendT >= POSE_EVERY && S.room) {
       poseSendT = 0;
-      S.room.sendPose({ u: pose.u, x: r2(pose.x), y: r2(pose.y), z: r2(pose.z), yaw: r2(pose.yaw) }).catch(() => {});
+      S.room.sendPose({ u: pose.u, x: r2(pose.x), y: r2(pose.y), z: r2(pose.z), yaw: r2(pose.yaw), g: pose.g }).catch(() => {});
     }
   }
 
@@ -608,7 +627,13 @@ function aimAssist(dt, eye) {
 // ---------- input ----------
 let drag = null;
 function ndc(e) { const r = canvas.getBoundingClientRect(); return new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); }
-function groundAt(e) { ray.setFromCamera(ndc(e), R.rtsCam); ray.far = 1000; const h = ray.intersectObject(R.terrain)[0]; return h ? h.point : null; }
+// Where an order lands. Clicking a building means the building itself.
+function groundAt(e) {
+  ray.setFromCamera(ndc(e), R.rtsCam); ray.far = 1000;
+  const h = ray.intersectObjects([R.terrain, R.bunkerGroup], true)[0]; if (!h) return null;
+  const bi = R.bunkerIdOf(h.object);
+  return bi !== null && S.view && S.view.bunkers[bi] > 0 ? { x: BUNKERS[bi].x, z: BUNKERS[bi].z } : h.point;
+}
 function requestLock() {
   if (lockFailed) return;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => { lockFailed = true; }); }
@@ -701,6 +726,7 @@ window.addEventListener('keydown', e => {
     else if (e.code === 'Escape') { setPatrol(false); selected.clear(); }
   } else {
     if (e.code === 'KeyE') tryHop();
+    if (e.code === 'KeyG') tryGarrison();
     if (e.code === 'KeyF') spearStimNow();
     const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].indexOf(e.code);
     const me = mySpear();
@@ -813,7 +839,10 @@ function hud(dt) {
     $('#hHpTxt').textContent = `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)}`;
     $('#hBuff').textContent = u.stim > 0 ? `STIM ${Math.ceil(u.stim)}s` : `+${Math.round(v.C.heroHp * 100)}% HP · +${Math.round(v.C.heroDmg * 100)}% DMG`;
     $('#hBuff').classList.toggle('stim', u.stim > 0);
-    $('#hHint').textContent = mtype(u.type).stim ? (touch && touch.on ? '' : 'F stim') : u.type === 'shade' && !(touch && touch.on) ? 'Right-click to scope' : '';
+    const tch = touch && touch.on, bn = u.inB >= 0 ? BUNKERS[u.inB] : bunkerNear(pose.x, pose.y, pose.z);
+    const gHint = bn && !tch ? (u.inB >= 0 ? `G leave ${BKIND[bn.kind].label}` : `G enter ${BKIND[bn.kind].label}`) : '';
+    $('#hHint').textContent = [gHint, tch ? '' : mtype(u.type).stim ? 'F stim' : u.type === 'shade' ? 'Right-click to scope' : ''].filter(Boolean).join(' · ');
+    if (touch) touch.garrison(u.inB >= 0 ? 'Exit' : bn ? 'Enter' : '');
     const cd = me.hopReadyAt - now, hopEl = $('#hop');
     hopEl.classList.toggle('ready', cd <= 0); hopEl.textContent = cd <= 0 ? 'Hop ready · aim at a marine, press E' : `Hop cooldown ${Math.ceil(cd)}s`;
     const ls = leashStatus(u, me.leash, v.C, now), el = $('#leash');
@@ -841,6 +870,8 @@ const mbake = document.createElement('canvas'); mbake.width = mbake.height = MS;
   for (let py = 0; py < MS; py++) for (let px = 0; px < MS; px++) {
     const x = px / MS * 160 - 80, z = py / MS * 160 - 80, y = H(x, z), i = (py * MS + px) * 4;
     let r = 150 + y * 7, g = 100 + y * 4, b = 64 + y * 2;
+    // Cliffs show as dark edges.
+    if (Math.abs(H(x + 0.6, z) - y) + Math.abs(H(x, z + 0.6) - y) > 1.4) { r = 70; g = 46; b = 34; }
     if (SPAWNS.some(([sx, sz]) => Math.hypot(x - sx, z - sz) < 13)) { r = 74; g = 36; b = 67; }
     img.data[i] = Math.min(255, r); img.data[i + 1] = Math.min(255, g); img.data[i + 2] = Math.min(255, b); img.data[i + 3] = 255;
   }
@@ -852,6 +883,7 @@ function drawMini() {
   const v = S.view;
   mctx.drawImage(mbake, 0, 0);
   const [rx, rz] = mm(RELAY.x, RELAY.z); mctx.fillStyle = '#7fe0ff'; mctx.fillRect(rx - 7, rz - 7, 14, 14);
+  for (const k of BUNKERS) { const [x, z] = mm(k.x, k.z), up = v.bunkers[k.i] > 0; mctx.fillStyle = up ? '#d9d3c4' : '#4a4038'; mctx.fillRect(x - 6, z - 6, 12, 12); if (up) { mctx.strokeStyle = '#2b2622'; mctx.lineWidth = 2; mctx.strokeRect(x - 6, z - 6, 12, 12); } }
   for (const b of v.units.values()) { if (b.team !== 's' || b.dead) continue; const [x, z] = mm(b.x, b.z); mctx.fillStyle = '#e04aa8'; const sz = b.type === 'brute' || b.type === 'burrower' ? 9 : 6; mctx.fillRect(x - 3, z - 3, sz, sz); }
   for (const m of v.units.values()) { if (m.team !== 'm' || m.dead) continue; const [x, z] = mm(m.x, m.z);
     mctx.fillStyle = m.owner ? '#ffcc4d' : selected.has(m.id) ? '#b9f5c6' : '#8fb3d6'; mctx.beginPath(); mctx.arc(x, z, m.owner ? 6 : 4, 0, 7); mctx.fill(); }
@@ -898,6 +930,14 @@ function drawOverlay(c) {
     }
     for (const b of v.units.values()) { if (b.team !== 's' || b.dead || b.hp >= b.maxHp) continue; const s = proj(b.x, b.y + barH(b), b.z, c); if (s) bar(s.x, s.y, b.type === 'brute' || b.type === 'burrower' ? 30 : 16, b.hp / b.maxHp, '#e04aa8'); }
     const rs = proj(RELAY.x, H(RELAY.x, RELAY.z) + 10, RELAY.z, c); if (rs) bar(rs.x, rs.y, 60, v.relayHp / RELAY_MAX, '#7fe0ff');
+    // Buildings: health, and how many are inside.
+    const inside = BUNKERS.map(() => 0);
+    for (const m of v.units.values()) if (m.team === 'm' && !m.dead && m.inB >= 0) inside[m.inB]++;
+    for (const k of BUNKERS) {
+      const K = BKIND[k.kind], hp = v.bunkers[k.i], s = proj(k.x, k.base + K.h + 2.6, k.z, c); if (!s) continue;
+      if (hp > 0) { bar(s.x, s.y, 44, hp / K.hp, '#d9d3c4'); ctx.fillStyle = 'rgba(241,230,210,.9)'; ctx.fillText(`${K.label.toUpperCase()} ${inside[k.i]}/${K.slots.length}`, s.x, s.y - 5); }
+      else { ctx.fillStyle = 'rgba(255,90,79,.85)'; ctx.fillText('WRECKED', s.x, s.y); }
+    }
   } else {
     // Allies within 60m get a chevron; other Spears get their name.
     const me = mySpear();
@@ -962,6 +1002,7 @@ function frame(ts) {
   if (hasView) {
     const me = mySpear();
     R.sync(S.view, { tophat: S.role === 'tophat', selected, hideId: active && me ? me.unitId : -1 }, dt);
+    R.syncBunkers(S.view.bunkers);
   }
   R.tickTracers(dt);
   markers.forEach(mk => mk.t += dt); markers = markers.filter(mk => mk.t < 0.7);
@@ -989,6 +1030,7 @@ touch = initTouch({
   setFire: v => { mouseFire = v; },
   look: (dx, dy) => { pose.yaw -= dx; pose.pitch = Math.max(-1.45, Math.min(1.45, pose.pitch - dy)); },
   hop: tryHop,
+  garrison: tryGarrison,
   stim: spearStimNow,
   key: (k, v) => { keys[k] = v; },
   selectAll: () => { selected.clear(); aliveMarines().forEach(m => selected.add(m.id)); },

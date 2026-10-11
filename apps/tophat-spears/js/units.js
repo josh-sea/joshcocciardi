@@ -136,7 +136,9 @@ function gunMesh(kind, len) {
   const bb = new THREE.Box3().setFromObject(src), size = bb.getSize(new THREE.Vector3()), c = bb.getCenter(new THREE.Vector3());
   src.position.sub(c);
   const holder = new THREE.Group(); holder.add(src);
-  holder.rotation.y = -Math.PI / 2; // models lie along x
+  // The models lie along x: the rifle and shotgun with the muzzle at +x,
+  // the sniper with it at -x.
+  holder.rotation.y = kind === 'sniper' ? Math.PI / 2 : -Math.PI / 2;
   holder.scale.setScalar(len / size.x);
   g.add(holder);
   if (kind === 'shotgun') {

@@ -3,7 +3,7 @@
  * Three.js comes from jsDelivr through the import map in index.html.
  */
 import * as THREE from 'three';
-import { H, RELAY, SPAWNS, PROPS, seeded } from './map.js';
+import { H, RELAY, SPAWNS, PROPS, BUNKERS, BKIND, seeded } from './map.js';
 import * as U from './units.js';
 import { createFx } from './fx.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -53,7 +53,8 @@ const MAT = {
 };
 
 // ---------- terrain ----------
-const SIZE = 200, SEG = 100;
+// One-metre grid, so the bluffs' cliffs come out sheer.
+const SIZE = 176, SEG = 176;
 let tg = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
 tg.rotateX(-Math.PI / 2);
 { const p = tg.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, H(p.getX(i), p.getZ(i))); }
@@ -66,7 +67,7 @@ tg = tg.toNonIndexed();
     a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1); c.fromBufferAttribute(p, i + 2);
     THREE.Triangle.getNormal(a, b, c, n);
     const y = (a.y + b.y + c.y) / 3, cx = (a.x + b.x + c.x) / 3, cz = (a.z + b.z + c.z) / 3, slope = 1 - Math.abs(n.y);
-    let hex = y > 14 ? 0x8f6450 : slope > 0.35 ? 0x7a4d3a : y > 5 ? 0xb57a4c : y > 2 ? 0xc48955 : 0xcf9a62;
+    let hex = y > 14 ? 0x8f6450 : slope > 0.6 ? (rng() < 0.5 ? 0x6a4434 : 0x5e3c2f) : slope > 0.35 ? 0x7a4d3a : y > 8.2 ? 0xa8754f : y > 5 ? 0xb57a4c : y > 2 ? 0xc48955 : 0xcf9a62;
     if (Math.hypot(cx - RELAY.x, cz - RELAY.z) < 11) hex = 0x6c737c;
     for (const [sx, sz] of SPAWNS) if (Math.hypot(cx - sx, cz - sz) < 13 + rng() * 3) hex = 0x4a2443;
     col.setHex(hex).offsetHSL(0, 0, (rng() - 0.5) * 0.05);
@@ -107,6 +108,87 @@ let relayCore;
   g.position.set(RELAY.x, y0, RELAY.z); relayCore = core;
   scene.add(g);
 }
+
+// ---------- buildings ----------
+// Bunkers, the outpost and the watchtowers. Each has its standing model and
+// a pile of rubble shown while it's wrecked.
+const BMAT = {
+  concrete: std(0x7d7a71, { roughness: 0.9 }), concreteDk: std(0x5c5a53, { roughness: 0.9 }),
+  sand: std(0x9b8660, { roughness: 1 }), slit: std(0x15171a, { roughness: 1 }),
+  steel: std(0x4a4f55, { metalness: 0.5, roughness: 0.55 }), rust: std(0x6b4a33, { metalness: 0.3, roughness: 0.8 }),
+  stripe: std(0xc9a227, { roughness: 0.7 }),
+};
+const bbox = (g, w, h, d, mat, x, y, z, ry = 0) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.y = ry;
+  m.castShadow = m.receiveShadow = true; g.add(m); return m;
+};
+function bunkerModel(k) {
+  const K = BKIND[k.kind], g = new THREE.Group(), doorAng = Math.atan2(k.door[0], k.door[1]);
+  if (k.kind === 'bunker') {
+    // Eight wall panels round a pit, a gap at the door, sandbags on top.
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(K.r / Math.cos(Math.PI / 8), K.r / Math.cos(Math.PI / 8), 0.2, 8), BMAT.concreteDk);
+    slab.rotation.y = doorAng + Math.PI / 8; slab.receiveShadow = true; g.add(slab);
+    for (let i = 0; i < 8; i++) {
+      const a = doorAng + i * Math.PI / 4;
+      if (i === 0) continue;
+      const len = 2 * K.r * Math.tan(Math.PI / 8) + 0.1, cx = Math.sin(a) * (K.r - 0.2), cz = Math.cos(a) * (K.r - 0.2);
+      bbox(g, len, K.h - 0.25, 0.4, BMAT.concrete, cx, (K.h - 0.25) / 2, cz, a);
+      for (let j = -1; j <= 1; j++) bbox(g, len / 3 - 0.06, 0.24, 0.5, BMAT.sand, cx + Math.cos(a) * j * len / 3, K.h - 0.12, cz - Math.sin(a) * j * len / 3, a);
+    }
+    // Hazard-striped posts either side of the way in.
+    for (const sx of [-1, 1]) bbox(g, 0.22, 1.5, 0.22, BMAT.stripe, Math.sin(doorAng) * K.r + Math.cos(doorAng) * sx * 1.0, 0.75, Math.cos(doorAng) * K.r - Math.sin(doorAng) * sx * 1.0);
+  } else if (k.kind === 'outpost') {
+    const w = K.r * 1.75, f = K.floor;
+    bbox(g, w, f + 3, w, BMAT.concrete, 0, (f - 3) / 2, 0);      // runs into the hillside
+    bbox(g, w + 0.2, 0.25, w + 0.2, BMAT.concreteDk, 0, f, 0);
+    for (const [x, z, ry] of [[0, -w / 2, 0], [0, w / 2, 0], [-w / 2, 0, Math.PI / 2], [w / 2, 0, Math.PI / 2]]) {
+      bbox(g, w, 0.95, 0.3, BMAT.concrete, x, f + 0.48, z, ry);
+      bbox(g, w * 0.7, 0.18, 0.32, BMAT.slit, x, f - 1.2, z, ry);   // firing slit on the wall below
+    }
+    bbox(g, 1.2, 2.1, 0.12, BMAT.rust, Math.sin(doorAng) * w / 2, 1.05, Math.cos(doorAng) * w / 2, doorAng);
+    // Ladder to the roof beside the door.
+    for (const sx of [-0.3, 0.3]) bbox(g, 0.08, f + 1, 0.08, BMAT.steel, Math.sin(doorAng) * (w / 2 + 0.15) + Math.cos(doorAng) * (1.4 + sx), (f + 1) / 2, Math.cos(doorAng) * (w / 2 + 0.15) - Math.sin(doorAng) * (1.4 + sx), doorAng);
+    bbox(g, 0.2, 0.2, 0.2, BMAT.stripe, 0, f + 1.1, 0);
+  } else {
+    const f = K.floor, w = 3.2;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const leg = bbox(g, 0.22, f, 0.22, BMAT.steel, sx * 1.3, f / 2, sz * 1.3);
+      leg.rotation.set(sz * 0.05, 0, -sx * 0.05);
+    }
+    for (const y of [f * 0.33, f * 0.66]) { bbox(g, 2.8, 0.1, 0.1, BMAT.rust, 0, y, 1.3); bbox(g, 2.8, 0.1, 0.1, BMAT.rust, 0, y, -1.3); bbox(g, 0.1, 0.1, 2.8, BMAT.rust, 1.3, y, 0); bbox(g, 0.1, 0.1, 2.8, BMAT.rust, -1.3, y, 0); }
+    bbox(g, w, 0.25, w, BMAT.concreteDk, 0, f, 0);
+    for (const [x, z, ry] of [[0, -w / 2, 0], [0, w / 2, 0], [-w / 2, 0, Math.PI / 2], [w / 2, 0, Math.PI / 2]]) {
+      bbox(g, w, 0.95, 0.2, BMAT.sand, x, f + 0.48, z, ry);
+    }
+    bbox(g, w + 0.4, 0.12, w + 0.4, BMAT.rust, 0, f + 2.7, 0);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) bbox(g, 0.1, 1.75, 0.1, BMAT.steel, sx * 1.5, f + 1.85, sz * 1.5);
+    for (const sx of [-0.25, 0.25]) bbox(g, 0.07, f, 0.07, BMAT.steel, Math.sin(doorAng) * 1.75 + Math.cos(doorAng) * sx, f / 2, Math.cos(doorAng) * 1.75 - Math.sin(doorAng) * sx, doorAng);
+  }
+  return g;
+}
+function rubbleModel(k) {
+  const g = new THREE.Group(), rng = seeded(500 + k.i), K = BKIND[k.kind];
+  for (let i = 0; i < 9; i++) {
+    const a = rng() * 6.28, r = rng() * K.r, sz = 0.5 + rng() * 1.1;
+    const m = bbox(g, sz, sz * 0.5, sz * 0.8, rng() < 0.6 ? BMAT.concreteDk : BMAT.rust, Math.sin(a) * r, sz * 0.2, Math.cos(a) * r);
+    m.rotation.set(rng() - 0.5, rng() * 3, rng() - 0.5);
+  }
+  return g;
+}
+export const bunkerGroup = new THREE.Group(); scene.add(bunkerGroup);
+const bunkerObjs = BUNKERS.map(k => {
+  const up = bunkerModel(k), down = rubbleModel(k), g = new THREE.Group();
+  g.add(up, down); down.visible = false;
+  g.position.set(k.x, k.base, k.z);
+  g.traverse(o => { o.userData.bunker = k.i; });
+  bunkerGroup.add(g);
+  return { up, down };
+});
+// Show each building standing or wrecked, from the match's building HP.
+export function syncBunkers(hps) {
+  hps.forEach((hp, i) => { const o = bunkerObjs[i]; if (!o) return; o.up.visible = hp > 0; o.down.visible = hp <= 0; });
+}
+export function bunkerIdOf(o) { while (o && o.userData.bunker === undefined) o = o.parent; return o ? o.userData.bunker : null; }
 
 // ---------- leash pillars ----------
 const leashMat = new THREE.MeshBasicMaterial({ color: 0xff9f3a, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false });

@@ -7,10 +7,10 @@
  *
  * Run: node apps/portfolio/test/tophat-spears.test.mjs
  */
-import { DEFAULTS, cleanConfig, MAX_SLOPE, MTYPES, STIM, SHOT } from '../../tophat-spears/js/config.js';
-import { H, PROPS, losClear, seeded } from '../../tophat-spears/js/map.js';
+import { DEFAULTS, cleanConfig, MAX_SLOPE, MTYPES, STIM, SHOT, WAVES } from '../../tophat-spears/js/config.js';
+import { H, PROPS, BLUFFS, BUNKERS, BKIND, losClear, route, levelAt, seeded } from '../../tophat-spears/js/map.js';
 import {
-  setRandom, waveComposition, deathWait, leashStatus, rankBodies, moveSpear,
+  setRandom, waveComposition, waveHp, spearGarrison, deathWait, leashStatus, rankBodies, moveSpear,
   newMatch, step, addSpear, removeSpear, setDriven, hop, redeploy, spearPose, spearShot, order, stim, spearStim, weaponCycle,
   snapshot, decode, interpolate, serialize, restore,
 } from '../../tophat-spears/js/sim.js';
@@ -33,17 +33,35 @@ console.log('\nconfig');
 
 console.log('\nmap');
 {
-  ok('the map is the same every time', PROPS.rocks.length > 20 && PROPS.obstacles.length === PROPS.rocks.length + PROPS.spires.length + 1);
+  ok('the map is the same every time', PROPS.rocks.length > 20 && PROPS.obstacles.length === PROPS.rocks.length + PROPS.spires.length + 1 + BUNKERS.length);
+  const W = BLUFFS[0], R = W.ramp;
+  ok('the west bluff stands well above the field', H(-60, 10) - H(-30, 10) > 7);
+  ok('its sides are cliffs', (H(-40.2, 0) - H(-38.8, 0)) / 1.4 > 3);
+  ok('its ramp is gentle enough to walk', (H(R.T.x, R.zTop + 1) - H(R.B.x, R.zBot - 1)) / (R.zBot - R.zTop - 2) < MAX_SLOPE);
+  // Walk a route from the swarm's side to the top of the west bluff.
+  let x = -30, z = -50, steps = 0, worst = 0;
+  const gx = -60, gz = 0;
+  while (Math.hypot(gx - x, gz - z) > 0.6 && steps++ < 3000) {
+    const [wx, wz] = route(x, z, gx, gz), d = Math.hypot(wx - x, wz - z) || 1, st = Math.min(0.25, d);
+    const nx = x + (wx - x) / d * st, nz = z + (wz - z) / d * st;
+    worst = Math.max(worst, (H(nx, nz) - H(x, z)) / st); x = nx; z = nz;
+  }
+  ok('the way up a bluff is the long way round, by the ramp', steps < 3000 && worst < MAX_SLOPE && steps * 0.25 > 100, `${steps} steps, worst rise ${worst.toFixed(2)}`);
+  ok('a bluff top is its own level', levelAt(-60, 0) === 1 && levelAt(-30, 0) === 0);
+  const t = BUNKERS.find(k => k.kind === 'tower'), K = BKIND.tower;
+  ok('from a watchtower you can see the field below', losClear(t.x, t.base + K.floor + 1.5, t.z, t.x + 26, H(t.x + 26, t.z - 14) + 0.6, t.z - 14));
   ok('the ridge blocks sight from south to north', !losClear(0, H(0, 20) + 1.6, 20, 0, H(0, -20) + 1.2, -20));
   ok('open ground near the relay is clear', losClear(-6, H(-6, 46) + 1.6, 46, 6, H(6, 46) + 1.2, 46));
 }
 
 console.log('\nrules');
 {
-  const w1 = waveComposition(1), w4 = waveComposition(4);
-  ok('wave 1 is 12 lings and nothing else', w1.lings === 12 && w1.brutes === 0 && w1.spitters === 0 && w1.burrowers === 0);
-  ok('spitters arrive from wave 2, burrowers from wave 4', waveComposition(2).spitters === 2 && waveComposition(3).burrowers === 0 && w4.burrowers === 1);
-  ok('the last wave brings 2 extra brutes', waveComposition(6).brutes === 6);
+  const w1 = waveComposition(1);
+  ok('wave 1 is lings and nothing else', w1.lings > 0 && w1.brutes === 0 && w1.spitters === 0 && w1.burrowers === 0);
+  ok('spitters arrive from wave 2, burrowers from wave 3', waveComposition(2).spitters > 0 && waveComposition(2).burrowers === 0 && waveComposition(3).burrowers > 0);
+  ok('every wave is bigger than the last', [...Array(WAVES - 1).keys()].every(i => { const a = waveComposition(i + 1), b = waveComposition(i + 2); return b.lings > a.lings && b.brutes >= a.brutes; }));
+  ok('later waves are tougher too', waveHp(WAVES) > waveHp(1) && waveHp(1) === 1);
+  ok('the last wave brings extra brutes', waveComposition(WAVES).brutes > waveComposition(WAVES - 1).brutes + 1);
   const C = { ...DEFAULTS };
   ok('normal death waits the respawn time', deathWait(C, 100, 90).wait === C.respawn);
   const early = deathWait(C, 100, 115);
@@ -77,6 +95,10 @@ console.log('\nspear movement');
   for (let i = 0; i < 40; i++) moveSpear(wall, { f: 1, s: 0 }, 0.05);
   ok('the outer wall is steeper than the limit', slope > MAX_SLOPE, slope.toFixed(2));
   ok('a Spear cannot walk up it to the map edge', wall.z < 73.6, wall.z.toFixed(2));
+  // Run and jump at a bluff's cliff: no climbing it mid-air either.
+  const foot = { x: -37, z: 0, y: H(-37, 0), vy: 0, yaw: Math.PI / 2 };
+  for (let i = 0; i < 60; i++) moveSpear(foot, { f: 1, s: 0, jump: true }, 0.05);
+  ok('a Spear cannot jump up a cliff', foot.y < 3 && foot.x > -40.5, `${foot.x.toFixed(2)}, ${foot.y.toFixed(2)}`);
 }
 
 console.log('\nmatch');
@@ -176,16 +198,66 @@ console.log('\nunit types');
   const s = newMatch(DEFAULTS);
   s.marines = s.marines.slice(0, 3);
   const [onLine, behind, aside] = s.marines;
-  const bx = 0, bz = 0;
-  Object.assign(onLine, { x: 0, z: 8 }); Object.assign(behind, { x: 0, z: 13 }); Object.assign(aside, { x: 6, z: 9 });
+  const bx = 0, bz = 40;
+  Object.assign(onLine, { x: 0, z: 48 }); Object.assign(behind, { x: 0, z: 53 }); Object.assign(aside, { x: 6, z: 49 });
   s.marines.forEach(m => { m.order = { type: 'hold', x: m.x, z: m.z }; m.hp = 1000; m.maxHp = 1000; });
-  s.bugs.push({ id: 950, team: 's', type: 'burrower', x: bx, z: bz, y: 0, hp: 9999, maxHp: 9999, r: 0.9, speed: 4, atkCd: 0, face: 0, dead: false, deathT: 0, wob: 0, burrowed: false, bT: 0, uT: 0, lost: 0 });
+  s.bugs.push({ id: 950, team: 's', type: 'burrower', x: bx, z: bz, y: H(bx, bz), hp: 9999, maxHp: 9999, r: 0.9, speed: 4, atkCd: 0, face: 0, dead: false, deathT: 0, wob: 0, burrowed: false, bT: 0, uT: 0, lost: 0 });
   s.nextWaveAt = 9999; s.reinforceAt = 9999;
   for (let i = 0; i < 30 * 3; i++) { step(s, 1 / 30); s.marines.forEach(m => { m.x = m.order.x; m.z = m.order.z; }); }
   const lurk = s.bugs.find(b => b.id === 950);
   ok('the burrower digs in once a soldier is in range', lurk.burrowed);
   ok('the spike line hits soldiers along it', onLine.hp < 1000 && behind.hp < 1000);
   ok('and misses a soldier off to the side', aside.hp === 1000);
+}
+
+console.log('\nwaves and buildings');
+{
+  const s = newMatch(DEFAULTS);
+  s.marines.forEach(m => { m.hp = m.maxHp = 1e6; });
+  let overlap = false;
+  for (let i = 0; i < 30 * 90 && !overlap; i++) { step(s, 1 / 30); if (s.waveN >= 2 && s.bugs.some(b => !b.dead)) overlap = true; }
+  ok('the next wave comes whether or not the last is cleared', overlap);
+  const half = newMatch({ ...DEFAULTS, swarm: 0.5 }), full = newMatch(DEFAULTS);
+  half.now = full.now = 15; step(half, 1 / 30); step(full, 1 / 30);
+  ok('the swarm size setting scales the waves', half.queue.length + half.bugs.length < full.queue.length + full.bugs.length);
+}
+{
+  const s = newMatch(DEFAULTS); s.nextWaveAt = s.reinforceAt = 9999;
+  const k = BUNKERS[0], K = BKIND.bunker;
+  const team = s.marines.filter(m => m.type !== 'strider').slice(0, 5);
+  order(s, 'move', team.map(m => m.id), { x: k.x, z: k.z });
+  ok('ordering a move onto a bunker means go in', team.every(m => m.order.type === 'enter' && m.order.b === 0));
+  const wire = JSON.stringify(snapshot(s));
+  ok('an order into a building goes over the wire cleanly', !wire.includes('null') && decode(JSON.parse(wire)).units.get(team[0].id).order.type === 'enter');
+  for (let i = 0; i < 30 * 20; i++) step(s, 1 / 30);
+  const inside = team.filter(m => m.inB === 0);
+  ok('they walk over and fill its four slots', inside.length === K.slots.length && new Set(inside.map(m => m.slot)).size === K.slots.length);
+  ok('the fifth waits outside', team.filter(m => m.inB < 0).length === 1);
+  ok('the soldiers inside stand on its floor', inside.every(m => near(m.y, k.base + K.floor, 1e-6)));
+  // A ling at the wall bites the bunker, not the soldiers in it.
+  const hp0 = inside.map(m => m.hp);
+  s.bugs.push({ id: 990, team: 's', type: 'ling', x: k.x, z: k.z - k.r - 0.8, y: H(k.x, k.z - k.r - 0.8), hp: 1e6, maxHp: 1e6, r: 0.55, speed: 0, atkCd: 0, face: 0, dead: false, deathT: 0, wob: 0, burrowed: false, bT: 0, uT: 0, lost: 0 });
+  for (let i = 0; i < 30 * 3; i++) step(s, 1 / 30);
+  ok('the bunker takes the hits for the soldiers inside', s.bk[0].hp < K.hp && inside.every((m, i) => m.hp >= hp0[i]));
+  const snap = decode(JSON.parse(JSON.stringify(snapshot(s))));
+  ok('who is inside and the building HP survive the trip', snap.units.get(inside[0].id).inB === 0 && snap.bunkers[0] === Math.round(s.bk[0].hp));
+  s.bk[0].hp = 1; s.bugs[s.bugs.length - 1].atkCd = 0;
+  for (let i = 0; i < 30; i++) step(s, 1 / 30);
+  ok('when it falls, everyone inside is thrown out', s.bk[0].hp === 0 && inside.every(m => m.inB === -1));
+  order(s, 'move', [inside[0].id], { x: k.x, z: k.z });
+  ok('and a wrecked bunker is no use', inside[0].order.type !== 'enter');
+}
+{
+  const s = newMatch(DEFAULTS); s.nextWaveAt = s.reinforceAt = 9999;
+  const k = BUNKERS[1], m = s.marines.find(x => x.type === 'marine');
+  addSpear(s, 'p1', 'Ash'); redeploy(s, 'p1', m.id);
+  ok('a Spear away from any door cannot go in', !spearGarrison(s, 'p1').ok);
+  Object.assign(m, { x: k.dx, z: k.dz, y: H(k.dx, k.dz) });
+  ok('at the door, a Spear can go in', spearGarrison(s, 'p1').ok && m.inB === 1);
+  spearPose(s, 'p1', { u: m.id, x: 0, y: 0, z: 0, yaw: 1, g: 1 });
+  step(s, 1 / 30);
+  ok('inside, the Spear can turn but not walk off', near(m.face, 1) && Math.hypot(m.x - k.x, m.z - k.z) < k.r);
+  ok('and can come back out', spearGarrison(s, 'p1').ok && m.inB === -1);
 }
 
 console.log('\nwire format');

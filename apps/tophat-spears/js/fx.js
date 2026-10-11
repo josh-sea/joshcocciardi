@@ -138,9 +138,12 @@ class Tracers {
         if (t.age > t.life) return false;
         head = t.dist; tail = 0; fade = 1 - t.age / t.life;
       } else {
-        head = Math.min(t.dist, t.speed * t.age); tail = Math.max(0, head - t.len);
+        // The tail trails the head by `len` and keeps moving after the head
+        // lands, so the streak shrinks into the impact point and is gone.
+        const run = t.speed * t.age;
+        head = Math.min(t.dist, run); tail = Math.max(0, run - t.len);
         if (head >= t.dist && !t.landed) { t.landed = true; onLand(t); }
-        if (tail >= t.dist - 0.01) return false;
+        if (tail >= t.dist) return false;
       }
       mid.copy(t.a).addScaledVector(t.dir, (head + tail) / 2);
       q.setFromUnitVectors(z, t.dir);

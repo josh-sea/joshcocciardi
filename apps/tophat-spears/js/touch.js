@@ -32,6 +32,7 @@ export function initTouch(G) {
       <button id="tJump" class="tb sm" type="button">Jump</button>
       <button id="tStim" class="tb sm" type="button">Stim</button>
       <button id="tHop" class="tb" type="button">Hop</button>
+      <button id="tGar" class="tb sm" type="button" hidden>Enter</button>
       <button id="tFire" class="tb fire" type="button">Fire</button>
     </div>
     <div id="tTop" hidden>
@@ -61,6 +62,9 @@ export function initTouch(G) {
     $('#tRotate').hidden = !(show && innerHeight > innerWidth);
     $('#tBox').classList.toggle('on', boxMode);
   };
+  // Enter / Exit, shown only at a building's door or inside one.
+  let garLabel = null;
+  T.garrison = label => { if (label === garLabel) return; garLabel = label; const b = $('#tGar'); b.hidden = !label; b.textContent = label; };
   addEventListener('resize', () => G.onChange());
 
   // ---------- shared pointer tracking ----------
@@ -134,6 +138,7 @@ export function initTouch(G) {
   });
 
   hold('#tHop', () => G.hop());
+  hold('#tGar', () => G.garrison());
   hold('#tStim', () => G.stim());
   hold('#tJump', () => G.key('Space', true), () => G.key('Space', false));
   let sprint = false;

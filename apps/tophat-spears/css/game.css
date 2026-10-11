@@ -220,3 +220,4 @@ body.touch #thHud{left:calc(12px + env(safe-area-inset-left,0px));right:12px;bot
 #hBuff.stim{color:var(--bad);font-weight:700;letter-spacing:.08em}
 #hHint{font-size:11px;letter-spacing:.08em;color:var(--dim)}
 #tStim{right:178px;bottom:20px;width:54px;height:54px;font-size:11px;border-color:var(--bad);color:var(--bad)}
+#tGar{right:178px;bottom:84px;width:54px;height:54px;font-size:11px;border-color:#d9d3c4;color:#d9d3c4}
