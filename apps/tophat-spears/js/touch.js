@@ -6,7 +6,8 @@
  * Patrol and Hold are the same buttons the mouse uses.
  *
  * Spear: left thumb is a floating joystick, right thumb drags to look.
- * Fire, Hop, Jump and Sprint are buttons on the right. Fire also looks while
+ * Fire, Hop, Jump, Sprint and (for Marines and Torches) Stim are buttons
+ * on the right. Fire also looks while
  * held, so you can track a target with the same thumb.
  *
  * The touch layout switches on for coarse pointers, and on the first touch
@@ -29,6 +30,7 @@ export function initTouch(G) {
     <div id="tSpear" hidden>
       <button id="tSprint" class="tb sm" type="button">Sprint</button>
       <button id="tJump" class="tb sm" type="button">Jump</button>
+      <button id="tStim" class="tb sm" type="button">Stim</button>
       <button id="tHop" class="tb" type="button">Hop</button>
       <button id="tFire" class="tb fire" type="button">Fire</button>
     </div>
@@ -50,10 +52,11 @@ export function initTouch(G) {
   window.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') enable(); }, { capture: true });
 
   // ---------- show and hide ----------
-  T.sync = ({ playing, tophat, spearActive }) => {
+  T.sync = ({ playing, tophat, spearActive, canStim }) => {
     const show = T.on && playing;
     $('#tSpear').hidden = !(show && spearActive);
     $('#tTop').hidden = !(show && tophat);
+    $('#tStim').hidden = !canStim;
     if (!(show && spearActive)) { releaseStick(); $('#tStick').hidden = true; setSprint(false); G.setFire(false); }
     $('#tRotate').hidden = !(show && innerHeight > innerWidth);
     $('#tBox').classList.toggle('on', boxMode);
@@ -131,6 +134,7 @@ export function initTouch(G) {
   });
 
   hold('#tHop', () => G.hop());
+  hold('#tStim', () => G.stim());
   hold('#tJump', () => G.key('Space', true), () => G.key('Space', false));
   let sprint = false;
   function setSprint(v) { sprint = v; G.key('ShiftLeft', v); $('#tSprint').classList.toggle('on', v); }

@@ -38,18 +38,46 @@ export function cleanConfig(raw) {
   return out;
 }
 
-export const BASE = { mHp: 100, mDmg: 10, mFire: 0.38, mRange: 24, mAcc: 0.5, mSpeed: 5.2 };
+/* Soldier types. `w` is the weapon: `n` shots per burst, `gap` seconds
+ * between shots in a burst, `pause` after the burst. A Marine's rifle goes
+ * brrt-brrt-brrt in fours, forever; the Shade takes one heavy shot and waits.
+ * `range` is how far the AI engages; `reach` is how far a Spear's shot flies.
+ * `eye` is the first-person camera height.
+ */
+export const MTYPES = {
+  marine: { label: 'Marine', hp: 100, speed: 5.2, r: 0.45, range: 24, eye: 1.62, stim: true,
+    w: { kind: 'rifle', n: 4, gap: 0.08, pause: 0.45, dmg: 4, acc: 0.55, reach: 90 } },
+  torch: { label: 'Torch', hp: 130, speed: 5.0, r: 0.5, range: 6.5, eye: 1.62, stim: true,
+    w: { kind: 'flame', n: 1, gap: 0, pause: 0.4, dmg: 9, acc: 1, reach: 7.5, cone: 0.45 } },
+  shade: { label: 'Shade', hp: 70, speed: 5.4, r: 0.42, range: 40, eye: 1.62, stim: false, detect: true,
+    w: { kind: 'snipe', n: 1, gap: 0, pause: 1.6, dmg: 45, acc: 0.85, reach: 140 } },
+  strider: { label: 'Strider', hp: 320, speed: 4.0, r: 0.95, range: 28, eye: 2.8, stim: false,
+    w: { kind: 'cannon', n: 2, gap: 0.12, pause: 0.4, dmg: 9, acc: 0.6, reach: 90 } },
+};
+export const MTYPE_LIST = ['marine', 'torch', 'shade', 'strider'];
+export const mtype = t => MTYPES[t] || MTYPES.marine;
+
+// Stim: trade a little health for a burst of speed. Marines and Torches only.
+export const STIM = { hp: 10, dur: 8, rate: 1.5, speed: 1.4 };
+
+// Shot kinds on the wire, for the tracer each one draws.
+export const SHOT = { rifle: 0, flame: 2, snipe: 3, spine: 4, lurk: 5, cannon: 6 };
+
 export const SPRINT = 1.45;
 export const BUGT = {
-  ling: { hp: 30, speed: 6.6, dmg: 7, atk: 0.7, r: 0.55 },
-  brute: { hp: 180, speed: 3.6, dmg: 22, atk: 1.1, r: 1.15 },
+  ling: { label: 'Ling', hp: 30, speed: 6.6, dmg: 7, atk: 0.7, r: 0.55 },
+  brute: { label: 'Brute', hp: 180, speed: 3.6, dmg: 22, atk: 1.1, r: 1.15 },
+  // Ranged: stops at `range` and spits acid spines.
+  spitter: { label: 'Spitter', hp: 80, speed: 4.6, dmg: 9, atk: 0.9, r: 0.6, range: 13, acc: 0.7 },
+  // Digs in at `range`, then sends a line of spikes through everything in front of it.
+  burrower: { label: 'Burrower', hp: 170, speed: 4.0, dmg: 20, atk: 1.8, r: 0.9, range: 15, width: 1.1 },
 };
+export const BTYPE_LIST = ['ling', 'brute', 'spitter', 'burrower'];
 export const WAVES = 6;
 export const MAXMAR = 16;
 export const SQUADS = ['Alpha', 'Bravo', 'Charlie'];
 export const MAX_SPEARS = 4;
 export const RELAY_MAX = 1500;
-export const SHOT_RANGE = 90;
 // The steepest ground a Spear can walk up, as rise over run (about 42
 // degrees). The ridge stays climbable; the wall at the map edge doesn't.
 export const MAX_SLOPE = 0.9;

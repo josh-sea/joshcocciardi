@@ -14,11 +14,11 @@
  */
 /* global THREE */
 
-import { DEFAULTS, TUNE, BASE, WAVES, SQUADS, RELAY_MAX, SHOT_RANGE, cleanConfig } from './config.js';
+import { DEFAULTS, TUNE, MTYPES, mtype, STIM, BUGT, WAVES, SQUADS, RELAY_MAX, cleanConfig } from './config.js';
 import { H, RELAY, SPAWNS, PROPS, clampM } from './map.js';
 import {
   newMatch, step, addSpear, removeSpear, setDriven, hop, redeploy, spearPose, spearShot, order,
-  snapshot, decode, interpolate, serialize, restore, rankBodies, leashStatus, moveSpear,
+  snapshot, decode, interpolate, serialize, restore, rankBodies, leashStatus, moveSpear, stim, spearStim,
 } from './sim.js';
 import { tophatAction, tophatOf, spearsOf, canBeSpear, pickHost, cleanName } from './lobby.js';
 import { roomKey, passwordProblem } from './keys.js';
@@ -216,7 +216,10 @@ function handleCmd(pid, c) {
     const r = (c.t === 'hop' ? hop : redeploy)(sim, pid, c.target);
     sim.events.push(r.ok ? { m: (c.t === 'hop' ? 'Hopped into ' : 'Dropped into ') + r.name, c: '#7fe0ff', to: pid } : { m: r.why, c: '', to: pid });
   } else if (c.t === 'shot') {
-    spearShot(sim, pid, { bug: c.bug, a: c.a ? Object.values(c.a) : null, b: c.b ? Object.values(c.b) : null });
+    spearShot(sim, pid, { bug: c.bug, bugs: c.bugs ? Object.values(c.bugs) : null, a: c.a ? Object.values(c.a) : null, b: c.b ? Object.values(c.b) : null });
+  } else if (c.t === 'stim') {
+    if (c.ids) { if (S.solo || (p && p.role === 'tophat')) stim(sim, Object.values(c.ids)); }
+    else if (!spearStim(sim, pid)) sim.events.push({ m: 'Can\u2019t stim: not enough health, or this body has no stims', c: '', to: pid });
   }
 }
 
@@ -229,7 +232,7 @@ function hostFrame(dt) {
   if (S.hostT.acc > TICK) S.hostT.acc = 0;
   // Fresh shots and events: draw them here, and queue them for the room.
   for (const sh of sim.shots.splice(0)) {
-    if (sh[6] !== S.uid) R.tracer(new THREE.Vector3(sh[0], sh[1], sh[2]), new THREE.Vector3(sh[3], sh[4], sh[5]), !!sh[6]);
+    if (sh[6] !== S.uid) R.tracer(new THREE.Vector3(sh[0], sh[1], sh[2]), new THREE.Vector3(sh[3], sh[4], sh[5]), sh[7] || 0, !!sh[6]);
     S.outShots.push(sh.map(v => typeof v === 'number' ? Math.round(v * 100) / 100 : v));
   }
   for (const e of sim.events.splice(0)) { showEvent(e); S.outEvents.push(e); }
@@ -264,7 +267,7 @@ function startClient() {
     S.lastSnapAt = t;
     for (const sh of Object.values(raw.s || {})) {
       const a = Object.values(sh);
-      if (a[6] !== S.uid) R.tracer(new THREE.Vector3(a[0], a[1], a[2]), new THREE.Vector3(a[3], a[4], a[5]), !!a[6]);
+      if (a[6] !== S.uid) R.tracer(new THREE.Vector3(a[0], a[1], a[2]), new THREE.Vector3(a[3], a[4], a[5]), a[7] || 0, !!a[6]);
     }
     for (const e of Object.values(raw.e || {})) { if (e.id && toastSeen.has(e.id)) continue; if (e.id) toastSeen.add(e.id); showEvent(e); }
     if (toastSeen.size > 300) toastSeen.clear();
@@ -310,6 +313,7 @@ function leaveGameToLobby() {
 }
 function onRoleChanged(prev) {
   if (document.pointerLockElement) document.exitPointerLock();
+  scoped = false;
   selected.clear(); resetPose(); mouseFire = false; setPatrol(false);
   if (S.screen === 'game') toast(S.role === 'tophat' ? 'You are the Tophat now' : 'You are a Spear now', '#ffcc4d');
   if (prev && S.screen === 'game' && S.role === 'tophat' && S.view) {
@@ -395,7 +399,7 @@ TUNE.forEach(([k, , , , , fmt]) => {
     S.config = cleanConfig({ ...S.config, [k]: v });
     if (S.solo && S.sim) {
       const me = S.sim.spears.me, u = me && S.sim.marines.find(m => m.id === me.unitId);
-      if (k === 'heroHp' && u) { const f = u.hp / u.maxHp; u.maxHp = BASE.mHp * (1 + v); u.hp = f * u.maxHp; }
+      if (k === 'heroHp' && u) { const f = u.hp / u.maxHp; u.maxHp = mtype(u.type).hp * (1 + v); u.hp = f * u.maxHp; }
       S.sim.C = cleanConfig({ ...S.sim.C, [k]: v });
     } else if (S.room && S.isHost) {
       clearTimeout(tuneTimer); tuneTimer = setTimeout(() => S.room.setConfig(S.config), 250);
@@ -458,12 +462,24 @@ function issue(kind, p) {
   if (kind !== 'hold') markers.push({ x: p.x, z: p.z, t: 0, col: kind === 'move' ? '#7bd88f' : '#ff9f3a' });
 }
 function holdSel() { issue('hold', { x: 0, z: 0 }); }
+// Stim the selected Marines and Torches (each pays 10 HP for 8s of speed).
+function stimSel() {
+  const ids = [...selected].filter(id => { const u = S.view && S.view.units.get(id); return u && !u.dead && mtype(u.type).stim && u.hp > STIM.hp + 1; });
+  if (!ids.length) { toast('Select Marines or Torches with health to spare'); return; }
+  cmd({ t: 'stim', ids });
+}
+function spearStimNow() {
+  const me = mySpear(), u = me && S.view && S.view.units.get(me.unitId);
+  if (!spearActive() || !u) return;
+  if (!mtype(u.type).stim) { toast(mtype(u.type).label + 's can\u2019t stim'); return; }
+  cmd({ t: 'stim' });
+}
 
 function tryHop() {
   const me = mySpear(); if (!spearActive()) return;
   const cd = me.hopReadyAt - hostNow();
   if (cd > 0) { toast('Hop cooling down: ' + Math.ceil(cd) + 's'); return; }
-  if (!hopCand) { toast('Aim at a marine within ' + S.view.C.hopRange + 'm'); return; }
+  if (!hopCand) { toast('Aim at a soldier within ' + S.view.C.hopRange + 'm'); return; }
   cmd({ t: 'hop', target: hopCand });
 }
 
@@ -475,18 +491,24 @@ const occluders = [R.terrain, R.rockGroup, R.relayMesh];
 function spearFrame(dt) {
   const me = mySpear(), u = S.view.units.get(me.unitId);
   if (pose.u !== me.unitId) {
-    // New body: start from wherever it is now.
+    // New body: start from wherever it is now, holding its weapon.
     if (!u) return;
     Object.assign(pose, { u: me.unitId, x: u.x, z: u.z, y: H(u.x, u.z), vy: 0, yaw: u.face, pitch: -0.05 });
+    burstLeft = 0; fireCd = 0; ammoCycle = 0;
+    R.setViewWeapon(mtype(u.type).w.kind);
+    syncHud();
   }
+  const T = mtype(u ? u.type : 'marine'), w = T.w, stimOn = !!(u && u.stim > 0);
   const tm = touch ? touch.move : { f: 0, s: 0 };
   const f = clamp1((keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) + tm.f);
   const s = clamp1((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + tm.s);
-  if (touch && touch.on) aimAssist(dt);
-  const mv = moveSpear(pose, { f, s, sprint: keys.ShiftLeft || keys.ShiftRight, jump: keys.Space }, dt);
-  const bob = mv.moving && mv.grounded ? Math.sin(performance.now() / 1000 * 11) * 0.04 : 0;
-  R.fpsCam.position.set(pose.x, pose.y + 1.62 + bob, pose.z);
+  if (touch && touch.on) aimAssist(dt, T.eye);
+  const mv = moveSpear(pose, { f, s, sprint: keys.ShiftLeft || keys.ShiftRight, jump: keys.Space }, dt, u ? u.type : 'marine', stimOn);
+  const bob = mv.moving && mv.grounded ? Math.sin(performance.now() / 1000 * (T.eye > 2 ? 6 : 11)) * (T.eye > 2 ? 0.08 : 0.04) : 0;
+  R.fpsCam.position.set(pose.x, pose.y + T.eye + bob, pose.z);
   R.fpsCam.rotation.set(pose.pitch + recoil * 0.04, pose.yaw, 0);
+  const fov = scoped && w.kind === 'snipe' ? 28 : 75;
+  if (R.fpsCam.fov !== fov) { R.fpsCam.fov = fov; R.fpsCam.updateProjectionMatrix(); }
   if (u) { u.x = pose.x; u.y = pose.y; u.z = pose.z; u.face = pose.yaw; }
   if (u && lastHp !== null && u.hp < lastHp) vign = Math.min(1, vign + (lastHp - u.hp) / 30);
   lastHp = u ? u.hp : null;
@@ -499,29 +521,62 @@ function spearFrame(dt) {
     }
   }
 
-  // Aim probe: a friendly marine under the crosshair is the hop candidate.
+  // Aim probe: a friendly soldier under the crosshair is the hop candidate.
   const C = S.view.C;
-  ray.setFromCamera(CENTER, R.fpsCam); ray.far = Math.max(C.hopRange, SHOT_RANGE);
+  ray.setFromCamera(CENTER, R.fpsCam); ray.far = Math.max(C.hopRange, w.reach);
   const targets = occluders.concat(R.unitMeshes(id => { const x = S.view.units.get(id); return x && !x.dead && id !== me.unitId; }));
   const hit = ray.intersectObjects(targets, true)[0];
   const hid = hit ? R.unitIdOf(hit.object) : null, hu = hid !== null ? S.view.units.get(hid) : null;
   hopCand = hu && hu.team === 'm' && !hu.owner && hit.distance <= C.hopRange ? hu.id : null;
   aimEnemy = !!(hu && hu.team === 's');
 
+  // Weapons fire in bursts: a click (or a held trigger) runs a whole burst,
+  // then the weapon waits out its pause. Stim speeds the whole cycle up.
   fireCd -= dt;
-  if (mouseFire && fireCd <= 0 && (document.pointerLockElement === canvas || lockFailed || (touch && touch.on))) {
-    fireCd = BASE.mFire; recoil = 1;
-    const spread = 0.012;
-    ray.setFromCamera(new THREE.Vector2((Math.random() - 0.5) * spread, (Math.random() - 0.5) * spread), R.fpsCam); ray.far = SHOT_RANGE;
-    const shoot = occluders.concat(R.unitMeshes((id, e) => e.team === 's' && S.view.units.get(id) && !S.view.units.get(id).dead));
-    const h = ray.intersectObjects(shoot, true)[0];
-    const end = h ? h.point : ray.ray.at(SHOT_RANGE, new THREE.Vector3());
-    R.viewGun.updateMatrixWorld(); const muzzle = R.viewGun.localToWorld(new THREE.Vector3(0, 0.05, -0.62));
-    R.tracer(muzzle, end, true); R.flash.visible = true; flashT = 0.04;
-    const bid = h ? R.unitIdOf(h.object) : null;
-    if (bid !== null) hitFlash = 1;
-    cmd({ t: 'shot', bug: bid || 0, a: [muzzle.x, muzzle.y, muzzle.z].map(r2), b: [end.x, end.y, end.z].map(r2) });
+  const canFire = document.pointerLockElement === canvas || lockFailed || (touch && touch.on);
+  if ((mouseFire || burstLeft > 0) && canFire && fireCd <= 0) {
+    if (burstLeft <= 0) burstLeft = w.n;
+    burstLeft--;
+    fireCd = (burstLeft > 0 ? w.gap : w.pause) / (stimOn ? STIM.rate : 1);
+    fireWeapon(w, me.unitId);
   }
+}
+
+let burstLeft = 0, ammoCycle = 0, scoped = false;
+const SPREAD = { rifle: 0.018, cannon: 0.022, snipe: 0, flame: 0 };
+function fireWeapon(w, myId) {
+  recoil = w.kind === 'snipe' ? 2.2 : w.kind === 'cannon' ? 1.4 : w.kind === 'flame' ? 0.3 : 1;
+  R.viewGun.updateMatrixWorld();
+  const muzzle = R.flash.getWorldPosition(new THREE.Vector3());
+  if (w.kind === 'cannon') muzzle.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(R.fpsCam.quaternion), (ammoCycle++ % 2) * -0.5);
+  if (w.kind === 'flame') {
+    // Everything in the cone in front of you, within reach.
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(R.fpsCam.quaternion);
+    const fx = fwd.x, fz = fwd.z, fl = Math.hypot(fx, fz) || 1;
+    const bugs = [];
+    for (const b of S.view.units.values()) {
+      if (b.team !== 's' || b.dead) continue;
+      const dx = b.x - pose.x, dz = b.z - pose.z, d = Math.hypot(dx, dz);
+      if (d - (BUGT[b.type] ? BUGT[b.type].r : 0.6) > w.reach) continue;
+      if (d > 1 && (dx * fx + dz * fz) / (d * fl) < Math.cos(w.cone)) continue;
+      bugs.push(b.id);
+    }
+    const end = R.fpsCam.position.clone().addScaledVector(fwd, w.reach);
+    R.tracer(muzzle, end, 2, true);
+    if (bugs.length) hitFlash = 0.6;
+    cmd({ t: 'shot', bugs: bugs.slice(0, 12), a: [muzzle.x, muzzle.y, muzzle.z].map(r2), b: [end.x, end.y, end.z].map(r2) });
+    return;
+  }
+  const sp = SPREAD[w.kind] || 0;
+  ray.setFromCamera(new THREE.Vector2((Math.random() - 0.5) * sp, (Math.random() - 0.5) * sp), R.fpsCam); ray.far = w.reach;
+  const shoot = occluders.concat(R.unitMeshes((id, e) => e.team === 's' && S.view.units.get(id) && !S.view.units.get(id).dead));
+  const h = ray.intersectObjects(shoot, true)[0];
+  const end = h ? h.point : ray.ray.at(w.reach, new THREE.Vector3());
+  R.tracer(muzzle, end, ({ rifle: 0, snipe: 3, cannon: 6 })[w.kind] || 0, true);
+  R.flash.visible = true; flashT = 0.04;
+  const bid = h ? R.unitIdOf(h.object) : null;
+  if (bid !== null) hitFlash = 1;
+  cmd({ t: 'shot', bug: bid || 0, a: [muzzle.x, muzzle.y, muzzle.z].map(r2), b: [end.x, end.y, end.z].map(r2) });
 }
 const r2 = v => Math.round(v * 100) / 100;
 const clamp1 = v => Math.max(-1, Math.min(1, v));
@@ -530,8 +585,8 @@ const clamp1 = v => Math.max(-1, Math.min(1, v));
  * gently onto a bug that is already close to it. Small window, slow pull:
  * it helps you stay on target, it doesn't aim for you.
  */
-function aimAssist(dt) {
-  const ex = pose.x, ey = pose.y + 1.62, ez = pose.z;
+function aimAssist(dt, eye) {
+  const ex = pose.x, ey = pose.y + eye, ez = pose.z;
   let best = null, bestErr = 0.11;
   for (const u of S.view.units.values()) {
     if (u.team !== 's' || u.dead) continue;
@@ -600,6 +655,7 @@ canvas.addEventListener('pointerdown', e => {
   } else if (spearActive()) {
     if (document.pointerLockElement !== canvas && !lockFailed) { requestLock(); return; }
     if (e.button === 0) mouseFire = true;
+    if (e.button === 2) scoped = true;
   }
 });
 canvas.addEventListener('pointermove', e => {
@@ -610,6 +666,7 @@ canvas.addEventListener('pointermove', e => {
 window.addEventListener('pointerup', e => {
   if (e.pointerType === 'touch') return;
   if (e.button === 0) mouseFire = false;
+  if (e.button === 2) scoped = false;
   if (!drag) return;
   const d = drag; drag = null; $('#selbox').hidden = true;
   if (!d.shift) selected.clear();
@@ -637,9 +694,11 @@ window.addEventListener('keydown', e => {
     else if (e.code === 'KeyQ') { selected.clear(); aliveMarines().forEach(m => selected.add(m.id)); }
     else if (e.code === 'KeyP') setPatrol(!patrolArmed);
     else if (e.code === 'KeyX') holdSel();
+    else if (e.code === 'KeyT') stimSel();
     else if (e.code === 'Escape') { setPatrol(false); selected.clear(); }
   } else {
     if (e.code === 'KeyE') tryHop();
+    if (e.code === 'KeyF') spearStimNow();
     const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'].indexOf(e.code);
     const me = mySpear();
     if (i >= 0 && me && me.state !== 'active' && hostNow() >= me.deadUntil && rdRank[i]) cmd({ t: 'redeploy', target: rdRank[i].m.id });
@@ -660,7 +719,8 @@ $('#bTop').onclick = () => soloSwap('tophat');
 $('#bSpear').onclick = () => soloSwap('spear');
 $('#cPatrol').onclick = () => setPatrol(!patrolArmed);
 $('#cHold').onclick = holdSel;
-$('#squads').innerHTML = SQUADS.map((s, i) => `<button class="sq" data-s="${s}"><b>${s}</b><span><kbd>${i + 1}</kbd> <span class="num" data-c="${s}">4</span> marines</span></button>`).join('');
+$('#cStim').onclick = stimSel;
+$('#squads').innerHTML = SQUADS.map((s, i) => `<button class="sq" data-s="${s}"><b>${s}</b><span><kbd>${i + 1}</kbd> <span class="num" data-c="${s}">4</span> soldiers</span></button>`).join('');
 $('#squads').addEventListener('click', e => { const b = e.target.closest('.sq'); if (b) selectSquad(b.dataset.s, e.shiftKey); });
 
 // ---------- redeploy ----------
@@ -676,8 +736,8 @@ function renderRedeploy() {
   rdRank = rankBodies([...S.view.units.values()]);
   const tagTxt = { combat: 'In combat', moving: 'Moving', hold: 'Holding' };
   const html = rdRank.map((r, i) => `<button class="dep" data-id="${r.m.id}" ${ready ? '' : 'disabled'}>
-    <span class="n">${i + 1}</span><b>${r.m.name}</b><span class="s ${r.tag}">${tagTxt[r.tag]}${r.near ? ' · ' + r.near + ' swarm' : ''}</span>
-    <span class="mini"><i style="width:${Math.round(r.m.hp / r.m.maxHp * 100)}%"></i></span></button>`).join('') || '<p class="k">No marines free. Reinforcements are on the way.</p>';
+    <span class="n">${i + 1}</span><b>${r.m.name} <span class="ty">${mtype(r.m.type).label}</span></b><span class="s ${r.tag}">${tagTxt[r.tag]}${r.near ? ' · ' + r.near + ' swarm' : ''}</span>
+    <span class="mini"><i style="width:${Math.round(r.m.hp / r.m.maxHp * 100)}%"></i></span></button>`).join('') || '<p class="k">No soldiers free. Reinforcements are on the way.</p>';
   if (html !== lastRd) { lastRd = html; $('#rdList').innerHTML = html; }
 }
 $('#rdList').addEventListener('click', e => {
@@ -699,7 +759,8 @@ function syncHud() {
   $('#bTop').classList.toggle('on', S.role === 'tophat'); $('#bSpear').classList.toggle('on', S.role === 'spear');
   $('#youChip').textContent = S.solo ? '' : (S.role === 'tophat' ? 'You · Tophat' : 'You · Spear') + (S.isHost ? ' · host' : '');
   R.setFog(active);
-  if (touch) touch.sync({ playing, tophat: playing && S.role === 'tophat', spearActive: active && S.phase === 'playing' });
+  const myU = active && S.view ? S.view.units.get(mySpear().unitId) : null;
+  if (touch) touch.sync({ playing, tophat: playing && S.role === 'tophat', spearActive: active && S.phase === 'playing', canStim: !!(myU && mtype(myU.type).stim) });
   if (S.screen === 'game' && !S.view && !S.isHost) showBanner('Joining the match…'); else if (!$('#banner').textContent.startsWith('The host')) $('#banner').hidden = true;
 }
 
@@ -737,14 +798,19 @@ function hud(dt) {
       document.querySelector(`.sq[data-s="${s}"]`).classList.toggle('on', sq.length > 0 && sq.every(m => selected.has(m.id)));
     });
     const sel = alive.filter(m => selected.has(m.id)), heroes = sel.filter(m => m.owner);
-    $('#selInfo').innerHTML = sel.length ? `<b class="num">${sel.length}</b> selected${heroes.length ? ' · <span class="g">includes ' + heroes.map(m => esc(spearName(m.owner))).join(', ') + '</span>' : ''}` : 'Nothing selected';
+    const kinds = {}; for (const m of sel) kinds[m.type] = (kinds[m.type] || 0) + 1;
+    const mix = Object.entries(kinds).map(([t, n]) => `${n} ${mtype(t).label}${n > 1 ? (mtype(t).label.endsWith('ch') ? 'es' : 's') : ''}`).join(', ');
+    $('#selInfo').innerHTML = sel.length ? `<b class="num">${sel.length}</b> selected <span class="mix">${mix}</span>${heroes.length ? ' · <span class="g">includes ' + heroes.map(m => esc(spearName(m.owner))).join(', ') + '</span>' : ''}` : 'Nothing selected';
   } else if (spearActive()) {
     const u = v.units.get(me.unitId); if (!u) return;
     const f = u.hp / u.maxHp;
     $('#hName').textContent = (S.solo ? '' : S.name + ' · ') + u.name;
+    $('#hTag').textContent = mtype(u.type).label;
     $('#hHp').style.width = (f * 100) + '%'; $('#hHp').style.background = hpCol(f);
     $('#hHpTxt').textContent = `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)}`;
-    $('#hBuff').textContent = `+${Math.round(v.C.heroHp * 100)}% HP · +${Math.round(v.C.heroDmg * 100)}% DMG`;
+    $('#hBuff').textContent = u.stim > 0 ? `STIM ${Math.ceil(u.stim)}s` : `+${Math.round(v.C.heroHp * 100)}% HP · +${Math.round(v.C.heroDmg * 100)}% DMG`;
+    $('#hBuff').classList.toggle('stim', u.stim > 0);
+    $('#hHint').textContent = mtype(u.type).stim ? (touch && touch.on ? '' : 'F stim') : u.type === 'shade' && !(touch && touch.on) ? 'Right-click to scope' : '';
     const cd = me.hopReadyAt - now, hopEl = $('#hop');
     hopEl.classList.toggle('ready', cd <= 0); hopEl.textContent = cd <= 0 ? 'Hop ready · aim at a marine, press E' : `Hop cooldown ${Math.ceil(cd)}s`;
     const ls = leashStatus(u, me.leash, v.C, now), el = $('#leash');
@@ -755,6 +821,11 @@ function hud(dt) {
     } else el.hidden = true;
   }
   if (S.role === 'spear' && !spearActive() && S.phase === 'playing') renderRedeploy();
+}
+// How high above a unit its health bar floats.
+function barH(u) {
+  if (u.team === 'm') return u.type === 'strider' ? 3.4 : 2.3;
+  return u.burrowed ? 0.7 : ({ brute: 2.6, spitter: 2.3, burrower: 1.8 })[u.type] || 1.4;
 }
 function spearName(pid) { const sp = S.view && S.view.spears[pid]; return sp ? sp.name : 'Spear'; }
 function hpCol(f) { return f > 0.6 ? '#7bd88f' : f > 0.3 ? '#ffcc4d' : '#ff5a4f'; }
@@ -778,7 +849,7 @@ function drawMini() {
   const v = S.view;
   mctx.drawImage(mbake, 0, 0);
   const [rx, rz] = mm(RELAY.x, RELAY.z); mctx.fillStyle = '#7fe0ff'; mctx.fillRect(rx - 7, rz - 7, 14, 14);
-  for (const b of v.units.values()) { if (b.team !== 's' || b.dead) continue; const [x, z] = mm(b.x, b.z); mctx.fillStyle = '#e04aa8'; const sz = b.type === 'brute' ? 9 : 6; mctx.fillRect(x - 3, z - 3, sz, sz); }
+  for (const b of v.units.values()) { if (b.team !== 's' || b.dead) continue; const [x, z] = mm(b.x, b.z); mctx.fillStyle = '#e04aa8'; const sz = b.type === 'brute' || b.type === 'burrower' ? 9 : 6; mctx.fillRect(x - 3, z - 3, sz, sz); }
   for (const m of v.units.values()) { if (m.team !== 'm' || m.dead) continue; const [x, z] = mm(m.x, m.z);
     mctx.fillStyle = m.owner ? '#ffcc4d' : selected.has(m.id) ? '#b9f5c6' : '#8fb3d6'; mctx.beginPath(); mctx.arc(x, z, m.owner ? 6 : 4, 0, 7); mctx.fill(); }
   const me = mySpear();
@@ -814,7 +885,7 @@ function drawOverlay(c) {
     for (const mk of markers) { const s = proj(mk.x, H(mk.x, mk.z) + 0.2, mk.z, c); if (!s) continue;
       ctx.strokeStyle = mk.col; ctx.lineWidth = 2; ctx.globalAlpha = 1 - mk.t / 0.7; ctx.beginPath(); ctx.ellipse(s.x, s.y, 18 * (1 - mk.t), 9 * (1 - mk.t), 0, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
     for (const m of v.units.values()) {
-      if (m.team !== 'm' || m.dead) continue; const s = proj(m.x, m.y + 2.3, m.z, c); if (!s) continue;
+      if (m.team !== 'm' || m.dead) continue; const s = proj(m.x, m.y + barH(m), m.z, c); if (!s) continue;
       const f = m.hp / m.maxHp;
       if (selected.has(m.id) || f < 1 || m.owner) bar(s.x, s.y, 26, f, hpCol(f));
       if (m.owner) {
@@ -822,7 +893,7 @@ function drawOverlay(c) {
         ctx.beginPath(); ctx.moveTo(s.x, s.y - 26); ctx.lineTo(s.x + 5, s.y - 20); ctx.lineTo(s.x, s.y - 14); ctx.lineTo(s.x - 5, s.y - 20); ctx.fill();
       }
     }
-    for (const b of v.units.values()) { if (b.team !== 's' || b.dead || b.hp >= b.maxHp) continue; const s = proj(b.x, b.y + (b.type === 'brute' ? 2.6 : 1.4), b.z, c); if (s) bar(s.x, s.y, b.type === 'brute' ? 30 : 16, b.hp / b.maxHp, '#e04aa8'); }
+    for (const b of v.units.values()) { if (b.team !== 's' || b.dead || b.hp >= b.maxHp) continue; const s = proj(b.x, b.y + barH(b), b.z, c); if (s) bar(s.x, s.y, b.type === 'brute' || b.type === 'burrower' ? 30 : 16, b.hp / b.maxHp, '#e04aa8'); }
     const rs = proj(RELAY.x, H(RELAY.x, RELAY.z) + 10, RELAY.z, c); if (rs) bar(rs.x, rs.y, 60, v.relayHp / RELAY_MAX, '#7fe0ff');
   } else {
     // Allies within 60m get a chevron; other Spears get their name.
@@ -830,7 +901,7 @@ function drawOverlay(c) {
     for (const m of v.units.values()) {
       if (m.team !== 'm' || m.dead || (me && m.id === me.unitId)) continue;
       const d = Math.hypot(m.x - pose.x, m.z - pose.z); if (d > 60) continue;
-      const s = proj(m.x, m.y + 2.3, m.z, c); if (!s) continue;
+      const s = proj(m.x, m.y + barH(m), m.z, c); if (!s) continue;
       const isC = m.id === hopCand;
       ctx.fillStyle = m.owner ? '#ffcc4d' : isC ? '#7fe0ff' : 'rgba(143,179,214,.85)';
       ctx.beginPath(); ctx.moveTo(s.x - 5, s.y - 6); ctx.lineTo(s.x + 5, s.y - 6); ctx.lineTo(s.x, s.y); ctx.fill();
@@ -915,6 +986,7 @@ touch = initTouch({
   setFire: v => { mouseFire = v; },
   look: (dx, dy) => { pose.yaw -= dx; pose.pitch = Math.max(-1.45, Math.min(1.45, pose.pitch - dy)); },
   hop: tryHop,
+  stim: spearStimNow,
   key: (k, v) => { keys[k] = v; },
   selectAll: () => { selected.clear(); aliveMarines().forEach(m => selected.add(m.id)); },
   clearSel: () => { selected.clear(); setPatrol(false); },
