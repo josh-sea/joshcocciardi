@@ -14,6 +14,7 @@ export const DEFAULTS = Object.freeze({
   leashR: 10,       // m, zone radius
   leashDrain: 8,    // HP/s while out of position after the deadline
   hopRange: 45,     // m
+  swarm: 1,         // multiplier on every wave's size
 });
 
 export const TUNE = [
@@ -25,6 +26,7 @@ export const TUNE = [
   ['leashR', 'Leash: zone radius', 4, 25, 1, v => v + 'm'],
   ['leashDrain', 'Leash: HP lost per second', 0, 30, 1, v => String(v)],
   ['hopRange', 'Hop range', 15, 90, 5, v => v + 'm'],
+  ['swarm', 'Swarm size', 0.5, 1.5, 0.05, v => Math.round(v * 100) + '%'],
 ];
 
 // Anything a client sends is clamped to the slider range before use.
@@ -65,15 +67,15 @@ export const SHOT = { rifle: 0, flame: 2, snipe: 3, spine: 4, lurk: 5, cannon: 6
 
 export const SPRINT = 1.45;
 export const BUGT = {
-  ling: { label: 'Ling', hp: 30, speed: 6.6, dmg: 7, atk: 0.7, r: 0.55 },
-  brute: { label: 'Brute', hp: 180, speed: 3.6, dmg: 22, atk: 1.1, r: 1.15 },
+  ling: { label: 'Ling', hp: 35, speed: 7.2, dmg: 8, atk: 0.7, r: 0.55 },
+  brute: { label: 'Brute', hp: 220, speed: 3.8, dmg: 26, atk: 1.1, r: 1.15 },
   // Ranged: stops at `range` and spits acid spines.
-  spitter: { label: 'Spitter', hp: 80, speed: 4.6, dmg: 9, atk: 0.9, r: 0.6, range: 13, acc: 0.7 },
+  spitter: { label: 'Spitter', hp: 90, speed: 4.6, dmg: 10, atk: 0.9, r: 0.6, range: 14, acc: 0.7 },
   // Digs in at `range`, then sends a line of spikes through everything in front of it.
-  burrower: { label: 'Burrower', hp: 170, speed: 4.0, dmg: 20, atk: 1.8, r: 0.9, range: 15, width: 1.1 },
+  burrower: { label: 'Burrower', hp: 200, speed: 4.0, dmg: 22, atk: 1.8, r: 0.9, range: 15, width: 1.1 },
 };
 export const BTYPE_LIST = ['ling', 'brute', 'spitter', 'burrower'];
-export const WAVES = 6;
+export const WAVES = 10;
 export const MAXMAR = 16;
 export const SQUADS = ['Alpha', 'Bravo', 'Charlie'];
 export const MAX_SPEARS = 4;

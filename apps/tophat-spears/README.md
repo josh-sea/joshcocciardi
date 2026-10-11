@@ -2,7 +2,8 @@
 
 A co-op RTS and FPS in the same match. One player is the **Tophat**, commanding
 marines from above. Up to four **Spears** play those marines in first person and
-hop between bodies. Six waves of swarm come over the ridge; keep the relay standing.
+hop between bodies. Ten waves of swarm come over the ridge, and they don't wait
+for you to finish the last one. Keep the relay standing.
 
 Live at `/projects/tophat-spears` (short link: `/tophat`).
 
@@ -31,6 +32,50 @@ No accounts. Each tab signs in anonymously, so two tabs on one laptop are two
 players and a reload keeps your seat. **Practice solo** runs offline with the
 prototype's Tab swap between seats.
 
+## The map
+
+North is where the swarm comes from; the relay is at the south end.
+
+- **Bluffs** stand against the west and east walls, about 9 m up with sheer
+  cliffs all round. Each has one ramp, cut into its inner face and climbing
+  north from the base side. Getting up there is a long walk for soldiers and
+  bugs alike, and from the top you outrange everything below (high ground adds
+  up to 6 m of range). Bugs that can't reach you up there prefer targets on
+  their own level.
+- **Buildings**: two bunkers in front of the relay (4 inside), an outpost on
+  the ridge crest (6 on its roof) and a watchtower on each bluff (2 on a
+  platform 6 m up). Soldiers inside get extra range and heal slowly, and the
+  building takes the hits instead of them (at half damage). If it falls,
+  everyone is thrown out. Buildings patch themselves up when nothing is
+  attacking them, and a wrecked one is rebuilt after a quiet minute.
+  - Tophat: right-click (or tap) a building with soldiers selected to send them
+    in. Any other move order brings them back out; Hold keeps them inside.
+  - Spear: walk up to the door and press **G** (or tap **Enter**). Inside you
+    hold your firing slot: look and shoot, no walking. **G** again to leave.
+    You can also hop straight into a soldier who is already inside.
+- Units find their own way round the cliffs and up the ramps (`route()` in
+  `js/map.js`), and nothing the AI moves can climb a cliff. Spears can't
+  either, jumping included.
+
+## Difficulty
+
+Each wave arrives over about half a minute, thickening toward the end, and
+the next starts six seconds after the last of it is out, so anything you
+don't kill stacks up. Every wave is bigger than the one before and its bugs
+have more health (+7% per wave). The last wave brings extra Brutes.
+
+Balance is checked with a headless soak of the simulation (5 to 8 seeds each):
+
+| Setup | Result at 100% swarm |
+|---|---|
+| AI alone, no orders | always loses, around wave 6 to 7 of 10 |
+| Scripted Tophat (bunkers and towers manned, stim on contact) plus 4 AI-driven Spear bodies | loses later, around wave 8 |
+
+Real Spears aim better than the AI and the Tophat can do far more than the
+script, so a good team gets further. If it's too much, the host can turn
+**Swarm size** down in Tune (50% to 150%): at 60% the scripted team reaches
+the final wave every time.
+
 ## Units
 
 Soldiers (Spears can hop into any of them, and play its weapon):
@@ -47,7 +92,7 @@ and gives 8 s of 1.5x fire rate and 1.4x speed. Marines and Torches only.
 
 Swarm: **Lings** (fast melee), **Brutes** (tanky melee), **Spitters** (stop
 at range and spit acid, from wave 2) and **Burrowers** (dig in, then send a
-line of spikes through every soldier in front of them, from wave 4).
+line of spikes through every soldier in front of them, from wave 3).
 
 Squads start mixed (Alpha: 3 Marines and a Torch; Bravo: 2 Marines, a
 Torch and a Shade; Charlie: 2 Marines, a Shade and a Strider) and
@@ -109,8 +154,8 @@ See the header of `js/net.js` for the shape of each node.
 | File | What it is |
 |---|---|
 | `js/config.js` | Tunables (`DEFAULTS`, the Tune sliders) and fixed numbers |
-| `js/map.js` | Height function, seeded rocks and spires, collision, line of sight |
-| `js/sim.js` | The match: AI, swarm, waves, leash, hops, deaths, snapshots |
+| `js/map.js` | Height function, bluffs and ramps, buildings, routes round the cliffs, rocks and spires, collision, line of sight |
+| `js/sim.js` | The match: AI, swarm, waves, buildings, leash, hops, deaths, snapshots |
 | `js/lobby.js` | Seat rules: Spears first, Tophat swaps, host takeover |
 | `js/keys.js` | Password to room key |
 | `js/net.js` | Firebase: sign-in, presence, seats, commands, state |
@@ -147,4 +192,4 @@ cd apps/tophat-spears && python3 -m http.server 8765
 - Spears can't walk up ground steeper than about 42 degrees.
 - Tuning is set by the host in the lobby and locked during the match.
 
-Still open from the handoff: pathfinding, sound, terrain textures, reloads, and balance (AI soldiers alone currently win every match).
+Still open from the handoff: sound, terrain textures and reloads.
