@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Tophat &amp; Spears</title>
 <meta name="description" content="One commander, four soldiers who hop between bodies. A co-op RTS and FPS in the same match, played in the browser with friends.">
 <meta name="theme-color" content="#0d1218">
@@ -81,18 +81,26 @@
         </div>
       </form>
       <div class="roles" style="margin-top:22px">
-        <div class="role"><h4>Tophat</h4><ul>
+        <div class="role"><h4>Tophat</h4><ul class="tch">
+          <li>Tap marines or a squad to select them</li>
+          <li>Tap the ground to send them there</li>
+          <li>Drag to move the map, pinch to zoom</li>
+          <li>Patrol or Hold, then tap; Box for a drag-select</li></ul><ul class="mse">
           <li>Drag to select, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> squads, <kbd>Q</kbd> all</li>
           <li>Right-click to move, <kbd>P</kbd> then click to patrol</li>
           <li><kbd>X</kbd> hold position, <kbd>WASD</kbd> pan, wheel zoom</li>
           <li>Ordering a Spear's body starts their leash clock</li></ul></div>
-        <div class="role sp"><h4>Spear</h4><ul>
+        <div class="role sp"><h4>Spear</h4><ul class="tch">
+          <li>Left thumb moves, right thumb looks</li>
+          <li>Hold Fire to shoot; drag it to keep aiming</li>
+          <li>Aim at a marine and tap Hop to jump bodies</li>
+          <li>Miss the leash and you bleed. Die early and you wait out the hop cooldown</li></ul><ul class="mse">
           <li><kbd>WASD</kbd> move, mouse aim, click fire, <kbd>Shift</kbd> sprint</li>
           <li>Aim at a marine and press <kbd>E</kbd> to hop</li>
           <li>Small buffs only: a bit more HP and damage</li>
           <li>Miss the leash and you bleed. Die early and you wait out the hop cooldown</li></ul></div>
       </div>
-      <p class="note" id="mobileNote" hidden>Built for keyboard and mouse. Open this on a laptop to play.</p>
+      <p class="note" id="mobileNote">Works on phones too: turn it sideways. Tophats tap marines to select them and tap the ground to send them. Spears get a thumbstick and fire button.</p>
       <p class="note">Everyone types the same password to land in the same lobby. No accounts: your name only lasts for this game.</p>
     </div>
   </div>

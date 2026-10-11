@@ -101,8 +101,8 @@ kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-b
 .tr input{grid-column:1/3;width:100%;accent-color:var(--amber)}
 .tr output{font-family:var(--mono);color:var(--amber)}
 
-#menu{inset:0;display:flex;align-items:center;padding:16px;background:linear-gradient(90deg,rgba(13,18,24,.95) 0%,rgba(13,18,24,.75) 55%,rgba(13,18,24,.15) 100%);overflow:auto}
-.dossier{max-width:600px;width:100%;padding:8px 0 8px clamp(0px,4vw,48px)}
+#menu{inset:0;display:flex;align-items:flex-start;padding:16px;background:linear-gradient(90deg,rgba(13,18,24,.95) 0%,rgba(13,18,24,.75) 55%,rgba(13,18,24,.15) 100%);overflow:auto}
+.dossier{max-width:600px;width:100%;margin:auto 0;padding:8px 0 8px clamp(0px,4vw,48px)}
 .eyebrow{color:var(--amber);font-size:12px;letter-spacing:.22em;text-transform:uppercase}
 h1{font-size:clamp(40px,7vw,72px);line-height:.92;margin:8px 0 14px;letter-spacing:-.01em;text-transform:uppercase;text-wrap:balance}
 h1 em{font-style:normal;color:var(--gold)}
@@ -147,8 +147,8 @@ input{font-family:var(--display)}
 .linkbtn{background:none;border:0;color:var(--dim);text-decoration:underline;cursor:pointer;font-size:13px;padding:0}
 .linkbtn:hover{color:var(--bone)}
 
-#lobby{inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(13,18,24,.86);overflow:auto;border:0;box-shadow:none}
-.lobbycard{width:min(640px,100%);background:var(--panel-solid);border:1px solid var(--line);padding:22px}
+#lobby{inset:0;display:flex;align-items:flex-start;justify-content:flex-start;padding:16px;background:rgba(13,18,24,.86);overflow:auto;border:0;box-shadow:none}
+.lobbycard{width:min(640px,100%);margin:auto;background:var(--panel-solid);border:1px solid var(--line);padding:22px}
 .lobbycard h2{margin:2px 0 4px;font-size:28px;text-transform:uppercase;letter-spacing:.02em}
 .lobbycard .sub{margin:0 0 16px;line-height:1.5}
 .seats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:16px}
@@ -178,3 +178,38 @@ input{font-family:var(--display)}
 .board th:first-child,.board td:first-child{text-align:left}
 .board td{padding:4px 6px;text-align:right;border-top:1px solid var(--line)}
 @media (max-width:520px){.seats{grid-template-columns:1fr}.seat.top{grid-column:auto}}
+
+/* ---------- touch ---------- */
+#view,#ov{touch-action:none}
+#touchUi{position:absolute;inset:0;pointer-events:none;z-index:6}
+#tStick{position:absolute;width:112px;height:112px;margin:-56px 0 0 -56px;border:2px solid rgba(241,230,210,.35);border-radius:50%;background:rgba(12,17,23,.25)}
+#tStick i{position:absolute;left:50%;top:50%;width:50px;height:50px;border-radius:50%;background:rgba(241,230,210,.55);transform:translate(-50%,-50%)}
+.tb{pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;
+  background:rgba(12,17,23,.62);border:1px solid rgba(241,230,210,.35);color:var(--bone);font:700 13px var(--display);letter-spacing:.1em;text-transform:uppercase;border-radius:50%}
+.tb.down{background:rgba(241,230,210,.3)}
+.tb.on{border-color:var(--amber);color:var(--amber)}
+#tSpear{position:absolute;right:calc(14px + env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));width:186px;height:186px}
+#tSpear .tb{position:absolute}
+#tFire{right:0;bottom:0;width:92px;height:92px;border-color:var(--bad);font-size:15px}
+#tFire.down{background:rgba(255,90,79,.4)}
+#tHop{right:104px;bottom:8px;width:66px;height:66px;border-color:#7fe0ff;color:#7fe0ff}
+#tJump{right:112px;bottom:88px;width:54px;height:54px;font-size:11px}
+#tSprint{right:18px;bottom:110px;width:54px;height:54px;font-size:10px}
+#tTop{position:absolute;left:calc(12px + env(safe-area-inset-left,0px));top:58px;display:flex;gap:8px}
+#tTop .tb{border-radius:0;padding:9px 14px}
+#tRotate{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--amber);padding:12px 16px;font-size:14px;text-align:center;max-width:240px}
+
+body.touch #lockhint{display:none!important}
+body.touch #thHud kbd,body.touch .cmd .k{display:none}
+.role .tch{display:none}body.touch .role .tch{display:block}body.touch .role .mse{display:none}
+body.touch .cmd button,body.touch .sq{padding:10px 14px;touch-action:manipulation}
+body.touch #topbar{flex-wrap:nowrap;white-space:nowrap;padding:6px calc(10px + env(safe-area-inset-right,0px)) 6px calc(10px + env(safe-area-inset-left,0px));gap:4px 14px}
+body.touch .hero{left:calc(12px + env(safe-area-inset-left,0px));top:56px;bottom:auto;width:210px;padding:8px 10px}
+body.touch .hero .who b{font-size:14px}
+body.touch .hop{bottom:12px;font-size:12px;padding:6px 12px}
+body.touch #hopTag{top:calc(50% + 22px)}
+body.touch #mini{width:104px;height:104px;top:52px;right:calc(12px + env(safe-area-inset-right,0px));bottom:auto}
+body.touch #toasts{top:164px}
+body.touch #thHud{left:calc(12px + env(safe-area-inset-left,0px));right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+@media (max-width:900px){body.touch .mission,body.touch .you-chip,body.touch .stat:has(#sMar),body.touch .stat:has(#sBug){display:none}body.touch .stat{font-size:13px}body.touch .meter{width:60px}body.touch #topbar .ghost,body.touch .seg button{padding:5px 9px}}
+@media (max-height:440px){body.touch .squads .sq span{display:none}body.touch #leash{top:52px;padding:4px 12px;min-width:0}body.touch #leash .v{font-size:16px}}
