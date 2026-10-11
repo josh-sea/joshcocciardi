@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset=utf8>
 <title>Boulder Smash</title>
-<meta name="description" content="A 3D smash-em-up for kids: Boulder the green giant wrecks the city, bonks Dr. Fizzle's gang, and throws rubble at giants. Plays in the browser with keyboard, trackpad or touch.">
+<meta name="description" content="A 3D smash-em-up for kids: Boulder the green giant wrecks the city, bonks Dr. Fizzle's gang, and punches boulders back at Rocko, crashes Bruno the bulldozer, and rescues trapped people. Plays in the browser with keyboard, trackpad or touch.">
 <meta name="theme-color" content="#8ec5e8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AA%A8%3C/text%3E%3C/svg%3E"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,7 +65,7 @@ button:focus-visible{outline:3px solid var(--crystal);outline-offset:2px}
 #msg{position:fixed;inset:0;display:grid;place-items:center;padding:16px;background:rgba(12,18,28,.55);overflow:auto}
 .card{max-width:460px;width:100%;box-sizing:border-box;background:var(--card);border:3px solid var(--crystal);border-radius:18px;padding:22px;text-align:center;box-shadow:0 10px 0 #0e131c}
 .card h1{font-family:var(--display);font-weight:400;font-size:clamp(28px,7vw,40px);line-height:1;margin:0 0 12px;color:var(--crystal);text-wrap:balance}
-.card p{margin:0 0 14px;font-size:17px;line-height:1.4}
+.card p{margin:0 0 14px;font-size:17px;line-height:1.4;white-space:pre-line}
 .keys{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;text-align:left;margin:0 auto 14px;max-width:320px;font-size:15px;color:var(--muted)}
 .keys kbd{font-family:var(--body);font-weight:700;color:var(--paper);background:#2a3447;border-radius:6px;padding:0 7px;white-space:nowrap}
 .cast{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin:0 0 16px;text-align:left}
@@ -86,6 +86,7 @@ button:focus-visible{outline:3px solid var(--crystal);outline-offset:2px}
     <div class="chip"><small>Score</small><b id="score">0</b></div>
     <div class="chip"><small>Buildings</small><b id="left">0</b></div>
     <div class="chip"><small>Villains</small><b id="vleft">0</b></div>
+    <div class="chip" id="rescueChip" hidden><small>Rescue</small><b id="rleft">0</b></div>
   </div>
   <div class="group">
     <div class="chip"><small>Stone</small><div class="bar"><div class="fill" id="hp"></div></div></div>
@@ -114,7 +115,7 @@ button:focus-visible{outline:3px solid var(--crystal);outline-offset:2px}
 <div id="msg">
   <div class="card">
     <h1 id="msgTitle">BOULDER SMASH</h1>
-    <p id="msgText">Boulder the green giant has to stop Dr. Fizzle's gang and smash every building in the city. When a building wobbles, a red ring appears. Get out before it crashes down!</p>
+    <p id="msgText">Boulder the green giant has to stop Dr. Fizzle's gang and smash every building in the city, saving anyone who is trapped. When a building wobbles, a red ring appears. Get out before it crashes down!</p>
     <div id="msgExtra">
       <div class="keys">
         <kbd>Stick or WASD</kbd><span>Move</span>
@@ -130,7 +131,10 @@ button:focus-visible{outline:3px solid var(--crystal);outline-offset:2px}
         <div><b><i style="background:#ffd23f"></i>Zappers</b>Throw zap balls. Two bonks.</div>
         <div><b><i style="background:#e63946"></i>Brutes</b>Shout, then charge. Dodge!</div>
         <div><b><i style="background:#f4a261"></i>Giants</b>Too tough to punch. Throw rubble!</div>
+        <div><b><i style="background:#b5651d"></i>Rocko</b>Rolls boulders. Punch them back!</div>
+        <div><b><i style="background:#ffb400"></i>Bruno</b>Bulldozer. Make him crash, then bonk!</div>
         <div><b><i style="background:#a35cff"></i>Dr. Fizzle</b>The boss. Last city.</div>
+        <div><b><i style="background:#3fa7d6"></i>Trapped people</b>Clear the rocks. Steel needs a thrown building!</div>
       </div>
     </div>
     <button class="go" id="msgBtn" type="button">Start smashing</button>
@@ -161,7 +165,7 @@ const SUPER_SLAM={radius:13,damage:6};   // 3x the smash
 const LIFT_COOLDOWN=20;  // seconds before Boulder can rip up another whole building
 const BRICK_LIFE=25;     // how long rubble stays on the ground to be picked up
 // How hard each kind of thrown thing hits
-const THROW_POWER={villain:2,robot:2,brick:2,rock:3,building:6};
+const THROW_POWER={villain:2,robot:2,brick:2,rock:3,boulder:3,building:6};
 const PALETTE=[0xd9644a,0x2f9e8f,0xe8c15a,0x5b7fbf,0xf08f6e,0x9b8ec4,0x6fb35f];
 
 // Villain types (all original characters)
@@ -170,21 +174,36 @@ const VTYPES={
   zapper:{hp:2, speed:2.8,scale:1,   suit:0x2b2d42,accent:0xffd23f,dmg:10,score:75},
   brute: {hp:4, speed:2.3,scale:1.45,suit:0x5a6170,accent:0xe63946,dmg:15,score:150},
   boss:  {hp:12,speed:4,  scale:1.3, suit:0xf2f2f2,accent:0xa35cff,dmg:12,score:500},
-  giant: {hp:10,speed:2,  scale:4,   suit:0x3d5a80,accent:0xf4a261,dmg:15,score:1000}
+  // big: the end-of-city bosses. Each one has its own trick for hurting it.
+  giant: {hp:10,speed:2,  scale:4,   suit:0x3d5a80,accent:0xf4a261,dmg:15,score:1000,big:true},
+  roller:{hp:9, speed:3,  scale:3.2, suit:0x8b5a2b,accent:0xff8c42,dmg:15,score:1000,big:true,rollCd:2.8},
+  dozer: {hp:10,speed:2.6,scale:2.6, suit:0xffb400,accent:0x2b2d42,dmg:20,score:1000,big:true}
 };
 
 // Buildings: [x, z, widthBlocks, depthBlocks, floors]
+// captives: someone trapped behind a rock pile (grab or punch the rocks away) or in a steel pen (only a thrown building breaks steel)
+// boss: stomps in once the city is smashed, every villain is bonked and everyone is saved
+// tip: shown on the card before the city starts
 const LEVELS=[
-  // giant: shows up once the city is smashed and every villain is bonked
   {name:'Pebble Street',bots:2,botSpeed:2.4,villains:{goon:3},
-   giant:{name:'GRUMBLE THE GIANT',hp:10,throwCd:3.4},buildings:[
+   boss:{type:'giant',name:'GRUMBLE THE GIANT',hp:10,throwCd:3.4},buildings:[
     [-20,-3,2,2,4],[0,-4,3,2,5],[20,-3,2,2,4],[-15,-22,2,3,5],[18,-20,3,2,6]
   ]},
-  {name:'Granite Avenue',bots:3,botSpeed:3,villains:{goon:4,zapper:2,brute:1},
-   giant:{name:'MEGA GRUMBLE',hp:16,throwCd:2.5,suit:0x6d2e46,accent:0xffd23f},buildings:[
-    [-24,-4,2,2,5],[-15,4,2,2,4],[0,-5,3,3,6],[16,4,2,2,4],[24,-4,2,3,6],[-6,-24,2,2,7],[6,-20,2,2,5],[20,-24,3,2,6]
+  {name:'Rubble Ridge',bots:3,botSpeed:2.8,villains:{goon:4,zapper:2},
+   tip:'Someone is trapped behind a rock pile! Grab the rocks (G) and throw them, or punch them apart.\nThen watch out for Rocko. Punch his rolling boulders right back at him!',
+   captives:[{x:0,z:-30,trap:'rocks'}],
+   boss:{type:'roller',name:'ROCKO THE ROLLER',hp:9},buildings:[
+    [-24,-4,2,2,5],[-15,4,2,2,4],[0,-6,3,2,5],[16,4,2,2,4],[24,-4,2,3,6],[-20,-26,2,2,6],[20,-24,3,2,6]
   ]},
-  {name:'Crystal Downtown',bots:4,botSpeed:3.4,villains:{goon:4,zapper:3,brute:2,boss:1},buildings:[
+  {name:'Iron Yard',bots:3,botSpeed:3,villains:{goon:3,zapper:2,brute:2},
+   tip:'Punches bounce off steel. Lift a building (B) and throw it at the steel pen!\nThen Bruno the bulldozer charges in. Dodge so he crashes, and bonk him while he is dizzy.',
+   captives:[{x:-24,z:-30,trap:'steel'},{x:24,z:-30,trap:'rocks'}],
+   boss:{type:'dozer',name:'BRUNO THE BULLDOZER',hp:10},buildings:[
+    [-26,0,2,2,5],[-12,4,2,2,4],[0,-8,3,2,6],[12,4,2,2,4],[26,0,2,3,5],[-8,-26,2,2,6],[8,-26,2,2,6],[0,-42,3,2,7]
+  ]},
+  {name:'Crystal Downtown',bots:4,botSpeed:3.4,villains:{goon:4,zapper:3,brute:2,boss:1},
+   tip:'The last city! Dr. Fizzle is here, and two people need saving.',
+   captives:[{x:-38,z:-10,trap:'rocks'},{x:36,z:-38,trap:'steel'}],buildings:[
     [-24,4,2,2,5],[-16,-5,2,2,7],[-4,-4,2,3,6],[5,4,2,2,4],[16,-4,3,2,7],[25,4,2,2,5],
     [-22,-24,3,3,8],[-6,-22,2,2,6],[5,-25,2,2,8],[20,-22,3,2,7],[0,-40,3,3,9]
   ]}
@@ -331,7 +350,7 @@ arrow.rotation.order='YXZ';scene.add(arrow);
 
 // ================= State =================
 let levelRoot=new THREE.Group();scene.add(levelRoot);
-let buildings=[],robots=[],villains=[],orbs=[],pickups=[],debris=[],dust=[],rings=[],thrown=[],rocks=[];
+let buildings=[],robots=[],villains=[],orbs=[],pickups=[],debris=[],dust=[],rings=[],thrown=[],rocks=[],obstacles=[],captives=[],rollers=[];
 let levelIdx=0,score=0,levelStartScore=0,health=100,state='title',clearTimer=0,shakeAmt=0,time=0,giantSpawned=false,hintAt=-99;
 const P={pos:new V3(0,0,10),vy:0,onGround:true,facing:Math.PI,punchT:-1,arm:0,hitDone:false,slamming:false,slamCd:0,slamPose:0,
   superJump:false,superCd:0,superSpin:0,liftCd:0,inv:0,walk:0,speed:0,held:null,throwPose:0};
@@ -402,7 +421,7 @@ renderer.domElement.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse
 });
 
 // ================= HUD =================
-const hud={score:$('score'),level:$('level'),name:$('levelName'),left:$('left'),vleft:$('vleft'),hp:$('hp'),boss:$('boss'),bossHp:$('bossHp'),superBtn:$('bSuper'),superTxt:$('superTxt')};
+const hud={score:$('score'),level:$('level'),name:$('levelName'),left:$('left'),vleft:$('vleft'),hp:$('hp'),boss:$('boss'),bossHp:$('bossHp'),superBtn:$('bSuper'),superTxt:$('superTxt'),rescue:$('rescueChip'),rleft:$('rleft')};
 const wasReady={super:true,lift:true};
 function cdButton(btn,txt,cd,max,key){
   const ready=cd<=0;
@@ -416,7 +435,8 @@ function updateHUD(){
   hud.left.textContent=buildings.filter(b=>b.state!=='gone').length;
   hud.vleft.textContent=villains.filter(v=>v.alive&&!v.flying&&!v.dying).length;
   hud.hp.style.width=health+'%';hud.hp.classList.toggle('low',health<=30);
-  const boss=villains.find(v=>(v.type==='boss'||v.type==='giant')&&v.alive&&!v.flying&&!v.dying);
+  hud.rescue.hidden=!captives.length;hud.rleft.textContent=captives.filter(c=>!c.freed).length;
+  const boss=villains.find(v=>(v.type==='boss'||v.T.big)&&v.alive&&!v.flying&&!v.dying);
   hud.boss.hidden=!boss;
   if(boss){hud.bossHp.style.width=(Math.max(0,boss.hp)/boss.maxHp*100)+'%';$('bossName').textContent=boss.name||'DR. FIZZLE';}
   cdButton(hud.superBtn,hud.superTxt,P.superCd,SUPER_COOLDOWN,'super');
@@ -536,6 +556,121 @@ function updateBuildings(dt){
   }
 }
 
+// ================= Obstacles: rock piles and steel =================
+// Rocks: punch twice to break, or grab one and throw it. Steel: punches bounce off, a thrown building smashes it.
+const pileMat=new THREE.MeshStandardMaterial({color:0x8f8578,roughness:1,flatShading:true});
+const pileGeo=new THREE.DodecahedronGeometry(1.3,0);
+function steelTexture(){
+  const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  g.fillStyle='#8c97a4';g.fillRect(0,0,64,64);g.fillStyle='#6f7985';g.fillRect(0,0,64,3);g.fillRect(0,0,3,64);
+  g.fillStyle='#c3cbd4';for(const [x,y] of [[9,9],[55,9],[9,55],[55,55]]){g.beginPath();g.arc(x,y,2.5,0,7);g.fill();}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(3,3);return t;
+}
+const steelMat=new THREE.MeshStandardMaterial({map:steelTexture(),metalness:.5,roughness:.45});
+const zapMat=new THREE.MeshStandardMaterial({color:0x7ff3ff,emissive:0x29c6e0,emissiveIntensity:1.2});
+const steelChunkGeo=new THREE.BoxGeometry(.7,.7,.7);
+function makeRockPile(cx,cz){
+  const n=11,R=4.2;
+  for(let i=0;i<n;i++){
+    const a=i/n*Math.PI*2,x=cx+Math.cos(a)*R,z=cz+Math.sin(a)*R;
+    const m=new THREE.Mesh(pileGeo,pileMat.clone());m.scale.set(rand(1,1.15),rand(1.6,1.85),rand(1,1.15));
+    m.rotation.y=rand(0,6);m.position.set(x,1.05*m.scale.y,z);m.castShadow=m.receiveShadow=true;levelRoot.add(m);
+    obstacles.push({kind:'rock',x,z,r:1.1,h:2.3*m.scale.y,m,hp:2,shake:0,base:m.material.color.clone()});
+  }
+}
+// A steel block with a crackling zap fence on top. The fence stops Boulder jumping over.
+function makeSteel(x,z,w,d,H){
+  const m=new THREE.Group();m.position.set(x,0,z);levelRoot.add(m);
+  const box=addMesh(m,new THREE.BoxGeometry(w,H,d),steelMat,0,H/2,0);box.receiveShadow=true;
+  addMesh(m,new THREE.BoxGeometry(w,.25,d),zapMat,0,H+.15,0);
+  obstacles.push({kind:'steel',x,z,minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2,h:H,m,shake:0});
+}
+function makeSteelPen(cx,cz){
+  const H=6,half=4.5,t=1;
+  makeSteel(cx,cz-half-t/2,half*2+t*2,t,H);makeSteel(cx,cz+half+t/2,half*2+t*2,t,H);
+  makeSteel(cx-half-t/2,cz,t,half*2,H);makeSteel(cx+half+t/2,cz,t,half*2,H);
+}
+function pushObs(p,r,o){
+  if(o.kind==='steel')return pushOut(p,r,o);
+  const dx=p.x-o.x,dz=p.z-o.z,d=Math.hypot(dx,dz),min=r+o.r;
+  if(d>=min)return false;
+  if(d<1e-4)p.x=o.x+min;else{p.x=o.x+dx/d*min;p.z=o.z+dz/d*min;}
+  return true;
+}
+const obsPoint=(o,from)=>o.kind==='steel'?closestPoint(o,from):new V3(o.x,0,o.z);
+function hitRock(o,amount,dir){
+  if(!obstacles.includes(o))return;
+  o.hp-=amount;o.shake=.25;
+  if(o.hp<=0)return breakRock(o,dir);
+  o.m.material.color.copy(o.base).lerp(DARK,.4);sfx.hit();puff(o.m.position,3,0xcfc6b8,.8);
+}
+function breakRock(o,dir){
+  const i=obstacles.indexOf(o);if(i<0)return;obstacles.splice(i,1);levelRoot.remove(o.m);
+  for(let k=0;k<3;k++)dropRock(new V3(o.x+rand(-.6,.6),1.5+k,o.z+rand(-.6,.6)),new V3(dir.x*rand(2,5)+rand(-2,2),rand(3,6),dir.z*rand(2,5)+rand(-2,2)));
+  puff(new V3(o.x,1,o.z),6,0xcfc6b8,1.2);sfx.thud();shake(.25);score+=10;
+}
+function breakSteel(o,dir){
+  const i=obstacles.indexOf(o);if(i<0)return;obstacles.splice(i,1);levelRoot.remove(o.m);
+  for(let k=0;k<10;k++){
+    const m=new THREE.Mesh(steelChunkGeo,steelMat);m.position.set(rand(o.minX,o.maxX),rand(.5,o.h),rand(o.minZ,o.maxZ));m.castShadow=true;levelRoot.add(m);
+    launch(m,dir.x*rand(4,9)+rand(-3,3),rand(4,10),dir.z*rand(4,9)+rand(-3,3),0,.35,'bit');
+  }
+  shockRing(new V3(o.x,0,o.z),6,0x9fe8ff,.45);sfx.clang();sfx.boom();shake(.6);score+=50;toast('STEEL SMASHED!');
+}
+function clangSteel(o,quiet){
+  o.shake=.25;sfx.clang();
+  if(!quiet&&time-hintAt>3){hintAt=time;toast(buildings.some(b=>b.state==='standing')?'THROW A BUILDING AT IT!':'SUPER SMASH THE STEEL!','warn');}
+}
+function updateObstacles(dt){
+  for(const o of obstacles)if(o.shake>0){o.shake-=dt;o.m.position.x=o.x+(o.shake>0?Math.sin(time*80)*.12:0);}
+  zapMat.emissiveIntensity=1+.6*Math.sin(time*25);
+}
+
+// ================= Trapped people =================
+const CIV_COLORS=[0x3fa7d6,0xe86a92,0x59cd90,0xfac05e,0xf79d84];
+function labelSprite(text,bg){
+  const c=document.createElement('canvas');c.width=256;c.height=96;const g=c.getContext('2d');
+  g.fillStyle=bg;g.beginPath();if(g.roundRect)g.roundRect(8,8,240,80,24);else g.rect(8,8,240,80);g.fill();
+  g.fillStyle='#fff';g.font='48px Bungee, Impact, sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,128,52);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false,fog:false}));
+  sp.scale.set(3.2,1.2,1);sp.renderOrder=10;return sp;
+}
+function makeCaptive(c){
+  const T={suit:CIV_COLORS[captives.length%CIV_COLORS.length],accent:0xffffff,scale:.9};
+  const p=buildPerson('civ',T);p.root.position.set(c.x,0,c.z);p.root.rotation.y=Math.atan2(-c.x,10-c.z);levelRoot.add(p.root);
+  const signY=(c.trap==='steel'?6:4.4)+1.8;
+  const sign=labelSprite('HELP!','#e63946');sign.position.set(c.x,signY,c.z);levelRoot.add(sign);
+  if(c.trap==='steel')makeSteelPen(c.x,c.z);else makeRockPile(c.x,c.z);
+  captives.push({...p,x:c.x,z:c.z,sign,signY,freed:false,t:rand(0,6),runT:0,runDir:new V3()});
+}
+function freeCaptive(c){
+  c.freed=true;c.runT=0;
+  c.runDir.set(c.x-P.pos.x,0,c.z-P.pos.z);if(c.runDir.lengthSq()<1e-6)c.runDir.set(0,0,1);c.runDir.normalize();
+  levelRoot.remove(c.sign);c.sign=labelSprite('THANKS!','#16b85f');levelRoot.add(c.sign);
+  score+=250;health=Math.min(100,health+15);sfx.chime();setTimeout(sfx.win,150);toast('SAVED! +250');puff(c.root.position,6,0xffffff,.8);
+}
+function updateCaptives(dt){
+  for(const c of captives){
+    c.t+=dt;const p=c.root.position;
+    if(!c.freed){
+      // Jumping and waving for help
+      c.armL.rotation.x=-2.6+Math.sin(c.t*8)*.5;c.armR.rotation.x=-2.6-Math.sin(c.t*8)*.5;
+      p.y=Math.abs(Math.sin(c.t*4))*.15;c.sign.position.y=c.signY+Math.sin(c.t*3)*.25;
+      if(flatDist(P.pos,p)<2.6&&P.pos.y<3)freeCaptive(c);
+      continue;
+    }
+    if(!c.root.parent)continue;
+    c.runT+=dt;
+    if(c.runT<1){p.y=Math.abs(Math.sin(c.runT*Math.PI*3))*1.2;c.armL.rotation.x=c.armR.rotation.x=-3;}
+    else{
+      p.y=0;p.addScaledVector(c.runDir,9*dt);c.root.rotation.y=Math.atan2(c.runDir.x,c.runDir.z);
+      const sw=Math.sin(c.runT*18)*.9;c.legL.rotation.x=sw;c.legR.rotation.x=-sw;c.armL.rotation.x=-sw;c.armR.rotation.x=sw;
+    }
+    c.sign.position.set(p.x,p.y+3,p.z);
+    if(c.runT>3.2){puff(p,5,0xffffff,.7);levelRoot.remove(c.root);levelRoot.remove(c.sign);}
+  }
+}
+
 // ================= Collision =================
 function pushOut(p,r,b){
   const cx=clamp(p.x,b.minX,b.maxX),cz=clamp(p.z,b.minZ,b.maxZ);
@@ -550,6 +685,7 @@ function freeSpot(minFromStart=14){
     const x=rand(-40,40),z=rand(-44,6);
     if(Math.hypot(x,z-10)<minFromStart)continue;
     if(buildings.some(b=>x>b.minX-2&&x<b.maxX+2&&z>b.minZ-2&&z<b.maxZ+2))continue;
+    if(captives.some(c=>Math.hypot(x-c.x,z-c.z)<9))continue;
     return [x,z];
   }
   return [rand(-30,30),-46];
@@ -583,6 +719,7 @@ function updateRobots(dt){
     if(dist<15){mx=dx/dist;mz=dz/dist;}else{if(Math.random()<dt*.5)r.wander+=rand(-1.5,1.5);mx=Math.sin(r.wander);mz=Math.cos(r.wander);}
     p.x+=mx*r.speed*dt;p.z+=mz*r.speed*dt;
     for(const b of buildings)if(solid(b))pushOut(p,.9,b);
+    for(const o of obstacles)pushObs(p,.9,o);
     if(Math.abs(p.x)>ARENA||Math.abs(p.z)>ARENA){r.wander+=Math.PI;p.x=clamp(p.x,-ARENA,ARENA);p.z=clamp(p.z,-ARENA,ARENA);}
     p.y=.9+Math.sin(r.t*4)*.15;r.g.rotation.y=Math.atan2(mx,mz);
     if(dist<1.8&&P.pos.y<2.2){takeDamage(10,p);p.x-=mx*2.5;p.z-=mz*2.5;}
@@ -605,8 +742,12 @@ function buildPerson(type,T){
   addMesh(body,new THREE.BoxGeometry(.8,.12,.46),accent,0,.98,0);
   const head=addMesh(body,new THREE.IcosahedronGeometry(.3,0),skin,0,2.02,0);
   const armL=arm(1),armR=arm(-1);
-  let extra=null;
-  if(type==='goon'){
+  let extra=null,stars=null;
+  const bang=()=>{const g=new THREE.Group();body.add(g);g.position.y=2.9;g.visible=false;const red=new THREE.MeshBasicMaterial({color:0xff2a1a});
+    addMesh(g,new THREE.BoxGeometry(.16,.5,.16),red,0,.2,0);addMesh(g,new THREE.BoxGeometry(.16,.16,.16),red,0,-.25,0);return g;};
+  if(type==='civ'){
+    addMesh(body,new THREE.SphereGeometry(.32,7,4,0,Math.PI*2,0,Math.PI/2),dark,0,2.06,-.02);    // hair
+  }else if(type==='goon'){
     addMesh(body,new THREE.BoxGeometry(.64,.13,.12),accent,0,2.07,.25);            // goggles
     addMesh(body,new THREE.CylinderGeometry(.31,.33,.22,7),suit,0,2.24,0);        // beanie
   }else if(type==='zapper'){
@@ -636,8 +777,27 @@ function buildPerson(type,T){
     addMesh(body,new THREE.BoxGeometry(.6,.5,.1),accent,0,1.45,.24);               // chest plate
     addMesh(body,new THREE.BoxGeometry(.3,.06,.05),glow,0,2.04,.29);               // glowing eye slit
     addMesh(armL,new THREE.IcosahedronGeometry(.2,0),accent,0,-.82,0);addMesh(armR,new THREE.IcosahedronGeometry(.2,0),accent,0,-.82,0);
+  }else if(type==='roller'){
+    const rock=new THREE.MeshStandardMaterial({color:0x9a8f80,roughness:1,flatShading:true});
+    addMesh(body,new THREE.BoxGeometry(.64,.12,.1),accent,0,2.1,.25);                // bandana
+    for(const s of [-1,1])addMesh(body,new THREE.DodecahedronGeometry(.3,0),rock,s*.55,1.85,0);   // rock shoulder pads
+    addMesh(body,new THREE.DodecahedronGeometry(.32,0),rock,0,1.45,-.38);            // rock backpack
+    extra=new THREE.Group();body.add(extra);extra.position.y=2.75;extra.visible=false; // boulder held overhead before rolling
+    addMesh(extra,new THREE.DodecahedronGeometry(.5,1),rock,0,0,0);
+  }else if(type==='dozer'){
+    const hat=new THREE.MeshStandardMaterial({color:0xffd23f,roughness:.5,flatShading:true});
+    addMesh(body,new THREE.SphereGeometry(.35,7,4,0,Math.PI*2,0,Math.PI/2),hat,0,2.1,0);     // hard hat
+    addMesh(body,new THREE.CylinderGeometry(.42,.42,.04,10),hat,0,2.1,.05);
+    addMesh(body,new THREE.BoxGeometry(.6,.12,.08),dark,0,2.02,.27);               // visor
+    addMesh(body,new THREE.BoxGeometry(1.5,.7,.12),accent,0,.75,.65);              // bulldozer blade
+    for(const s of [-1,1])addMesh(body,new THREE.BoxGeometry(.1,.1,.5),dark,s*.45,.85,.38);
+    addMesh(body,new THREE.CylinderGeometry(.07,.07,.6,6),dark,.25,2,-.3);          // exhaust pipe
+    extra=bang();
+    stars=new THREE.Group();body.add(stars);stars.position.y=2.55;stars.visible=false; // dizzy stars after a crash
+    const starMat=new THREE.MeshBasicMaterial({color:0xffe14d});
+    for(let i=0;i<5;i++){const a=i/5*Math.PI*2;addMesh(stars,new THREE.OctahedronGeometry(.09,0),starMat,Math.cos(a)*.4,0,Math.sin(a)*.4);}
   }
-  return {root,body,legL,legR,armL,armR,head,suit,extra};
+  return {root,body,legL,legR,armL,armR,head,suit,extra,stars};
 }
 function makeVillain(type,x,z,cfg){
   const T={...VTYPES[type],...(cfg||{})},m=buildPerson(type,T);
@@ -646,24 +806,28 @@ function makeVillain(type,x,z,cfg){
     cd:rand(1,3),summonCd:8,stompCd:2,mode:'chase',modeT:0,chargeDir:new V3(),walk:rand(0,6),ang:rand(0,Math.PI*2),age:0};
 }
 // src says what hit them: punch, slam, super, throw, splash or collapse.
-// Giants shrug off punches and splash. Only thrown stuff (and a little from slams) hurts them.
-function hitGiant(v,amount,src){
+// Big bosses shrug off punches and splash. Giants and Rocko only feel thrown stuff (and a little from slams).
+// Bruno is armored until he crashes: while he is dizzy everything works, otherwise only throws (at half power).
+const BIG_HINT={giant:'TOO TOUGH! THROW STUFF!',roller:'PUNCH HIS BOULDERS BACK!',dozer:'MAKE HIM CRASH!'};
+function hitBig(v,amount,src){
   if(v.dying)return;
-  const dmg=src==='throw'?amount:src==='super'?2:src==='slam'?1:0;
+  let dmg=src==='throw'?amount:src==='super'?2:src==='slam'?1:0;
+  if(v.type==='dozer')dmg=v.mode==='dizzy'?(src==='throw'?amount:src==='super'?3:src==='slam'?2:src==='punch'?1:0):(src==='throw'?Math.ceil(amount/2):0);
   if(dmg<=0){
     sfx.clang();v.flash=.08;
-    if(time-hintAt>4){hintAt=time;toast('TOO TOUGH! THROW STUFF!','boss');}
+    if(time-hintAt>4){hintAt=time;toast(BIG_HINT[v.type],'boss');}
     return;
   }
   v.hp-=dmg;v.flash=.25;sfx.giantHurt();shake(.35);puff(new V3(v.root.position.x,6,v.root.position.z),4,0xffffff,1.5);
   if(v.hp<=0){
-    v.dying=true;v.dieT=0;score+=v.T.score;toast(v.name.replace(' THE GIANT','')+' DOWN!','boss');
+    v.dying=true;v.dieT=0;score+=v.T.score;toast(v.name.replace(/ THE .*/,'')+' DOWN!','boss');
+    if(v.extra)v.extra.visible=false;if(v.stars)v.stars.visible=false;
     if(v.stompRing){levelRoot.remove(v.stompRing);v.stompRing=null;}
   }
 }
 function hitVillain(v,amount,dir,src='hit'){
   if(!v.alive||v.flying)return;
-  if(v.type==='giant')return hitGiant(v,amount,src);
+  if(v.T.big)return hitBig(v,amount,src);
   if(src==='splash'&&v.type==='boss')amount=Math.min(amount,1);
   v.hp-=amount;v.flash=.18;v.stun=.35;
   v.root.position.x+=dir.x*1.4;v.root.position.z+=dir.z*1.4;
@@ -735,6 +899,25 @@ function updateVillains(dt){
           for(let k=0;k<2;k++){const g=makeVillain('goon',clamp(p.x+rand(-3,3),-ARENA,ARENA),clamp(p.z+rand(-3,3),-ARENA,ARENA));villains.push(g);puff(g.root.position,5,0xa35cff,.8);}
           toast('MORE GOONS!','boss');
         }}
+    }else if(v.type==='roller'){
+      // Keeps his distance and rolls giant boulders along the ground
+      if(v.mode==='windup'){v.modeT-=dt;v.root.rotation.y=Math.atan2(toP.x,toP.z);
+        if(v.modeT<=0){v.extra.visible=false;rollBoulder(v);v.mode='chase';v.cd=v.T.rollCd*rand(.85,1.15);}}
+      else{
+        const side=new V3(-toP.z,0,toP.x);
+        if(dist<16){mx=-toP.x;mz=-toP.z;}else if(dist>30){mx=toP.x;mz=toP.z;}else{mx=side.x*.5;mz=side.z*.5;}
+        v.cd-=dt;if(v.cd<=0&&dist<55){v.mode='windup';v.modeT=.8;v.extra.visible=true;sfx.shout();}
+      }
+    }else if(v.type==='dozer'){
+      // Revs up, then charges in a straight line. Crashing into anything leaves him dizzy.
+      v.cd-=dt;
+      if(v.mode==='chase'){mx=toP.x;mz=toP.z;if(dist<30&&v.cd<=0){v.mode='windup';v.modeT=1.1;v.extra.visible=true;sfx.shout();}}
+      else if(v.mode==='windup'){v.modeT-=dt;v.root.rotation.y=Math.atan2(toP.x,toP.z);v.body.position.x=Math.sin(time*60)*.08;
+        if(Math.random()<.5)puff(p,1,0x777777,.8);
+        if(v.modeT<=0){v.mode='charge';v.modeT=2.2;v.chargeDir.copy(toP);v.extra.visible=false;v.body.position.x=0;sfx.rumble();}}
+      else if(v.mode==='charge'){v.modeT-=dt;mx=v.chargeDir.x;mz=v.chargeDir.z;spd=19;if(Math.random()<.6)puff(p,1,0xcfc6b8,1.2);
+        if(v.modeT<=0){v.mode='chase';v.cd=1.5;}}
+      else if(v.mode==='dizzy'){v.modeT-=dt;v.stars.rotation.y+=dt*5;if(v.modeT<=0){v.mode='chase';v.cd=2;v.stars.visible=false;}}
     }else if(v.type==='giant'){
       // Stays at a distance and lobs boulders. Stomps if Boulder gets close.
       v.cd-=dt;v.stompCd-=dt;
@@ -759,10 +942,17 @@ function updateVillains(dt){
     }
     p.x+=mx*spd*dt;p.z+=mz*spd*dt;
     const r=.55*v.T.scale+.2;
+    // Brutes that charge into a building crack it and get dizzy. Bruno smashes it and gets very dizzy.
+    const crash=()=>{if(v.type==='dozer')dozerCrash(v);else{v.mode='chase';v.cd=3;v.stun=1.5;shake(.4);}};
     for(const b of buildings)if(solid(b)&&pushOut(p,r,b)&&v.mode==='charge'){
-      // Brutes that charge into a building crack it and get dizzy
-      const c=closestPoint(b,p);c.y=1.5;hitBuilding(b,1,c,v.chargeDir);v.mode='chase';v.cd=3;v.stun=1.5;shake(.4);
+      const c=closestPoint(b,p);c.y=1.5;hitBuilding(b,v.type==='dozer'?3:1,c,v.chargeDir);crash();
     }
+    for(const o of [...obstacles])if(pushObs(p,r,o)&&v.mode==='charge'){
+      if(v.type==='dozer'){if(o.kind==='rock')breakRock(o,v.chargeDir);else breakSteel(o,v.chargeDir);}
+      else if(o.kind==='rock')hitRock(o,1,v.chargeDir);else clangSteel(o,true);
+      crash();
+    }
+    if(v.type==='dozer'&&v.mode==='charge'&&(Math.abs(p.x)>ARENA||Math.abs(p.z)>ARENA))dozerCrash(v);   // into the city wall
     p.x=clamp(p.x,-ARENA,ARENA);p.z=clamp(p.z,-ARENA,ARENA);
     if(v.mode!=='windup')v.root.rotation.y=lerpAngle(v.root.rotation.y,Math.atan2(toP.x,toP.z),1-Math.exp(-8*dt));
     // Walk animation
@@ -771,17 +961,18 @@ function updateVillains(dt){
     const sw=moving?Math.sin(v.walk)*.8:0;
     v.legL.rotation.x=sw;v.legR.rotation.x=-sw;
     v.armL.rotation.x=damp(v.armL.rotation.x,-sw*.8,10,dt);v.armR.rotation.x=damp(v.armR.rotation.x,sw*.8,10,dt);
-    v.body.rotation.z=v.stun>0?Math.sin(time*25)*.15:0;
+    v.body.rotation.z=v.stun>0||v.mode==='dizzy'?Math.sin(time*25)*.15:0;
+    if(v.type==='roller'&&v.mode==='windup')v.armL.rotation.x=v.armR.rotation.x=-2.9;   // boulder overhead
     if(v.mode==='charge'){v.body.rotation.x=.35;v.armL.rotation.x=v.armR.rotation.x=1;}else v.body.rotation.x=0;
-    if(v.type==='giant'){
+    if(v.T.big){
       if(v.mode==='stomp')v.legR.rotation.x=-1.3*Math.min(1,(1.1-v.modeT)*3);   // big foot raised
       const step=Math.sign(Math.sin(v.walk));if(moving&&step!==v.lastStep){shake(.15);sfx.step();}v.lastStep=step;
     }
     // Touching Boulder hurts him
     const reach=.9+v.T.scale*.5;
-    if(dist<reach+.8&&P.pos.y<p.y+2&&v.stun<=0){
+    if(dist<reach+.8&&P.pos.y<p.y+2&&v.stun<=0&&v.mode!=='dizzy'){
       takeDamage(v.T.dmg,p);
-      if(v.mode==='charge'){v.mode='chase';v.cd=3;v.stun=.6;}
+      if(v.mode==='charge'&&v.type!=='dozer'){v.mode='chase';v.cd=3;v.stun=.6;}
       p.x-=toP.x*1.5;p.z-=toP.z*1.5;
     }
   }
@@ -795,6 +986,7 @@ function updateOrbs(dt){
     const chest=new V3(P.pos.x,P.pos.y+1.8,P.pos.z);
     if(!gone&&o.m.position.distanceTo(chest)<1.5){takeDamage(10,o.m.position);gone=true;}
     if(!gone)for(const b of buildings)if(solid(b)&&o.m.position.x>b.minX&&o.m.position.x<b.maxX&&o.m.position.z>b.minZ&&o.m.position.z<b.maxZ){gone=true;break;}
+    if(!gone)for(const ob of obstacles)if(flatDist(obsPoint(ob,o.m.position),o.m.position)<(ob.r||.2)){gone=true;break;}
     if(gone){puff(o.m.position,2,0xfff3a0,.5);levelRoot.remove(o.m);orbs.splice(i,1);}
   }
 }
@@ -810,7 +1002,7 @@ function throwRock(v){
   // Red target circle shows where it will land
   const mk=new THREE.Mesh(new THREE.RingGeometry(2.4,3,32),new THREE.MeshBasicMaterial({color:0xff3b2a,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false}));
   mk.rotation.x=-Math.PI/2;mk.position.set(target.x,.1,target.z);levelRoot.add(mk);
-  rocks.push({m,vel,g,target,mk,age:0});sfx.whoosh();
+  rocks.push({m,vel,g,target,mk,age:0,src:v});sfx.whoosh();
 }
 function landRock(r){
   const p=r.m.position;
@@ -832,7 +1024,7 @@ function updateRocks(dt){
 // A good punch bats an incoming boulder right back at the giant
 function batRock(i,fw){
   const r=rocks[i];rocks.splice(i,1);levelRoot.remove(r.mk);
-  const giant=villains.find(v=>v.type==='giant'&&v.alive&&!v.dying);
+  const giant=r.src&&r.src.alive&&!r.src.dying?r.src:null;
   let vel;
   if(giant){const t=new V3(giant.root.position.x,giant.T.scale*1.4,giant.root.position.z);const T=.8,g=GRAV*.6;
     vel=new V3((t.x-r.m.position.x)/T,(t.y-r.m.position.y)/T+.5*g*T,(t.z-r.m.position.z)/T);}
@@ -840,12 +1032,66 @@ function batRock(i,fw){
   thrown.push({h:{kind:'rock',o:{half:1.2},obj:r.m},vel,g:GRAV*.6,age:0,power:THROW_POWER.rock});
   toast('BATTED BACK!');sfx.hit();shake(.3);
 }
-function spawnGiant(cfg){
-  const v=makeVillain('giant',0,-42,cfg);villains.push(v);v.cd=2.5;
+// ================= Rocko's rolling boulders =================
+const rollGeo=new THREE.DodecahedronGeometry(1.6,1);
+function rollBoulder(v){
+  if(state!=='playing')return;
+  const dir=new V3(P.pos.x-v.root.position.x,0,P.pos.z-v.root.position.z).normalize();
+  const m=new THREE.Mesh(rollGeo,new THREE.MeshStandardMaterial({color:0x9a8f80,roughness:1,flatShading:true}));
+  m.position.copy(v.root.position).addScaledVector(dir,v.T.scale*.9+1.8).setY(1.6);m.castShadow=true;levelRoot.add(m);
+  // Red lane shows where it will roll
+  const lane=new THREE.Group();lane.position.set(m.position.x,.07,m.position.z);lane.rotation.y=Math.atan2(dir.x,dir.z);
+  const strip=new THREE.Mesh(new THREE.PlaneGeometry(3,70),new THREE.MeshBasicMaterial({color:0xff3b2a,transparent:true,opacity:.35,side:THREE.DoubleSide,depthWrite:false}));
+  strip.rotation.x=Math.PI/2;strip.position.z=35;lane.add(strip);levelRoot.add(lane);
+  rollers.push({m,src:v,dir,speed:11,r:1.6,returned:false,age:0,lane,strip});sfx.rumble();
+}
+function punchBack(b,fw){
+  b.returned=true;b.age=0;b.speed=21;
+  const v=b.src;
+  if(v&&v.alive&&!v.dying)b.dir.set(v.root.position.x-b.m.position.x,0,v.root.position.z-b.m.position.z).normalize();
+  else b.dir.copy(fw);
+  b.m.material.emissive.setHex(0x8a5a00);levelRoot.remove(b.lane);
+  toast('SMASHED BACK!');sfx.hit();shake(.3);
+}
+function shatterRoller(b){
+  const p=b.m.position;levelRoot.remove(b.m);levelRoot.remove(b.lane);
+  puff(p,8,0xd8cfc0,1.5);shockRing(p,4,0xffb199,.35);sfx.thud();shake(.4);
+  for(let k=0;k<3;k++)dropRock(new V3(p.x+rand(-1,1),1.2,p.z+rand(-1,1)),new V3(rand(-4,4),rand(4,7),rand(-4,4)));
+}
+function updateRollers(dt){
+  for(let i=rollers.length-1;i>=0;i--){
+    const b=rollers[i],p=b.m.position;b.age+=dt;
+    p.addScaledVector(b.dir,b.speed*dt);
+    b.m.rotateOnWorldAxis(new V3(b.dir.z,0,-b.dir.x),b.speed*dt/b.r);
+    b.strip.material.opacity=.22+.15*Math.abs(Math.sin(time*10));
+    if(Math.random()<.3)puff(new V3(p.x,.3,p.z),1,0xd8cfc0,.7);
+    // Any punch that's swinging while the boulder is close knocks it back. Easy for little hands.
+    if(!b.returned&&P.punchT>=0&&flatDist(p,P.pos)<b.r+3.6)punchBack(b,forward());
+    let done=false;
+    if(!b.returned&&flatDist(p,P.pos)<b.r+1&&P.pos.y<2.6){takeDamage(18,p);done=true;}
+    const v=b.src;
+    if(!done&&b.returned&&v&&v.alive&&!v.dying&&flatDist(p,v.root.position)<b.r+v.T.scale*.45+.4){hitVillain(v,3,b.dir,'throw');done=true;}
+    for(const o of villains)if(o!==v&&o.alive&&!o.flying&&!o.held&&!o.thrown&&!o.T.big&&flatDist(o.root.position,p)<b.r+.8)hitVillain(o,99,b.dir,'collapse');
+    for(const r of robots)if(r.alive&&!r.held&&!r.thrown&&flatDist(r.g.position,p)<b.r+.8)killRobot(r,b.dir);
+    if(!done)for(const bl of buildings)if(bl.state==='standing'){const c=closestPoint(bl,p);if(flatDist(c,p)<b.r){c.y=1.5;hitBuilding(bl,2,c,b.dir);done=true;break;}}
+    // Boulders plow straight through rock piles, but steel stops them
+    if(!done)for(const o of [...obstacles])if(flatDist(obsPoint(o,p),p)<b.r+(o.r||0)){if(o.kind==='rock')breakRock(o,b.dir);else{clangSteel(o,true);done=true;break;}}
+    if(Math.abs(p.x)>ARENA+2||Math.abs(p.z)>ARENA+2||b.age>9)done=true;
+    if(done){shatterRoller(b);rollers.splice(i,1);}
+  }
+}
+function dozerCrash(v){
+  if(v.mode!=='charge')return;
+  v.mode='dizzy';v.modeT=3.5;v.stars.visible=true;
+  shake(.9);sfx.boom();shockRing(v.root.position,6,0xffd23f,.5);puff(v.root.position,10,0xd8cfc0,2);toast('BONK HIM NOW!','boss');
+}
+function spawnBoss(cfg){
+  const v=makeVillain(cfg.type,0,-42,cfg);villains.push(v);v.cd=2.5;
   toast(cfg.name,'boss');shake(.7);sfx.superBoom();
-  setTimeout(()=>{if(state==='playing')toast('THROW RUBBLE AT HIM!');},1900);
-  // Make sure there is always something to throw
-  for(let k=0;k<6;k++)dropRock(new V3(P.pos.x+rand(-6,6),5+rand(0,4),P.pos.z+rand(-6,6)));
+  setTimeout(()=>{if(state==='playing')toast({giant:'THROW RUBBLE AT HIM!',roller:'PUNCH HIS BOULDERS BACK!',dozer:'DODGE! MAKE HIM CRASH!'}[cfg.type]);},1900);
+  // Something to throw at a giant, and steel blocks for Bruno to crash into
+  if(cfg.type==='giant')for(let k=0;k<6;k++)dropRock(new V3(P.pos.x+rand(-6,6),5+rand(0,4),P.pos.z+rand(-6,6)));
+  if(cfg.type==='dozer')[[-16,-16],[16,-16],[-16,8],[16,8]].forEach(([x,z])=>{makeSteel(x,z,3,3,4);puff(new V3(x,1,z),6,0xd8cfc0,1.5);});
 }
 
 // ================= Health crystals =================
@@ -869,6 +1115,9 @@ function updatePickups(dt){
 function forward(){return new V3(Math.sin(P.facing),0,Math.cos(P.facing));}
 // Aim assist: snap toward the nearest thing in reach so little hands don't have to line up perfectly
 function autoAim(){
+  // An incoming boulder always wins: turn and punch it back
+  let ball=null,bb=6.5;for(const b of rollers)if(!b.returned){const d=flatDist(b.m.position,P.pos);if(d<bb){bb=d;ball=b.m.position;}}
+  if(ball){P.facing=Math.atan2(ball.x-P.pos.x,ball.z-P.pos.z);return;}
   let best=null,bd=4.4;
   for(const b of buildings)if(b.state==='standing'){const c=closestPoint(b,P.pos);const d=flatDist(c,P.pos);if(d<bd){bd=d;best=c;}}
   const near=(p,range)=>{const d=flatDist(p,P.pos);if(d<range&&(d<bd||!best)){bd=d;best=p;}};
@@ -876,6 +1125,7 @@ function autoAim(){
   for(const r of robots)if(r.alive&&!r.held&&!r.thrown)near(r.g.position,5);
   for(const o of orbs)near(o.m.position,4);
   for(const r of rocks)near(r.m.position,4.5);
+  for(const o of obstacles)near(obsPoint(o,P.pos),4.4+(o.r||0));
   if(best)P.facing=Math.atan2(best.x-P.pos.x,best.z-P.pos.z);
 }
 function doPunch(){
@@ -889,6 +1139,11 @@ function doPunch(){
   for(const v of villains)if(v.alive&&!v.flying&&!v.held&&!v.thrown&&flatDist(v.root.position,fist)<2.4+v.T.scale*.4&&Math.abs(fist.y-v.root.position.y-1.5)<3){hitVillain(v,1,fw,'punch');hit=true;}
   for(let i=orbs.length-1;i>=0;i--)if(orbs[i].m.position.distanceTo(fist)<2.4){puff(orbs[i].m.position,3,0xfff3a0,.5);levelRoot.remove(orbs[i].m);orbs.splice(i,1);score+=5;hit=true;}
   for(let i=rocks.length-1;i>=0;i--)if(rocks[i].m.position.distanceTo(fist)<3.2){batRock(i,fw);hit=true;}
+  for(const b of rollers)if(!b.returned&&flatDist(b.m.position,fist)<b.r+1.9){punchBack(b,fw);hit=true;}
+  for(const o of [...obstacles]){
+    if(fist.y>o.h+1||flatDist(obsPoint(o,fist),fist)-(o.r||0)>1.6)continue;
+    if(o.kind==='rock')hitRock(o,1,fw);else clangSteel(o);hit=true;
+  }
   if(hit)shake(.15);else sfx.whoosh();
 }
 function groundPound(cfg,big){
@@ -902,17 +1157,28 @@ function groundPound(cfg,big){
   for(const r of robots){if(!r.alive||r.held||r.thrown)continue;const dir=new V3().subVectors(r.g.position,P.pos).setY(0);if(dir.length()<cfg.radius)killRobot(r,dir.normalize());}
   for(const v of villains){if(!v.alive||v.flying||v.held||v.thrown)continue;const dir=new V3().subVectors(v.root.position,P.pos).setY(0);if(dir.length()<cfg.radius+v.T.scale*.5)hitVillain(v,cfg.damage,dir.lengthSq()>0?dir.normalize():forward(),big?'super':'slam');}
   for(let i=orbs.length-1;i>=0;i--)if(flatDist(orbs[i].m.position,P.pos)<cfg.radius){levelRoot.remove(orbs[i].m);orbs.splice(i,1);}
+  // Slams crack rocks. Steel only gives way to a super smash once there are no buildings left to throw at it.
+  const noBuildings=!buildings.some(b=>b.state==='standing');
+  for(const o of [...obstacles]){
+    const c=obsPoint(o,P.pos);if(flatDist(c,P.pos)>cfg.radius+(o.r||0))continue;
+    const dir=new V3(c.x-P.pos.x,0,c.z-P.pos.z);if(dir.lengthSq()<1e-6)dir.copy(forward());dir.normalize();
+    if(o.kind==='rock')hitRock(o,big?3:1,dir);else if(big&&noBuildings)breakSteel(o,dir);else clangSteel(o);
+  }
 }
 // ================= Grab, lift and throw =================
 // What Boulder can pick up: bad guys first, then rubble (bricks and rock chunks) lying on the ground
 function grabbableBrick(d){return d.kind==='brick'&&d.delay<=0&&d.age<BRICK_LIFE&&(d.settled||d.m.position.y<2.5);}
 function nearestGrabbable(range=3.8){
   let best=null,bd=range;
-  for(const v of villains)if(v.alive&&!v.flying&&!v.dying&&!v.held&&!v.thrown&&v.type!=='boss'&&v.type!=='giant'){const d=flatDist(v.root.position,P.pos);if(d<bd){bd=d;best={kind:'villain',o:v,obj:v.root};}}
+  for(const v of villains)if(v.alive&&!v.flying&&!v.dying&&!v.held&&!v.thrown&&v.type!=='boss'&&!v.T.big){const d=flatDist(v.root.position,P.pos);if(d<bd){bd=d;best={kind:'villain',o:v,obj:v.root};}}
   for(const r of robots)if(r.alive&&!r.held&&!r.thrown){const d=flatDist(r.g.position,P.pos);if(d<bd){bd=d;best={kind:'robot',o:r,obj:r.g};}}
   if(best)return best;
   bd=3.4;
   for(const d of debris)if(grabbableBrick(d)){const dd=flatDist(d.m.position,P.pos);if(dd<bd){bd=dd;best={kind:'brick',o:d,obj:d.m};}}
+  if(best)return best;
+  // Big rocks from a rock pile can be pulled out and thrown
+  bd=2.6;
+  for(const o of obstacles)if(o.kind==='rock'){const dd=flatDist(o,P.pos)-o.r;if(dd<bd){bd=dd;best={kind:'boulder',o:{half:1.3,obs:o},obj:o.m};}}
   return best;
 }
 function grab(){
@@ -921,6 +1187,7 @@ function grab(){
   P.held=g;
   P.facing=Math.atan2(g.obj.position.x-P.pos.x,g.obj.position.z-P.pos.z);
   if(g.kind==='brick'){const i=debris.indexOf(g.o);if(i>=0)debris.splice(i,1);}
+  else if(g.kind==='boulder'){const i=obstacles.indexOf(g.o.obs);if(i>=0)obstacles.splice(i,1);g.obj.scale.setScalar(1);}
   else g.o.held=true;
   if(g.kind==='villain'){g.o.mode='chase';g.o.stun=0;if(g.o.extra)g.o.extra.visible=false;g.o.body.position.x=0;}
   sfx.grab();puff(g.obj.position,3,0xffffff,.6);
@@ -961,9 +1228,13 @@ function throwHeld(){
   // Aim at the closest thing in front of Boulder so throws land where a kid expects
   let fw=forward(),target=null,bd=30;
   const consider=(p,y)=>{const dx=p.x-P.pos.x,dz=p.z-P.pos.z,d=Math.hypot(dx,dz);if(d<2.5||d>bd)return;if((dx*fw.x+dz*fw.z)/d<.55)return;bd=d;target=new V3(p.x,y,p.z);};
-  for(const b of buildings)if(b.state==='standing')consider(closestPoint(b,P.pos),Math.min(b.height*.5,3.5));
-  for(const v of villains)if(v.alive&&!v.flying&&!v.dying&&!v.held&&!v.thrown)consider(v.root.position,v.root.position.y+(v.type==='giant'?v.T.scale*1.3:1.2));
-  for(const r of robots)if(r.alive&&!r.held&&!r.thrown)consider(r.g.position,.9);
+  if(h.kind==='building')for(const o of obstacles)if(o.kind==='steel')consider(closestPoint(o,P.pos),3);   // a building goes at steel first
+  if(!target){
+    for(const b of buildings)if(b.state==='standing')consider(closestPoint(b,P.pos),Math.min(b.height*.5,3.5));
+    for(const v of villains)if(v.alive&&!v.flying&&!v.dying&&!v.held&&!v.thrown)consider(v.root.position,v.root.position.y+(v.T.big?v.T.scale*1.3:1.2));
+    for(const r of robots)if(r.alive&&!r.held&&!r.thrown)consider(r.g.position,.9);
+    for(const o of obstacles)if(o.kind==='rock')consider(new V3(o.x,0,o.z),1.6);
+  }
   const start=h.obj.position,g=GRAV*.6,sp=h.kind==='building'?18:24;let vel;
   if(target){
     P.facing=Math.atan2(target.x-P.pos.x,target.z-P.pos.z);
@@ -985,6 +1256,7 @@ function explodeBuilding(b,p,dir){
   for(const o of buildings)if(o.state==='standing'){const c=closestPoint(o,p);if(flatDist(c,p)<9){c.y=1.5;hitBuilding(o,4,c,dir);}}
   for(const v of villains){if(!v.alive||v.flying||v.held||v.thrown)continue;const d=new V3().subVectors(v.root.position,p).setY(0);if(d.length()<9+v.T.scale*.5)hitVillain(v,4,d.lengthSq()>0?d.normalize():dir,'throw');}
   for(const r of robots){if(!r.alive||r.held||r.thrown)continue;const d=new V3().subVectors(r.g.position,p).setY(0);if(d.length()<9)killRobot(r,d.lengthSq()>0?d.normalize():dir);}
+  for(const o of [...obstacles])if(flatDist(obsPoint(o,p),p)<(o.kind==='steel'?7:9)){if(o.kind==='steel')breakSteel(o,dir);else breakRock(o,dir);}
 }
 function landThrown(t,dir){
   const h=t.h,o=h.o,p=h.obj.position.clone();p.y=Math.max(p.y,.5);
@@ -1015,6 +1287,11 @@ function updateThrown(dt){
     if(!hit)for(const r of robots){
       if(r===t.h.o||!r.alive||r.held||r.thrown)continue;
       if(r.g.position.distanceTo(p)<rad+.4){killRobot(r,dir);hit=true;break;}
+    }
+    if(!hit)for(const o of obstacles){
+      if(p.y>o.h+pad||flatDist(obsPoint(o,p),p)>(o.r||0)+pad+(big?1:0))continue;
+      if(o.kind==='rock'&&!big)hitRock(o,t.power,dir);else if(!big)clangSteel(o,true);
+      hit=true;break;
     }
     const floor=big?Math.max(t.h.o.w,t.h.o.d)*S*.4:.6;
     if(hit||p.y<=floor||t.age>3.5){landThrown(t,dir);thrown.splice(i,1);}
@@ -1068,6 +1345,7 @@ function updatePlayer(dt){
     P.vy=0;P.onGround=true;
   }
   for(const b of buildings)if(solid(b)&&P.pos.y<b.height)pushOut(P.pos,1.1,b);
+  for(const o of obstacles)if(o.kind==='steel'||P.pos.y<o.h)pushObs(P.pos,1.1,o);
   P.pos.x=clamp(P.pos.x,-ARENA,ARENA);P.pos.z=clamp(P.pos.z,-ARENA,ARENA);
   if(P.inv>0)P.inv-=dt;
   if(P.held)holdTarget(P.held,dt);
@@ -1112,6 +1390,7 @@ function updateArrow(){
   let best=null,bd=Infinity;
   for(const b of buildings)if(b.state==='standing'){const d=Math.hypot(b.x-P.pos.x,b.z-P.pos.z);if(d<bd){bd=d;best=new V3(b.x,0,b.z);}}
   for(const v of villains)if(v.alive&&!v.flying&&!v.dying&&!v.held&&!v.thrown){const d=flatDist(v.root.position,P.pos);if(d<bd){bd=d;best=v.root.position;}}
+  for(const c of captives)if(!c.freed){const d=flatDist(c.root.position,P.pos);if(d<bd){bd=d;best=c.root.position;}}
   if(!best||bd<9||state!=='playing'){arrow.visible=false;return;}
   arrow.visible=true;const a=Math.atan2(best.x-P.pos.x,best.z-P.pos.z);
   arrow.position.set(P.pos.x+Math.sin(a)*3,.25,P.pos.z+Math.cos(a)*3);
@@ -1151,10 +1430,11 @@ function updateEffects(dt){
 // ================= Levels =================
 function loadLevel(i,retry){
   scene.remove(levelRoot);levelRoot=new THREE.Group();scene.add(levelRoot);
-  buildings=[];robots=[];villains=[];orbs=[];pickups=[];debris=[];dust=[];rings=[];thrown=[];rocks=[];P.held=null;P.throwPose=0;
+  buildings=[];robots=[];villains=[];orbs=[];pickups=[];debris=[];dust=[];rings=[];thrown=[];rocks=[];obstacles=[];captives=[];rollers=[];P.held=null;P.throwPose=0;
   levelIdx=i;if(retry)score=levelStartScore;levelStartScore=score;health=100;clearTimer=0;giantSpawned=false;
   const L=LEVELS[i];
   L.buildings.forEach((d,k)=>buildings.push(makeBuilding(d,k+i*2)));
+  (L.captives||[]).forEach(makeCaptive);
   for(let k=0;k<L.bots;k++){const [x,z]=freeSpot();robots.push(makeRobot(x,z,L.botSpeed));}
   for(const [type,count] of Object.entries(L.villains)){
     for(let k=0;k<count;k++){
@@ -1169,15 +1449,17 @@ function loadLevel(i,retry){
 }
 function startGame(){score=0;levelStartScore=0;loadLevel(0);}
 function checkClear(dt){
-  if(buildings.every(b=>b.state==='gone')&&villains.every(v=>!v.alive||v.flying)){
-    // City smashed: a giant stomps in before the level is done
+  if(buildings.every(b=>b.state==='gone')&&villains.every(v=>!v.alive||v.flying)&&captives.every(c=>c.freed)){
+    // City smashed and everyone saved: the boss stomps in before the level is done
     const L=LEVELS[levelIdx];
-    if(L.giant&&!giantSpawned){clearTimer+=dt;if(clearTimer>1.5){giantSpawned=true;clearTimer=0;spawnGiant(L.giant);}return;}
+    if(L.boss&&!giantSpawned){clearTimer+=dt;if(clearTimer>1.5){giantSpawned=true;clearTimer=0;spawnBoss(L.boss);}return;}
     clearTimer+=dt;
     if(clearTimer>1.2){
       state='cleared';sfx.win();
-      if(levelIdx<LEVELS.length-1)showMessage('City saved!',`${LEVELS[levelIdx].name} is rubble, the villains are bonked, and ${(LEVELS[levelIdx].giant||{}).name||'the boss'} is down. Score: ${score}.`,'Next city',()=>loadLevel(levelIdx+1));
-      else showMessage('Boulder wins!',`Dr. Fizzle is bonked into the clouds and every city is smashed. Final score: ${score}.`,'Play again',startGame);
+      const n=captives.length,saved=n?` You saved ${n} ${n>1?'people':'person'}.`:'';
+      const next=LEVELS[levelIdx+1];
+      if(next)showMessage('City saved!',`${L.name} is rubble, the villains are bonked, and ${(L.boss||{}).name||'the boss'} is down.${saved} Score: ${score}.\n\nNext: ${next.name}. ${next.tip||''}`,'Next city',()=>loadLevel(levelIdx+1));
+      else showMessage('Boulder wins!',`Dr. Fizzle is bonked into the clouds, every city is smashed and everyone is safe. Final score: ${score}.`,'Play again',startGame);
     }
   }
 }
@@ -1195,7 +1477,7 @@ function frame(){
   }
   camera.position.sub(shakeOff);
   if(state==='playing'){
-    updatePlayer(dt);updateRobots(dt);updateVillains(dt);updateRocks(dt);updateThrown(dt);updateOrbs(dt);updatePickups(dt);updateBuildings(dt);checkClear(dt);updateHUD();
+    updatePlayer(dt);updateRobots(dt);updateVillains(dt);updateRocks(dt);updateRollers(dt);updateThrown(dt);updateObstacles(dt);updateCaptives(dt);updateOrbs(dt);updatePickups(dt);updateBuildings(dt);checkClear(dt);updateHUD();
   }
   queue.clear();
   if(state!=='title')updateEffects(dt);
