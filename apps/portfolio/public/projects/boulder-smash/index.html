@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset=utf8>
 <title>Boulder Smash</title>
-<meta name="description" content="A 3D smash-em-up for kids: Boulder the stone giant wrecks the city, bonks Dr. Fizzle's gang, and throws rubble at giants. Plays in the browser with keyboard, trackpad or touch.">
+<meta name="description" content="A 3D smash-em-up for kids: Boulder the green giant wrecks the city, bonks Dr. Fizzle's gang, and throws rubble at giants. Plays in the browser with keyboard, trackpad or touch.">
 <meta name="theme-color" content="#8ec5e8">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AA%A8%3C/text%3E%3C/svg%3E"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -114,7 +114,7 @@ button:focus-visible{outline:3px solid var(--crystal);outline-offset:2px}
 <div id="msg">
   <div class="card">
     <h1 id="msgTitle">BOULDER SMASH</h1>
-    <p id="msgText">Boulder the stone giant has to stop Dr. Fizzle's gang and smash every building in the city. When a building wobbles, a red ring appears. Get out before it crashes down!</p>
+    <p id="msgText">Boulder the green giant has to stop Dr. Fizzle's gang and smash every building in the city. When a building wobbles, a red ring appears. Get out before it crashes down!</p>
     <div id="msgExtra">
       <div class="keys">
         <kbd>Stick or WASD</kbd><span>Move</span>
@@ -265,24 +265,58 @@ const sfx={
   win:()=>[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,f*1.01,.22,'triangle',.22),i*130))
 };
 
-// ================= Boulder (original low-poly stone giant) =================
+// ================= Boulder (original low-poly green giant) =================
+// crystalMat lights his eyes and pulses brighter when the super jump is ready
 const crystalMat=new THREE.MeshStandardMaterial({color:0x5dffa0,emissive:0x1fd16a,emissiveIntensity:1.1,roughness:.3,flatShading:true});
 function addMesh(parent,geo,mat,x,y,z){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);m.castShadow=true;parent.add(m);return m;}
 function buildBoulder(){
-  const stone=new THREE.MeshStandardMaterial({color:0x8a7f72,roughness:1,flatShading:true});
-  const stone2=new THREE.MeshStandardMaterial({color:0x675e54,roughness:1,flatShading:true});
+  const skin=new THREE.MeshStandardMaterial({color:0x5cae3a,roughness:.75,flatShading:true});
+  const skin2=new THREE.MeshStandardMaterial({color:0x3f8a27,roughness:.8,flatShading:true});   // muscle shadows
+  const hairMat=new THREE.MeshStandardMaterial({color:0x1f5a17,roughness:.9,flatShading:true});
+  const pants=new THREE.MeshStandardMaterial({color:0x6a2c9e,roughness:.9,flatShading:true});
+  const pants2=new THREE.MeshStandardMaterial({color:0x4e1f78,roughness:.9,flatShading:true});
+  const dark=new THREE.MeshStandardMaterial({color:0x1b2a14,roughness:1,flatShading:true});
   const root=new THREE.Group();
   const torso=new THREE.Group();torso.position.y=1.4;root.add(torso);
-  addMesh(torso,new THREE.CylinderGeometry(1.35,.95,1.9,6),stone,0,.95,0).scale.z=.78;
-  addMesh(torso,new THREE.CylinderGeometry(.95,.85,.5,6),stone2,0,0,0).scale.z=.8;
-  const head=addMesh(torso,new THREE.DodecahedronGeometry(.62,0),stone2,0,2.12,.3);
-  addMesh(torso,new THREE.BoxGeometry(1,.22,.35),stone,0,2.36,.72);
-  addMesh(torso,new THREE.BoxGeometry(.24,.12,.08),crystalMat,.24,2.18,.86);
-  addMesh(torso,new THREE.BoxGeometry(.24,.12,.08),crystalMat,-.24,2.18,.86);
-  for(const s of [-1,1]){const c=addMesh(torso,new THREE.OctahedronGeometry(.38,0),crystalMat,s*1.2,2.0,-.15);c.scale.y=1.7;c.rotation.z=-s*.5;}
-  for(let i=0;i<3;i++){const c=addMesh(torso,new THREE.OctahedronGeometry(.3-i*.05,0),crystalMat,0,1.9-i*.5,-.72);c.scale.y=1.8;c.rotation.x=-.5;}
-  const arm=s=>{const p=new THREE.Group();p.position.set(s*1.55,1.55,0);torso.add(p);addMesh(p,new THREE.CylinderGeometry(.45,.38,1.4,6),stone,0,-.65,0);addMesh(p,new THREE.DodecahedronGeometry(.68,0),stone2,0,-1.65,0);addMesh(p,new THREE.OctahedronGeometry(.2,0),crystalMat,0,-1.7,.6);return p;};
-  const leg=s=>{const p=new THREE.Group();p.position.set(s*.62,1.4,0);root.add(p);addMesh(p,new THREE.CylinderGeometry(.5,.42,1.0,6),stone,0,-.45,0);addMesh(p,new THREE.BoxGeometry(.95,.4,1.25),stone2,0,-1.2,.15);return p;};
+  // Big V-shaped chest, pecs, abs and shoulder muscles
+  addMesh(torso,new THREE.CylinderGeometry(1.3,.85,1.8,8),skin,0,.95,0).scale.z=.72;
+  for(const s of [-1,1]){
+    addMesh(torso,new THREE.SphereGeometry(.52,8,6),skin,s*.44,1.42,.42).scale.set(1,.72,.62);   // pecs
+    addMesh(torso,new THREE.SphereGeometry(.62,8,6),skin,s*1.22,1.68,0);                          // shoulders
+    addMesh(torso,new THREE.SphereGeometry(.5,8,6),skin,s*.75,1.12,-.42).scale.set(1,1.2,.6);     // lats and back
+  }
+  for(let r=0;r<3;r++)for(const s of [-1,1])addMesh(torso,new THREE.BoxGeometry(.28,.22,.12),skin2,s*.17,.95-r*.27,.6-r*.04);  // six-pack
+  addMesh(torso,new THREE.CylinderGeometry(.55,.95,.45,8),skin,0,1.95,-.1).scale.z=.7;          // traps
+  addMesh(torso,new THREE.CylinderGeometry(.92,.9,.5,8),pants,0,0,0).scale.z=.8;                 // waistband
+  // Head: heavy brow, square jaw, glowing eyes and messy green hair
+  const head=new THREE.Group();head.position.set(0,2.22,.3);torso.add(head);
+  addMesh(head,new THREE.IcosahedronGeometry(.56,1),skin,0,0,0);
+  addMesh(head,new THREE.BoxGeometry(.78,.32,.5),skin,0,-.32,.12);                               // jaw
+  addMesh(head,new THREE.BoxGeometry(.8,.13,.2),skin2,0,.12,.46);                                // brow
+  addMesh(head,new THREE.BoxGeometry(.2,.09,.06),crystalMat,.2,.02,.53);
+  addMesh(head,new THREE.BoxGeometry(.2,.09,.06),crystalMat,-.2,.02,.53);
+  addMesh(head,new THREE.BoxGeometry(.34,.06,.05),dark,0,-.36,.38);                              // scowl
+  addMesh(head,new THREE.SphereGeometry(.6,8,6,0,Math.PI*2,0,Math.PI*.55),hairMat,0,.1,-.04).scale.set(1.04,1,1.06);
+  for(let i=0;i<9;i++){
+    const a=-1.6+i*.4,h=addMesh(head,new THREE.ConeGeometry(.15,.5,4),hairMat,Math.sin(a)*.42,.42+Math.cos(a*1.3)*.05,Math.cos(a)*-.3+.05);
+    h.rotation.set(-.6-Math.cos(a)*.3,0,-Math.sin(a)*.8);
+  }
+  for(const s of [-1,1]){const f=addMesh(head,new THREE.ConeGeometry(.12,.4,4),hairMat,s*.18,.42,.34);f.rotation.set(1.1,0,-s*.4);}  // bangs
+  // Arms: bulging biceps and big fists
+  const arm=s=>{const p=new THREE.Group();p.position.set(s*1.55,1.55,0);torso.add(p);
+    addMesh(p,new THREE.CylinderGeometry(.44,.36,1.0,8),skin,0,-.45,0);
+    addMesh(p,new THREE.SphereGeometry(.42,8,6),skin,0,-.5,.18).scale.set(1,1.15,.9);             // bicep
+    addMesh(p,new THREE.CylinderGeometry(.42,.34,.8,8),skin,0,-1.15,0);                            // forearm
+    addMesh(p,new THREE.DodecahedronGeometry(.56,0),skin2,0,-1.65,0);return p;};                   // fist
+  // Legs: ripped purple pants with a jagged hem, bare green feet
+  const leg=s=>{const p=new THREE.Group();p.position.set(s*.62,1.4,0);root.add(p);
+    addMesh(p,new THREE.CylinderGeometry(.55,.46,.9,8),pants,0,-.42,0);
+    for(let i=0;i<7;i++){const a=i/7*Math.PI*2+s*.3,t=addMesh(p,new THREE.ConeGeometry(.15,.2+(i%3)*.08,3),i%2?pants:pants2,Math.cos(a)*.42,-.95,Math.sin(a)*.42);t.rotation.x=Math.PI;}
+    addMesh(p,new THREE.BoxGeometry(.18,.12,.04),skin,s*.18,-.55,.5);                              // rip showing skin
+    addMesh(p,new THREE.CylinderGeometry(.34,.3,.38,8),skin,0,-1.08,0);                            // bare shin
+    addMesh(p,new THREE.BoxGeometry(.62,.22,.9),skin,0,-1.29,.14);                                 // foot
+    for(let i=-1;i<=1;i++)addMesh(p,new THREE.SphereGeometry(.11,6,4),skin2,i*.19,-1.32,.62);      // toes
+    return p;};
   // Super-jump aura: glowing ring around his waist
   const aura=new THREE.Mesh(new THREE.TorusGeometry(1.8,.12,6,24),new THREE.MeshBasicMaterial({color:0xffd23f,transparent:true,opacity:0}));
   aura.rotation.x=Math.PI/2;aura.position.y=2;root.add(aura);
