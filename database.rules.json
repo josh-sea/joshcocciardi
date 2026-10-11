@@ -1,0 +1,31 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "tophat": {
+      "rooms": {
+        ".read": false,
+        ".write": false,
+        "$room": {
+          ".read": "auth != null && $room.matches(/^[0-9a-f]{64}$/)",
+          ".write": "auth != null && $room.matches(/^[0-9a-f]{64}$/)",
+          "players": {
+            "$uid": {
+              "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
+              "role": { ".validate": "newData.val() === 'tophat' || newData.val() === 'spear'" }
+            }
+          },
+          "inputs": {
+            "$uid": { ".validate": "$uid === auth.uid" }
+          },
+          "cmds": {
+            "$cmd": { ".validate": "newData.child('uid').val() === auth.uid" }
+          },
+          "$other": {
+            ".validate": "$other.matches(/^(meta|players|request|state|full|inputs|cmds)$/)"
+          }
+        }
+      }
+    }
+  }
+}

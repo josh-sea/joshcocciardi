@@ -1,0 +1,9 @@
+{
+  "name": "tophat-spears",
+  "private": true,
+  "type": "module",
+  "description": "Static app, no build step. This file only marks js/ as ES modules for the Node tests.",
+  "scripts": {
+    "test": "node ../portfolio/test/tophat-spears.test.mjs"
+  }
+}

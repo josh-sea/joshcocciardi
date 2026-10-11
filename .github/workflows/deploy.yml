@@ -9,11 +9,12 @@
 #      value: the entire contents of that JSON file
 #
 # What it deploys (mirrors ./deploy.sh):
-#   - copies the static apps (playball, canitwo, recipebox, psx, solra) into portfolio/public
+#   - copies the static apps (playball, canitwo, recipebox, psx, solra, disney-trivia,
+#     tophat-spears) into portfolio/public
 #   - builds the mail app and copies it to portfolio/public/projects/electronic-mail
 #   - builds the portfolio (the built copy of moments is committed under
 #     apps/portfolio/public/projects/)
-#   - firebase deploy --only hosting,firestore:rules,storage,functions
+#   - firebase deploy --only hosting,firestore:rules,database,storage,functions
 #
 # Hosting is multi-site (targets in firebase.json / .firebaserc):
 #   - portfolio   → joshcocciardi.com (apps/portfolio/build, includes
@@ -88,15 +89,21 @@ jobs:
         working-directory: apps/portfolio
         run: node test/seasonal-box.test.mjs
 
+      # Tophat & Spears: the match simulation and lobby seat rules are pure
+      # modules shared by every player's browser. No install needed.
+      - name: Test Tophat & Spears
+        run: node apps/portfolio/test/tophat-spears.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx solra disney-trivia; do
+          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app/test"
             rm -f "apps/portfolio/public/projects/$app/README.md" \
-                  "apps/portfolio/public/projects/$app/package.json"
+                  "apps/portfolio/public/projects/$app/package.json" \
+                  "apps/portfolio/public/projects/$app/prototype.html"
           done
 
       # The mail app is a CRA build, not a static copy. Its config comes from
@@ -137,4 +144,4 @@ jobs:
             exit 1
           fi
           printf '%s' "$FIREBASE_SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
-          npx firebase-tools@13 deploy --only hosting,firestore:rules,storage,functions --project josh-cocciardi --non-interactive --force
+          npx firebase-tools@13 deploy --only hosting,firestore:rules,database,storage,functions --project josh-cocciardi --non-interactive --force

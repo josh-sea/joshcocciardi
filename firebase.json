@@ -50,6 +50,10 @@
           "destination": "/projects/disney-trivia/index.html"
         },
         {
+          "source": "/projects/tophat-spears/**",
+          "destination": "/projects/tophat-spears/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -140,6 +144,15 @@
           ]
         },
         {
+          "source": "/projects/tophat-spears/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/disney-trivia/maps/**",
           "headers": [
             {
@@ -175,6 +188,11 @@
         {
           "source": "/projects/whereami{,/**}",
           "destination": "/projects/disney-trivia/#whereami",
+          "type": 301
+        },
+        {
+          "source": "/tophat",
+          "destination": "/projects/tophat-spears/",
           "type": 301
         }
       ]
@@ -247,6 +265,9 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "database": {
+    "rules": "database.rules.json"
+  },
   "functions": {
     "source": "functions"
   },
@@ -273,6 +294,10 @@
     "ui": {
       "enabled": false
     },
-    "singleProjectMode": true
+    "singleProjectMode": true,
+    "database": {
+      "host": "127.0.0.1",
+      "port": 9000
+    }
   }
 }
