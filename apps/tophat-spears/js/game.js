@@ -175,11 +175,14 @@ async function becomeHost() {
   if (S.solo) return;
   stopClient();
   if (S.phase === 'playing' && !S.sim) {
-    const full = await S.room.loadFull();
+    const room = S.room;
+    const full = await room.loadFull();
+    // Left the room (or lost the host job) while the save was loading.
+    if (S.room !== room || !S.isHost) return;
     if (full && full.phase !== 'over') {
       S.sim = restore(full);
       showBanner('The host left. You are running the match now.', 4000);
-    } else { S.room.setPhase('lobby'); return; }
+    } else { room.setPhase('lobby'); return; }
   }
   if (S.sim) attachHost();
 }
