@@ -20,6 +20,7 @@
 #   ./deploy.sh seasonal-box - Build portfolio, deploy rules + the sbox* agent functions + hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
+#   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
 #
 # Apps live in:
 #   apps/portfolio/   - Main React portfolio SPA (CRA)
@@ -35,6 +36,8 @@
 #   apps/solra/       - Solra Trainer language practice tool (static) → served at /projects/solra
 #   apps/disney-trivia/ - Ticket Book trivia + Where Am I photo decks (static)
 #                       → served at /projects/disney-trivia
+#   apps/tophat-spears/ - Tophat & Spears multiplayer RTS/FPS (static, Realtime Database)
+#                       → served at /projects/tophat-spears
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
 # (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
@@ -54,6 +57,7 @@ RECIPEBOX_DIR="$ROOT_DIR/apps/recipebox"
 PSX_DIR="$ROOT_DIR/apps/psx"
 SOLRA_DIR="$ROOT_DIR/apps/solra"
 DISNEY_DIR="$ROOT_DIR/apps/disney-trivia"
+TOPHAT_DIR="$ROOT_DIR/apps/tophat-spears"
 WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
@@ -184,6 +188,23 @@ build_disney() {
     success "disney-trivia copied"
 }
 
+build_tophat() {
+    # No build step. The match rules and lobby seats are pure modules with a
+    # dependency-free suite, so always run it.
+    log "Testing Tophat & Spears..."
+    cd "$ROOT_DIR"
+    node apps/portfolio/test/tophat-spears.test.mjs || fail "Tophat & Spears tests failed"
+
+    log "Copying tophat-spears to portfolio/public/projects/tophat-spears (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/tophat-spears"
+    rm -rf "$PORTFOLIO_DIR/public/projects/tophat-spears"/*
+    cp -r "$TOPHAT_DIR"/* "$PORTFOLIO_DIR/public/projects/tophat-spears/"
+    rm -f "$PORTFOLIO_DIR/public/projects/tophat-spears/README.md" \
+          "$PORTFOLIO_DIR/public/projects/tophat-spears/package.json" \
+          "$PORTFOLIO_DIR/public/projects/tophat-spears/prototype.html"
+    success "tophat-spears copied"
+}
+
 build_portfolio() {
     # Swing Coach ships as a single static page inside public/, with its swing
     # geometry inlined. The suite lifts that engine out of the page and runs
@@ -230,6 +251,7 @@ deploy_hosting() {
     echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Swing Coach:    https://www.joshcocciardi.com/projects/swing-coach"
     echo "  Boulder Smash:  https://www.joshcocciardi.com/projects/boulder-smash"
+    echo "  Tophat&Spears:  https://www.joshcocciardi.com/projects/tophat-spears"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
     echo "  Reading Buddy:  https://www.joshcocciardi.com/tools/myreadingbuddy"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
@@ -273,6 +295,13 @@ deploy_firestore() {
     success "Firestore deployed"
 }
 
+deploy_database() {
+    log "Deploying Realtime Database rules..."
+    cd "$ROOT_DIR"
+    firebase deploy --only database || fail "Realtime Database rules deploy failed"
+    success "Realtime Database rules deployed"
+}
+
 deploy_storage() {
     log "Deploying Storage rules..."
     cd "$ROOT_DIR"
@@ -294,9 +323,11 @@ case "${1:-all}" in
         build_psx
         build_solra
         build_disney
+        build_tophat
         build_workbook
         build_portfolio
         deploy_firestore
+        deploy_database
         deploy_hosting
         ;;
     portfolio)
@@ -441,9 +472,18 @@ case "${1:-all}" in
         echo "========================================"
         deploy_storage
         ;;
+    tophat)
+        echo "========================================"
+        echo "  Deploying Tophat & Spears"
+        echo "========================================"
+        build_tophat
+        build_portfolio
+        deploy_database
+        deploy_hosting
+        ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|firestore|storage]"
         exit 1
         ;;
 esac

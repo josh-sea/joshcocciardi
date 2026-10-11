@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tophat &amp; Spears</title>
+<meta name="description" content="One commander, four soldiers who hop between bodies. A co-op RTS and FPS in the same match, played in the browser with friends.">
+<meta name="theme-color" content="#0d1218">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%A9%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="view"></canvas>
+  <canvas id="ov"></canvas>
+  <div id="selbox" hidden></div>
+  <div id="vignette"></div>
+
+  <header id="topbar" hidden>
+    <div class="mission"><span>Op</span>Hold the Ridge</div>
+    <div class="stat"><span class="k">Wave</span><span id="sWave" class="num">0/6</span><span id="sNext" class="sub num"></span></div>
+    <div class="stat"><span class="k">Relay</span><span class="meter"><i id="sRelay"></i></span></div>
+    <div class="stat"><span class="k">Marines</span><span id="sMar" class="num">0</span></div>
+    <div class="stat"><span class="k">Swarm</span><span id="sBug" class="num">0</span></div>
+    <div class="spacer"></div>
+    <span class="you-chip" id="youChip"></span>
+    <div class="seg" id="soloSeg" hidden><button id="bTop" class="on">Tophat</button><button id="bSpear">Spear</button></div>
+    <button id="bAskTop" class="ghost" hidden>Ask for Tophat</button>
+    <button id="bTune" class="ghost" hidden>Tune</button>
+    <button id="bLeave" class="ghost">Leave</button>
+  </header>
+
+  <section id="thHud" hidden>
+    <div class="squads" id="squads"></div>
+    <div class="cmd">
+      <span id="selInfo">Nothing selected</span>
+      <button id="cPatrol">Patrol <kbd>P</kbd></button>
+      <button id="cHold">Hold <kbd>X</kbd></button>
+      <span class="k">Right-click to move · Drag to select · <kbd>WASD</kbd> pan<span id="tabHint" hidden> · <kbd>Tab</kbd> swap view</span></span>
+    </div>
+  </section>
+
+  <section id="spHud" hidden>
+    <div class="cross" id="cross"><i></i><i></i><i></i><i></i></div>
+    <div id="hitm"></div>
+    <div id="hopTag"></div>
+    <div id="leash" hidden><div class="t" id="leashT">Orders</div><div class="v num" id="leashV">--</div></div>
+    <div class="hero">
+      <div class="who"><b id="hName">--</b><span class="tag">Spear</span></div>
+      <div class="hpbar"><i id="hHp"></i></div>
+      <div class="row"><span id="hHpTxt" class="num">0 / 0</span><span id="hBuff"></span></div>
+    </div>
+    <div class="hop" id="hop">Hop ready</div>
+    <div id="lockhint" hidden>Click to take control</div>
+  </section>
+
+  <div id="redeploy" class="panel" hidden>
+    <div class="eyebrow">Spear</div>
+    <h2 id="rdTitle">Pick a body</h2>
+    <p id="rdWhy"></p>
+    <div id="rdList"></div>
+  </div>
+
+  <!-- 1. Join: password, then name -->
+  <div id="menu" class="panel" style="border:0;box-shadow:none">
+    <div class="dossier">
+      <div class="eyebrow">Hold the Ridge · up to 5 players</div>
+      <h1>Tophat <em>&amp;</em> Spears</h1>
+      <p class="brief">The swarm is coming over the ridge from the north. Six waves. Keep the relay standing. One player commands from above as the Tophat. Up to four Spears drop into soldiers on the ground and hop between their bodies.</p>
+      <form class="form" id="joinForm" autocomplete="off">
+        <div class="field"><label for="fPw">Lobby password</label><input id="fPw" type="password" required minlength="4" autocomplete="off" placeholder="Same password, same lobby"></div>
+        <div class="field"><label for="fName">Your name</label><input id="fName" type="text" required maxlength="18" autocomplete="nickname" placeholder="What your friends will see"></div>
+        <p class="err" id="joinErr" role="alert"></p>
+        <div class="go">
+          <button class="btn" id="joinBtn" type="submit">Join lobby</button>
+          <button class="linkbtn" id="soloBtn" type="button">Practice solo</button>
+        </div>
+      </form>
+      <div class="roles" style="margin-top:22px">
+        <div class="role"><h4>Tophat</h4><ul>
+          <li>Drag to select, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> squads, <kbd>Q</kbd> all</li>
+          <li>Right-click to move, <kbd>P</kbd> then click to patrol</li>
+          <li><kbd>X</kbd> hold position, <kbd>WASD</kbd> pan, wheel zoom</li>
+          <li>Ordering a Spear's body starts their leash clock</li></ul></div>
+        <div class="role sp"><h4>Spear</h4><ul>
+          <li><kbd>WASD</kbd> move, mouse aim, click fire, <kbd>Shift</kbd> sprint</li>
+          <li>Aim at a marine and press <kbd>E</kbd> to hop</li>
+          <li>Small buffs only: a bit more HP and damage</li>
+          <li>Miss the leash and you bleed. Die early and you wait out the hop cooldown</li></ul></div>
+      </div>
+      <p class="note" id="mobileNote" hidden>Built for keyboard and mouse. Open this on a laptop to play.</p>
+      <p class="note">Everyone types the same password to land in the same lobby. No accounts: your name only lasts for this game.</p>
+    </div>
+  </div>
+
+  <!-- 2. Lobby: five seats -->
+  <div id="lobby" class="panel" hidden>
+    <div class="lobbycard">
+      <div class="eyebrow">Lobby</div>
+      <h2>Pick your seats</h2>
+      <p class="sub" id="lobbySub">Spears fill first. Want to command? Tap the Tophat seat.</p>
+      <div class="seats" id="seats"></div>
+      <div class="lobbyacts">
+        <button class="btn" id="startBtn">Start match</button>
+        <button class="btn alt" id="topBtn">Be Tophat</button>
+        <button class="btn alt" id="spearBtn" hidden>Be a Spear</button>
+        <button class="ghost" id="tuneBtn">Tune</button>
+      </div>
+      <p id="lobbyMsg" role="status"></p>
+      <div class="lobbyfoot">
+        <button class="linkbtn" id="copyLink" type="button">Copy invite link</button>
+        <span class="sub" id="copyNote">Send the link and the password.</span>
+        <span class="spacer"></span>
+        <button class="linkbtn" id="leaveBtn" type="button">Leave lobby</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tuning" class="panel" hidden>
+    <h3>Tuning</h3>
+    <p>Spear buffs stay small on purpose. The edge should come from aim and decisions, so a Spear who charges a swarm alone still dies. Only the host can change these, and only in the lobby.</p>
+    <div id="tuneRows"></div>
+    <button class="ghost" id="tClose">Close</button>
+  </div>
+
+  <!-- The Tophat gets this when someone asks for the seat -->
+  <div id="askModal" class="panel modal" hidden role="dialog" aria-labelledby="askTitle">
+    <div class="eyebrow">Seat request</div>
+    <h3 id="askTitle">Someone wants to be Tophat</h3>
+    <p>Switch seats? If you say yes, you become a Spear and they take command.</p>
+    <div class="go"><button class="btn" id="askYes">Yes, switch</button><button class="btn alt" id="askNo">No, keep it</button></div>
+  </div>
+  <div id="asking" class="panel" hidden><span id="askingTxt">Waiting for the Tophat to answer…</span><button class="ghost" id="askCancel">Cancel</button></div>
+  <div id="banner" class="panel" hidden></div>
+
+  <div id="over" class="panel" hidden>
+    <div class="eyebrow" id="ovEyebrow">Mission complete</div>
+    <h2 id="ovTitle">Ridge held</h2>
+    <div class="stats" id="ovStats"></div>
+    <table class="board" id="ovBoard"></table>
+    <button class="btn" id="again">Back to lobby</button>
+    <p class="note" id="ovWait" hidden>Waiting for the host to head back to the lobby.</p>
+  </div>
+
+  <canvas id="mini" width="320" height="320" hidden></canvas>
+  <div id="toasts"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module" src="js/game.js"></script>
+</body>
+</html>

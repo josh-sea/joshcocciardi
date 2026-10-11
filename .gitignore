@@ -28,4 +28,5 @@ coverage/
 # firebase emulator logs
 firebase-debug.log
 firestore-debug.log
+database-debug.log
 ui-debug.log

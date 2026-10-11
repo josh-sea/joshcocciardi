@@ -155,6 +155,13 @@ const playthings = [
     link: "/projects/boulder-smash",
   },
   {
+    title: "🎩 Tophat & Spears",
+    description:
+      "A co-op RTS and FPS in one match, for up to five friends. One player is the Tophat, commanding three squads of marines from above as a swarm pours over the ridge. Up to four Spears drop into those marines in first person and hop from body to body. The Tophat can leash a Spear to a zone; miss the deadline and you bleed. Everyone types the same password to land in the same lobby. One player's browser runs the battle and streams it to the rest through Firebase, and if that player leaves, the next one picks the match up where it was.",
+    tech: ["JavaScript", "Three.js", "WebGL", "Firebase Realtime Database", "PBKDF2", "Pointer Lock API"],
+    link: "/projects/tophat-spears",
+  },
+  {
     title: "👾 Conway's DOOM",
     description:
       "Conway's Game of Life meets first-person shooter. Navigate an evolving cellular automata maze, shoot walls, manage ammo, and survive progressive difficulty levels.",
