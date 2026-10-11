@@ -150,7 +150,7 @@ const playthings = [
   {
     title: "🪨 Boulder Smash",
     description:
-      "A 3D smash-em-up built for kids. Boulder the stone giant stomps through three cities: punch buildings until they wobble and crash, bonk Dr. Fizzle's gang into the sky, grab rubble or a whole building and throw it, and take down the giants who show up when the city falls. Aim assist and an on-screen controller make it playable on a phone, and a laptop can steer the stick with the trackpad.",
+      "A 3D smash-em-up built for kids. Boulder the green giant stomps through three cities: punch buildings until they wobble and crash, bonk Dr. Fizzle's gang into the sky, grab rubble or a whole building and throw it, and take down the giants who show up when the city falls. Aim assist and an on-screen controller make it playable on a phone, and a laptop can steer the stick with the trackpad.",
     tech: ["JavaScript", "Three.js", "WebGL", "Web Audio", "Pointer Lock API"],
     link: "/projects/boulder-smash",
   },
