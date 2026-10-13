@@ -161,6 +161,18 @@ service firebase.storage {
       allow delete: if waSignedIn();
     }
 
+    // ── EzPayze ──────────────────────────────────────────────────────────
+    // Invoice/quote PDFs, photos of paper invoices, and logos. Owner-only,
+    // PDFs and images only, 10 MB max. Cloud Functions read them (Admin SDK)
+    // to attach to reminders.
+    match /ezpayze/users/{userId}/{allPaths=**} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+    }
+
     // User files path: users/{userId}/**
     match /users/{userId}/{allPaths=**} {
       // Allow read if authenticated user owns the files

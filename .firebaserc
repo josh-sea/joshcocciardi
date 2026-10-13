@@ -13,6 +13,9 @@
         ],
         "igatekeeper": [
           "igatekeeper"
+        ],
+        "ezpayze": [
+          "ezpayze"
         ]
       }
     }

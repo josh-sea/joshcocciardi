@@ -1,5 +1,9 @@
 # Function tests
 
+The root `firebase.json` now has two functions codebases. Before starting the
+functions emulator from the repo root, build the EzPayze one once:
+`npm --prefix apps/ezpayze/functions ci && npm --prefix apps/ezpayze/functions run build`.
+
 ## `espn-proxy.test.mjs`
 
 Exercises the `espnFantasy` callable against the emulator suite: its auth gate,

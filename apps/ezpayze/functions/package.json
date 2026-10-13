@@ -1,0 +1,26 @@
+{
+  "name": "ezpayze-functions",
+  "description": "Cloud Functions for EzPayze (reminders, morning checklist, plans, stats, our billing)",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test lib/test/*.test.js",
+    "test:rules": "node --test --test-force-exit test-rules/rules.test.mjs",
+    "test:e2e": "node --test --test-force-exit test-e2e/flow.test.mjs"
+  },
+  "dependencies": {
+    "firebase-functions": "^6.6.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "@types/node": "^22.10.0",
+    "firebase": "^11.10.0",
+    "firebase-admin": "^12.7.0",
+    "typescript": "^5.9.3"
+  }
+}
