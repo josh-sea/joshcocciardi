@@ -20,6 +20,7 @@
 #   ./deploy.sh seasonal-box - Build portfolio, deploy rules + the sbox* agent functions + hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
+#   ./deploy.sh ezpayze      - Test + build EzPayze, deploy its hosting site, functions, and rules
 #   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
 #
 # Apps live in:
@@ -231,7 +232,7 @@ build_portfolio() {
 deploy_hosting() {
     log "Deploying to Firebase Hosting..."
     cd "$ROOT_DIR"
-    firebase deploy --only hosting || fail "Firebase hosting deploy failed"
+    firebase deploy --only hosting:portfolio,hosting:gramandpops,hosting:igatekeeper || fail "Firebase hosting deploy failed"
     success "Hosting deployed"
     echo ""
     echo "Live URLs:"
@@ -288,6 +289,18 @@ deploy_seasonal_box_functions() {
     success "Seasonal Box functions deployed"
 }
 
+deploy_ezpayze() {
+    log "Testing and building EzPayze..."
+    cd "$ROOT_DIR/apps/ezpayze/functions"
+    npm test || fail "EzPayze function tests failed"
+    cd "$ROOT_DIR/apps/ezpayze/web"
+    npm run build || fail "EzPayze web build failed"
+    cd "$ROOT_DIR"
+    firebase hosting:sites:get ezpayze >/dev/null 2>&1 || firebase hosting:sites:create ezpayze
+    firebase deploy --only hosting:ezpayze,functions:ezpayze,firestore:rules,storage || fail "EzPayze deploy failed"
+    success "EzPayze deployed → https://ezpayze.web.app"
+}
+
 deploy_firestore() {
     log "Deploying Firestore rules and indexes..."
     cd "$ROOT_DIR"
@@ -329,6 +342,12 @@ case "${1:-all}" in
         deploy_firestore
         deploy_database
         deploy_hosting
+        ;;
+    ezpayze)
+        echo "========================================"
+        echo "  Deploying EzPayze"
+        echo "========================================"
+        deploy_ezpayze
         ;;
     portfolio)
         echo "========================================"

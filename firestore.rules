@@ -827,8 +827,97 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // ── EzPayze: payment reminders for small businesses ─────────────────
+    // Everything lives under ezpayze_users/{uid}. Owners read their own tree.
+    // They may write their profile (never `subscription` or `usage`), their
+    // customers, new jobs, and a job's attachments list. Payments, events, the
+    // daily queue, stats, and plan requests drive what gets sent, so only the
+    // Cloud Functions (Admin SDK) write them. Platform-wide payment facts and
+    // config (provider keys) are never client-readable.
+    function ezOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    // Storage paths. The functions only ever open paths under
+    // ezpayze/users/{uid}/, so a bad entry here can't reach anyone else's file.
+    function ezValidAttachments(list) {
+      return list is list && list.size() <= 10;
+    }
+
+    match /ezpayze_users/{uid} {
+      allow read: if ezOwner(uid);
+      // Created by the ensureAccount function (it sets the trial).
+      allow create, delete: if false;
+      allow update: if ezOwner(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['subscription', 'usage', 'createdAt']);
+
+      match /customers/{customerId} {
+        allow read, delete: if ezOwner(uid);
+        allow create, update: if ezOwner(uid)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120;
+      }
+
+      match /jobs/{jobId} {
+        allow read: if ezOwner(uid);
+        allow create: if ezOwner(uid)
+          && request.resource.data.keys().hasOnly([
+               'customerId', 'customerName', 'customerEmail', 'customerPhone', 'title',
+               'referenceNumber', 'category', 'totalAmount', 'currency', 'completedDate',
+               'dueDate', 'attachments', 'hasPlan', 'status', 'createdAt', 'source'])
+          && request.resource.data.status == 'open'
+          && request.resource.data.hasPlan == false
+          && request.resource.data.source == 'manual'
+          && request.resource.data.totalAmount is int
+          && request.resource.data.totalAmount > 0
+          && request.resource.data.totalAmount <= 100000000
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 120
+          && request.resource.data.customerName is string
+          && request.resource.data.customerName.size() > 0
+          && ezValidAttachments(request.resource.data.attachments);
+        // Everything else about a job changes through Cloud Functions.
+        allow update: if ezOwner(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attachments'])
+          && ezValidAttachments(request.resource.data.attachments);
+        allow delete: if false;
+      }
+
+      match /payments/{paymentId} {
+        allow read: if ezOwner(uid);
+        allow write: if false;
+        match /events/{eventId} {
+          allow read: if ezOwner(uid);
+          allow write: if false;
+        }
+      }
+      match /queue/{dateKey} {
+        allow read: if ezOwner(uid);
+        allow write: if false;
+      }
+      match /stats/{docId} {
+        allow read: if ezOwner(uid);
+        allow write: if false;
+      }
+      match /planRequests/{requestId} {
+        allow read: if ezOwner(uid);
+        allow write: if false;
+      }
+    }
+    match /ezpayze_paymentFacts/{factId} {
+      allow read, write: if false;
+    }
+    match /ezpayze_config/{docId} {
+      allow read, write: if false;
+    }
+    match /ezpayze_stripeCustomers/{customerId} {
+      allow read, write: if false;
+    }
+
     // Default authenticated access for other collections.
-    // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, Seasonal Box HQ, /work and the per-user `users` tree are excluded —
+    // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, Seasonal Box HQ, EzPayze, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
     // rules above (in Firestore, any matching `allow` wins), and every
     // signed-in user could read and write everyone else's documents.
@@ -851,6 +940,7 @@ service cloud.firestore {
         && !collection.matches('workbook_.*')
         && !collection.matches('sbox_.*')
         && !collection.matches('whereami_.*')
+        && !collection.matches('ezpayze_.*')
         && collection != 'work_private';
     }
   }

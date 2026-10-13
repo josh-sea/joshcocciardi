@@ -20,6 +20,10 @@
 #   - portfolio   → joshcocciardi.com (apps/portfolio/build, includes
 #                   the /projects/* mirrors of the static apps)
 #   - gramandpops → gramandpops.com (apps/recipebox served at the root)
+#   - igatekeeper → igatekeeper.web.app
+#   - ezpayze     → ezpayze.web.app (apps/ezpayze/web/dist), deployed in its
+#                   own step with its own functions codebase, so a problem
+#                   there can never block the other sites
 #
 # Indexes are deliberately NOT deployed from CI: the project has indexes
 # that aren't captured in firestore.indexes.json, and a non-interactive
@@ -134,6 +138,21 @@ jobs:
         working-directory: functions
         run: npm ci
 
+      # EzPayze: unit tests (schedule, plans, wording, tokens, billing), then
+      # build its functions codebase and web app. Rules and end-to-end suites
+      # need the emulators; see apps/ezpayze/README.md.
+      - name: Test and build EzPayze functions
+        working-directory: apps/ezpayze/functions
+        run: |
+          npm ci
+          npm test
+
+      - name: Build EzPayze web app
+        working-directory: apps/ezpayze/web
+        run: |
+          npm ci
+          npm run build
+
       - name: Deploy hosting + Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
@@ -144,4 +163,15 @@ jobs:
             exit 1
           fi
           printf '%s' "$FIREBASE_SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
-          npx firebase-tools@13 deploy --only hosting,firestore:rules,database,storage,functions --project josh-cocciardi --non-interactive --force
+          npx firebase-tools@13 deploy --only hosting:portfolio,hosting:gramandpops,hosting:igatekeeper,firestore:rules,database,storage,functions:default --project josh-cocciardi --non-interactive --force
+
+      # EzPayze ships separately (its rules went out above with the shared
+      # rules files). Creates the Hosting site the first time.
+      - name: Deploy EzPayze
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: |
+          npx firebase-tools@13 hosting:sites:get ezpayze --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
+            || npx firebase-tools@13 hosting:sites:create ezpayze --project josh-cocciardi --non-interactive
+          npx firebase-tools@13 deploy --only hosting:ezpayze,functions:ezpayze --project josh-cocciardi --non-interactive --force
