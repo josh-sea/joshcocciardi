@@ -34,7 +34,7 @@ const pinIcon = (glyph, cls) =>
     iconAnchor: [15, 15],
   });
 
-export function createMap(el, { onMapTap } = {}) {
+export function createMap(el, { onMapTap, onCornerTap } = {}) {
   const map = L.map(el, { zoomControl: true, attributionControl: true, tap: true })
     .setView([39.8283, -98.5795], 4);
 
@@ -46,16 +46,21 @@ export function createMap(el, { onMapTap } = {}) {
   let line = null;
   let aimLine = null;
   let waypoints = [];
+  let cornerMarks = [];
 
   map.on("click", (e) => onMapTap?.({ lat: e.latlng.lat, lng: e.latlng.lng }));
 
+  // Leaflet's own marker dragging loses the gesture to the map pan underneath
+  // it — a drag on the marker scrolls the map and leaves the mark where it
+  // was. Marks are repositioned by tapping instead, which is also the easier
+  // gesture with a thumb on a 30px target.
   function setMark(key, point, glyph, cls, title) {
     if (!point) {
       if (marks[key]) { map.removeLayer(marks[key]); marks[key] = null; }
       return;
     }
-    if (marks[key]) marks[key].setLatLng(point);
-    else marks[key] = L.marker(point, { icon: pinIcon(glyph, cls), title, zIndexOffset: 400 }).addTo(map);
+    if (marks[key]) { marks[key].setLatLng(point); return; }
+    marks[key] = L.marker(point, { icon: pinIcon(glyph, cls), title, zIndexOffset: 400 }).addTo(map);
   }
 
   return {
@@ -93,14 +98,33 @@ export function createMap(el, { onMapTap } = {}) {
 
     /* ---- the target line ---- */
 
-    setWaypoints(points) {
-      waypoints = points.slice();
+/**
+     * `path` is what the line is drawn through, ball to flag. `corners` is the
+     * subset you placed by hand, which get their own numbered markers so each
+     * one can be dragged or tapped away individually — "clear the whole line"
+     * is a blunt instrument when only the second corner is wrong.
+     */
+    setPath(path, corners = []) {
+      waypoints = path.slice();
       if (line) { map.removeLayer(line); line = null; }
       if (waypoints.length >= 2) {
         line = L.polyline(waypoints.map((p) => [p.lat, p.lng]), {
           color: "#FF6B3D", weight: 4, opacity: 0.9, dashArray: "1 8", lineCap: "round",
         }).addTo(map);
       }
+      for (const m of cornerMarks) map.removeLayer(m);
+      cornerMarks = corners.map((c, i) => {
+        const m = L.marker(c, {
+          icon: pinIcon(String(i + 1), "corner"),
+          title: `Corner ${i + 1} — tap to remove`,
+          zIndexOffset: 300,
+        }).addTo(map);
+        m.on("click", (e) => {
+          L.DomEvent.stopPropagation(e);   // don't also drop a new corner
+          onCornerTap?.(i);
+        });
+        return m;
+      });
     },
     get waypoints() { return waypoints.slice(); },
 
