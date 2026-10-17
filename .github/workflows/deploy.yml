@@ -24,6 +24,10 @@
 #   - ezpayze     → ezpayze.web.app (apps/ezpayze/web/dist), deployed in its
 #                   own step with its own functions codebase, so a problem
 #                   there can never block the other sites
+#   - roy        → josh-cocciardi-roy.web.app (apps/roy/dist, the Expo web
+#                   export), deployed in its own step with its own functions
+#                   codebase, same as EzPayze. Its Realtime Database rules
+#                   (/roy in database.rules.json) go out with the shared rules.
 #
 # Indexes are deliberately NOT deployed from CI: the project has indexes
 # that aren't captured in firestore.indexes.json, and a non-interactive
@@ -159,6 +163,19 @@ jobs:
           npm ci
           npm run build
 
+      # Roy: the Expo app exported as a static web build, plus its functions
+      # codebase. The rules suite needs the database emulator; see
+      # apps/roy/README.md.
+      - name: Build Roy web app
+        working-directory: apps/roy
+        run: |
+          npm ci
+          npx expo export -p web
+
+      - name: Install Roy functions dependencies
+        working-directory: apps/roy/functions
+        run: npm ci
+
       - name: Deploy hosting + Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
@@ -181,3 +198,14 @@ jobs:
           npx firebase-tools@13 hosting:sites:get ezpayze --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
             || npx firebase-tools@13 hosting:sites:create ezpayze --project josh-cocciardi --non-interactive
           npx firebase-tools@13 deploy --only hosting:ezpayze,functions:ezpayze --project josh-cocciardi --non-interactive --force
+
+      # Roy ships separately too (its database rules went out above).
+      # Creates the Hosting site the first time.
+      - name: Deploy Roy
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: |
+          npx firebase-tools@13 hosting:sites:get josh-cocciardi-roy --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
+            || npx firebase-tools@13 hosting:sites:create josh-cocciardi-roy --project josh-cocciardi --non-interactive
+          npx firebase-tools@13 deploy --only hosting:roy,functions:roy --project josh-cocciardi --non-interactive --force

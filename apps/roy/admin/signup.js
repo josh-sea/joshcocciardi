@@ -4,15 +4,15 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   Dimensions,
 } from "react-native";
+import alert from "../utils/alert";
 import { auth } from "./firebaseConfig";
 import { useNavigation } from "@react-navigation/native";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { ref, set } from "firebase/database";
-import { database } from "./firebaseConfig";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { get, update } from "firebase/database";
+import { royRef } from "./firebaseConfig";
 import { Ionicons } from "@expo/vector-icons";
 import Banner from "../components/royBanner";
 
@@ -25,35 +25,45 @@ const Signup = () => {
 
   const navigation = useNavigation();
 
-  const handleSignup = () => {
-    if (username.length > 16) {
-      Alert.alert("Invalid Username", "Username cannot be longer than 16 characters.");
+  // Roy shares the josh-cocciardi user pool with the other apps, so someone
+  // may already have an account from elsewhere. In that case sign them in
+  // with the same password and just add their Roy profile.
+  const signInOrCreate = async () => {
+    try {
+      return await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      if (error.code !== "auth/email-already-in-use") throw error;
+      return signInWithEmailAndPassword(auth, email, password);
+    }
+  };
+
+  const handleSignup = async () => {
+    if (username.length < 1 || username.length > 16) {
+      alert("Invalid Username", "Username must be 1 to 16 characters.");
       return;
     }
-  
-    createUserWithEmailAndPassword(auth, email, password)
-      .then((userCredential) => {
-        const user = userCredential.user;
-        const userId = user.uid; // User ID from Firebase Authentication
+
+    try {
+      const { user } = await signInOrCreate();
+      const userId = user.uid;
+      const existing = await get(royRef(`/users/${userId}/username`));
+      if (!existing.exists()) {
         const friendCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-        const userData = {
+        // update() rather than set(): the rules grant each profile field on
+        // its own and keep /features server-only.
+        await update(royRef(`/users/${userId}`), {
           username,
           email: user.email,
           friendCode,
-        };
-
-        set(ref(database, `/users/${userId}`), userData)
-          .then(() => {
-            console.log("User data saved successfully!");
-            navigation.navigate("Games", { userEmail: user.email, userId });
-          })
-          .catch((error) => {
-            Alert.alert("Signup Failed", error.message);
-          });
-      })
-      .catch((error) => {
-        Alert.alert("Signup Failed", error.message);
-      });
+        });
+      }
+      navigation.navigate("Games", { userEmail: user.email, userId });
+    } catch (error) {
+      const message = error.code === "auth/invalid-credential" || error.code === "auth/wrong-password"
+        ? "That email already has an account. Use its existing password."
+        : error.message;
+      alert("Signup Failed", message);
+    }
   };
 
   return (

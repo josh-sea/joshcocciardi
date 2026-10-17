@@ -10,9 +10,9 @@ import {
   FlatList,
   ScrollView,
 } from "react-native";
-import { database } from "../admin/firebaseConfig";
+import { royRef } from "../admin/firebaseConfig";
 import { Ionicons } from "@expo/vector-icons";
-import { ref, set, push, get } from "firebase/database";
+import { set, push, get } from "firebase/database";
 import ShapePreview from "./ShapePreview";
 import { SHAPE_NAMES, generateShapeOrder } from "../utils/gameEngine";
 
@@ -30,7 +30,7 @@ const CreateGameForm = ({ userId, onClose, deathmatch = false, strategist = fals
   useEffect(() => {
     const loadFriendsAndUser = async () => {
       try {
-        const userSnap = await get(ref(database, `/users/${userId}`));
+        const userSnap = await get(royRef(`/users/${userId}`));
         if (!userSnap.exists()) return;
         setCurrentUsername(userSnap.val().username);
 
@@ -40,7 +40,7 @@ const CreateGameForm = ({ userId, onClose, deathmatch = false, strategist = fals
         const friendIds = Object.keys(friendsNode);
         const profiles = await Promise.all(
           friendIds.map(async (fid) => {
-            const snap = await get(ref(database, `/users/${fid}`));
+            const snap = await get(royRef(`/users/${fid}`));
             return snap.exists() ? { id: fid, username: snap.val().username } : null;
           })
         );
@@ -76,7 +76,7 @@ const CreateGameForm = ({ userId, onClose, deathmatch = false, strategist = fals
   const handleSubmit = () => {
     if (opponent) {
       try {
-        const gamesRef = ref(database, "/games");
+        const gamesRef = royRef("/games");
         const newGameRef = push(gamesRef);
         const gameId = newGameRef.key;
         const gameData = {
@@ -112,7 +112,7 @@ const CreateGameForm = ({ userId, onClose, deathmatch = false, strategist = fals
           gameData.creatorId = userId;
         }
 
-        set(ref(database, `/games/${gameId}`), gameData);
+        set(royRef(`/games/${gameId}`), gameData);
         setName("");
         setSearch("");
         setOpponent(null);

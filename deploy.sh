@@ -22,6 +22,7 @@
 #   ./deploy.sh storage      - Deploy storage rules only
 #   ./deploy.sh ezpayze      - Test + build EzPayze, deploy its hosting site, functions, and rules
 #   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
+#   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
 #
 # Apps live in:
 #   apps/portfolio/   - Main React portfolio SPA (CRA)
@@ -303,6 +304,19 @@ deploy_ezpayze() {
     success "EzPayze deployed → https://ezpayze.web.app"
 }
 
+deploy_roy() {
+    log "Building Roy for the web..."
+    cd "$ROOT_DIR/apps/roy"
+    npm ci || fail "Roy install failed"
+    npx expo export -p web || fail "Roy web export failed"
+    cd "$ROOT_DIR/apps/roy/functions"
+    npm ci || fail "Roy functions install failed"
+    cd "$ROOT_DIR"
+    firebase hosting:sites:get josh-cocciardi-roy >/dev/null 2>&1 || firebase hosting:sites:create josh-cocciardi-roy
+    firebase deploy --only hosting:roy,functions:roy,database || fail "Roy deploy failed"
+    success "Roy deployed → https://josh-cocciardi-roy.web.app"
+}
+
 deploy_firestore() {
     log "Deploying Firestore rules and indexes..."
     cd "$ROOT_DIR"
@@ -493,6 +507,12 @@ case "${1:-all}" in
         echo "========================================"
         deploy_storage
         ;;
+    roy)
+        echo "========================================"
+        echo "  Deploying Roy"
+        echo "========================================"
+        deploy_roy
+        ;;
     tophat)
         echo "========================================"
         echo "  Deploying Tophat & Spears"
@@ -504,7 +524,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|roy|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac

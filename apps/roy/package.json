@@ -4,16 +4,10 @@
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:android": "eas build -p android",
-    "build:ios": "eas build -p ios",
-    "submit:android": "eas submit -p android",
-    "submit:ios": "eas submit -p ios",
-    "deploy:android": "./scripts/deploy-android.sh",
-    "deploy:android:ota": "./scripts/deploy-android.sh --ota",
-    "deploy:android:prod": "./scripts/deploy-android.sh --track production"
+    "build:web": "expo export -p web",
+    "android": "expo start --android",
+    "ios": "expo start --ios"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -38,9 +32,7 @@
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.23.7",
-    "@expo/ngrok": "^4.1.0",
-    "eas-cli": "^18.4.0"
+    "@babel/core": "^7.23.7"
   },
   "private": true,
   "overrides": {

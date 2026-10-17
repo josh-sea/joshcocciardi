@@ -158,11 +158,12 @@
       <div class="warning">
         <strong>This action is permanent and cannot be undone.</strong>
         <ul>
-          <li>Your account and login will be deleted</li>
+          <li>Your Roy account will be deleted</li>
           <li>Your game history will be removed</li>
           <li>Your profile and stats will be erased</li>
           <li>Active games you're in will be deleted</li>
         </ul>
+        <p style="margin-top:8px; color:#ccc;">Your sign-in is shared with the other apps on joshcocciardi.com, so the login itself stays. Only your Roy data is removed.</p>
       </div>
       <div class="check-row">
         <input type="checkbox" id="confirm-check" onchange="toggleDelete()">
@@ -176,7 +177,7 @@
     <div id="done-section">
       <div style="font-size:48px; margin-bottom:16px;">&#10003;</div>
       <h2 style="color:#4ecdc4; margin-bottom:12px;">Account Deleted</h2>
-      <p style="color:#888; font-size:14px;">Your account and all associated data have been permanently removed. You can close this page.</p>
+      <p style="color:#888; font-size:14px;">Your Roy account and all associated data have been permanently removed. You can close this page.</p>
     </div>
 
     <div class="status" id="status"></div>
@@ -187,12 +188,12 @@
     import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyDNVoxKpQ6atcfEZOlUslT7K68rzDRBM8k",
-      authDomain: "battle-roy-al.firebaseapp.com",
-      projectId: "battle-roy-al",
-      storageBucket: "battle-roy-al.appspot.com",
-      messagingSenderId: "562464814439",
-      appId: "1:562464814439:web:7c582c2c930b8a7b286bc2",
+      apiKey: "AIzaSyDg4KwFy06tmJ9T_rop8Q10_9mPjfOYrxc",
+      authDomain: "josh-cocciardi.firebaseapp.com",
+      projectId: "josh-cocciardi",
+      storageBucket: "josh-cocciardi.firebasestorage.app",
+      messagingSenderId: "21223323384",
+      appId: "1:21223323384:web:2df2e363a8a4a52adaed0d",
     };
 
     const app = initializeApp(firebaseConfig);

@@ -1,14 +1,17 @@
-const functions = require("firebase-functions");
+// Roy's Cloud Functions: codebase "roy" in the josh-cocciardi project. Every
+// function is exported under the `roy` group (roy-onTurnChange, ...), and all
+// data lives under /roy in the default Realtime Database.
+const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
-const fetch = require("node-fetch");
 
 admin.initializeApp();
 const db = admin.database();
+const ROOT = "/roy";
 
 // ──────────────────────────────────────────────
-// Account Deletion API (for Google Play compliance)
+// Account Deletion API (removes the caller's Roy data)
 // ──────────────────────────────────────────────
-exports.deleteAccount = functions.https.onRequest(async (req, res) => {
+const deleteAccount = functions.https.onRequest(async (req, res) => {
   // CORS headers
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -39,21 +42,21 @@ exports.deleteAccount = functions.https.onRequest(async (req, res) => {
 
   try {
     // 1. Delete user data from Realtime Database
-    await db.ref(`/users/${uid}`).remove();
+    await db.ref(`${ROOT}/users/${uid}`).remove();
 
     // 2. Find and clean up any games involving this user
-    const gamesSnapshot = await db.ref("/games").once("value");
+    const gamesSnapshot = await db.ref(`${ROOT}/games`).once("value");
     const games = gamesSnapshot.val() || {};
     const deletePromises = [];
     for (const [gameId, game] of Object.entries(games)) {
       if (game.player1 === uid || game.player2 === uid) {
-        deletePromises.push(db.ref(`/games/${gameId}`).remove());
+        deletePromises.push(db.ref(`${ROOT}/games/${gameId}`).remove());
       }
     }
     await Promise.all(deletePromises);
 
-    // 3. Delete the Firebase Auth account
-    await admin.auth().deleteUser(uid);
+    // The sign-in itself is shared with the other joshcocciardi.com apps, so
+    // only Roy's data is removed. The Firebase Auth account stays.
 
     return res.status(200).json({ success: true });
   } catch (err) {
@@ -97,7 +100,7 @@ async function sendExpoPushNotifications(messages) {
  * @returns {Promise<string|null>}
  */
 async function getUserPushToken(userId) {
-  const snapshot = await db.ref(`/users/${userId}/pushToken`).once("value");
+  const snapshot = await db.ref(`${ROOT}/users/${userId}/pushToken`).once("value");
   return snapshot.val();
 }
 
@@ -107,7 +110,7 @@ async function getUserPushToken(userId) {
  * @returns {Promise<string>}
  */
 async function getUsername(userId) {
-  const snapshot = await db.ref(`/users/${userId}/username`).once("value");
+  const snapshot = await db.ref(`${ROOT}/users/${userId}/username`).once("value");
   return snapshot.val() || "Someone";
 }
 
@@ -119,7 +122,7 @@ async function getUsername(userId) {
  * @returns {Promise<boolean>}
  */
 async function isNotificationEnabled(userId, type) {
-  const snapshot = await db.ref(`/users/${userId}/notifications/${type}`).once("value");
+  const snapshot = await db.ref(`${ROOT}/users/${userId}/notifications/${type}`).once("value");
   const val = snapshot.val();
   // Default to true if preference hasn't been set
   return val === null ? true : val === true;
@@ -128,14 +131,14 @@ async function isNotificationEnabled(userId, type) {
 // ──────────────────────────────────────────────
 // 1. Notify opponent when it becomes their turn
 // ──────────────────────────────────────────────
-exports.onTurnChange = functions.database
-  .ref("/games/{gameId}/turn")
+const onTurnChange = functions.database
+  .ref(`${ROOT}/games/{gameId}/turn`)
   .onUpdate(async (change, context) => {
     const newTurn = change.after.val();
     const gameId = context.params.gameId;
 
     // Get the full game data
-    const gameSnapshot = await db.ref(`/games/${gameId}`).once("value");
+    const gameSnapshot = await db.ref(`${ROOT}/games/${gameId}`).once("value");
     const game = gameSnapshot.val();
     if (!game) return null;
 
@@ -179,8 +182,8 @@ exports.onTurnChange = functions.database
 // ──────────────────────────────────────────────
 // 2. Notify opponent when a new game is created
 // ──────────────────────────────────────────────
-exports.onGameCreated = functions.database
-  .ref("/games/{gameId}")
+const onGameCreated = functions.database
+  .ref(`${ROOT}/games/{gameId}`)
   .onCreate(async (snapshot, context) => {
     const game = snapshot.val();
     const gameId = context.params.gameId;
@@ -213,8 +216,8 @@ exports.onGameCreated = functions.database
 // ──────────────────────────────────────────────
 // 3. Notify opponent on trash talk
 // ──────────────────────────────────────────────
-exports.onTrashTalk = functions.database
-  .ref("/games/{gameId}/message")
+const onTrashTalk = functions.database
+  .ref(`${ROOT}/games/{gameId}/message`)
   .onUpdate(async (change, context) => {
     const newMessage = change.after.val();
     const gameId = context.params.gameId;
@@ -223,7 +226,7 @@ exports.onTrashTalk = functions.database
     if (!newMessage || !newMessage.value || newMessage.sender === 0) return null;
 
     // Get the full game data
-    const gameSnapshot = await db.ref(`/games/${gameId}`).once("value");
+    const gameSnapshot = await db.ref(`${ROOT}/games/${gameId}`).once("value");
     const game = gameSnapshot.val();
     if (!game) return null;
 
@@ -260,3 +263,10 @@ exports.onTrashTalk = functions.database
       },
     ]);
   });
+
+exports.roy = {
+  deleteAccount,
+  onTurnChange,
+  onGameCreated,
+  onTrashTalk,
+};

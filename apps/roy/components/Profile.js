@@ -8,14 +8,14 @@ import {
   StatusBar,
   Dimensions,
   Share,
-  Alert,
   Switch,
 } from "react-native";
+import alert from "../utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { database } from "../admin/firebaseConfig";
-import { ref, get, update } from "firebase/database";
+import { royRef } from "../admin/firebaseConfig";
+import { get, update } from "firebase/database";
 import { useNavigation } from "@react-navigation/native";
 
 const { height } = Dimensions.get("window");
@@ -35,7 +35,7 @@ const Profile = ({ route }) => {
   const [notifPrefs, setNotifPrefs] = useState(DEFAULT_NOTIF_PREFS);
 
   useEffect(() => {
-    get(ref(database, `/users/${userId}`)).then((snap) => {
+    get(royRef(`/users/${userId}`)).then((snap) => {
       if (snap.exists()) {
         const data = snap.val();
         setProfile(data);
@@ -60,14 +60,14 @@ const Profile = ({ route }) => {
         message: `Add me on Roy! My friend code is: ${profile.friendCode}`,
       });
     } catch (e) {
-      Alert.alert("Error", "Could not share.");
+      alert("Error", "Could not share.");
     }
   };
 
   const toggleNotifPref = (key) => {
     const updated = { ...notifPrefs, [key]: !notifPrefs[key] };
     setNotifPrefs(updated);
-    update(ref(database, `/users/${userId}/notifications`), { [key]: !notifPrefs[key] }).catch(() => {});
+    update(royRef(`/users/${userId}/notifications`), { [key]: !notifPrefs[key] }).catch(() => {});
   };
 
   return (

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { ref, onValue, set } from 'firebase/database';
-import { database } from '../admin/firebaseConfig';
+import { onValue, set } from 'firebase/database';
+import { royRef } from '../admin/firebaseConfig';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import { Platform } from 'react-native';
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -16,6 +17,10 @@ Notifications.setNotificationHandler({
 
 async function registerForPushNotificationsAsync() {
   let token;
+
+  // Expo push tokens are native-only. Web push (FCM, installed PWA) is wired
+  // separately; until then the web build simply skips registration.
+  if (Platform.OS === 'web') return;
 
   if (Device.isDevice) {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -50,6 +55,8 @@ export function useGames(userId) {
   const responseListener = useRef();
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
+
     // Register for push notifications
     registerForPushNotificationsAsync().then(token => setPushToken(token));
 
@@ -65,15 +72,15 @@ export function useGames(userId) {
     });
 
     return () => {
-      Notifications.removeNotificationSubscription(notificationListener.current);
-      Notifications.removeNotificationSubscription(responseListener.current);
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
     };
   }, []);
 
   useEffect(() => {
     if (pushToken) {
       // Store the push token in the user's profile
-      const userTokenRef = ref(database, `/users/${userId}/pushToken`);
+      const userTokenRef = royRef(`/users/${userId}/pushToken`);
       set(userTokenRef, pushToken);
     }
   }, [pushToken, userId]);
@@ -81,7 +88,7 @@ export function useGames(userId) {
   useEffect(() => {
     const fetchUserGames = async () => {
       try {
-        gamesRef.current = ref(database, "/games");
+        gamesRef.current = royRef("/games");
         const unsubscribe = onValue(gamesRef.current, (snapshot) => {
           if (snapshot.exists()) {
             const data = snapshot.val();

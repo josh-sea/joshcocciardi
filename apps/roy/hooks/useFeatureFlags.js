@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { database } from "../admin/firebaseConfig";
-import { ref, onValue } from "firebase/database";
+import { royRef } from "../admin/firebaseConfig";
+import { onValue } from "firebase/database";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CACHE_KEY = "roy_feature_flags";
@@ -33,7 +33,7 @@ export default function useFeatureFlags(userId) {
       }
     });
 
-    const featuresRef = ref(database, `/users/${userId}/features`);
+    const featuresRef = royRef(`/users/${userId}/features`);
     const unsubscribe = onValue(featuresRef, (snapshot) => {
       const data = snapshot.val();
       const resolved = {

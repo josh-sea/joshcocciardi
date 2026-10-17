@@ -6,8 +6,8 @@ import {
   Modal,
   Text,
   Dimensions,
-  Alert,
 } from 'react-native';
+import alert from "../utils/alert";
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from "../admin/firebaseConfig";
 import { useNavigation } from "@react-navigation/native";
@@ -27,7 +27,7 @@ const HamburgerMenu = ({ onNewGame, userId }) => {
         navigation.navigate('Login');
       })
       .catch((error) => {
-        Alert.alert('Logout Failed', error.message);
+        alert('Logout Failed', error.message);
       });
     setMenuVisible(false);
   };

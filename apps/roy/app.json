@@ -47,6 +47,15 @@
     },
     "updates": {
       "url": "https://u.expo.dev/7137a7b5-196c-481f-911c-2a052519dc7d"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Roy",
+      "shortName": "Roy",
+      "themeColor": "#1a1a2e",
+      "backgroundColor": "#f5f5f5",
+      "favicon": "./assets/favicon.png"
     }
   }
 }

@@ -5,10 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  Text,
-  Alert
+  Text
 } from "react-native";
-import { auth } from "./firebaseConfig";
+import alert from "../utils/alert";
+import { auth, royRef } from "./firebaseConfig";
+import { get } from "firebase/database";
 import { useNavigation } from "@react-navigation/native";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import Banner from "../components/royBanner";
@@ -27,7 +28,14 @@ const Login = () => {
       const user = userCredential.user;
       const userId = user.uid;
       const userEmail = user.email;
-      console.log("logged in successfully");
+      // A login from the shared user pool that has never played Roy has no
+      // profile yet; send them to Sign Up to pick a username.
+      const profile = await get(royRef(`/users/${userId}/username`));
+      if (!profile.exists()) {
+        alert("Almost there", "Pick a username on the Sign Up screen to start playing Roy.");
+        navigation.navigate("Signup");
+        return;
+      }
       navigation.navigate("Games", { userEmail, userId });
     } catch (error) {
       const errorCode = error.code;
@@ -35,10 +43,10 @@ const Login = () => {
       console.log(errorCode, errorMessage);
       const alertMessage = errorCode === "auth/user-not-found" 
         ? "That account is not signed up yet, try signing up first!" 
-        : errorCode === "auth/wrong-password" 
+        : errorCode === "auth/wrong-password" || errorCode === "auth/invalid-credential"
         ? "Wrong email or password, try again!"
         : "Login failed. Please try again.";
-      Alert.alert('Login Failed', alertMessage);
+      alert('Login Failed', alertMessage);
     }
   };
 

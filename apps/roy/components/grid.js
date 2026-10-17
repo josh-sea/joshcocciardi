@@ -12,8 +12,8 @@ import {
 import ResetButton from "./resetButton";
 import Scoreboard from "./scoreboard";
 import * as Haptics from "expo-haptics";
-import { database } from "../admin/firebaseConfig";
-import { ref, set, get, onValue, update } from "firebase/database";
+import { royRef } from "../admin/firebaseConfig";
+import { set, get, onValue, update } from "firebase/database";
 import ActionMenu from "./ActionMenu";
 import EmoteStore from "./EmoteStore";
 import GameOverModal from "./gameOverModal";
@@ -133,12 +133,12 @@ const Grid = ({ route }) => {
   // Load game data and set up listeners
   useEffect(() => {
     if (gameId) {
-      dbGameRef.current = ref(database, `/games/${gameId}`);
-      dbTurnRef.current = ref(database, `/games/${gameId}/turn`);
-      dbIndexRef.current = ref(database, `/games/${gameId}/selected`);
-      dbGridRef.current = ref(database, `/games/${gameId}/grid`);
-      dbMessageRef.current = ref(database, `/games/${gameId}/message`);
-      dbActiveRef.current = ref(database, `/games/${gameId}/active`);
+      dbGameRef.current = royRef(`/games/${gameId}`);
+      dbTurnRef.current = royRef(`/games/${gameId}/turn`);
+      dbIndexRef.current = royRef(`/games/${gameId}/selected`);
+      dbGridRef.current = royRef(`/games/${gameId}/grid`);
+      dbMessageRef.current = royRef(`/games/${gameId}/message`);
+      dbActiveRef.current = royRef(`/games/${gameId}/active`);
 
       get(dbGameRef.current).then((snapshot) => {
         const data = snapshot.val();
@@ -184,7 +184,7 @@ const Grid = ({ route }) => {
           // Write current animation preference to Firebase now that player is identified
           AsyncStorage.getItem("roy_move_animation").then((saved) => {
             const animId = saved || "pulse";
-            const animRef = ref(database, `/games/${gameId}/animations/${playerKey}`);
+            const animRef = royRef(`/games/${gameId}/animations/${playerKey}`);
             set(animRef, animId).catch(() => {});
           });
         }
@@ -308,7 +308,7 @@ const Grid = ({ route }) => {
   // Player 2 picks their starting shape (Strategist only)
   const handleShapePick = (startIndex) => {
     const order = generateShapeOrder(startIndex);
-    const shapeOrderRef = ref(database, `/games/${gameId}/shapeOrder/player2`);
+    const shapeOrderRef = royRef(`/games/${gameId}/shapeOrder/player2`);
     set(shapeOrderRef, order).catch((error) => {
       console.error("Error setting player2 shape order:", error);
     });
@@ -342,7 +342,7 @@ const Grid = ({ route }) => {
       // Update move count for strategist
       if (isStrategist) {
         const newMoveCount = { ...moveCount, [playerKey]: (moveCount[playerKey] || 0) + 1 };
-        const moveCountRef = ref(database, `/games/${gameId}/moveCount`);
+        const moveCountRef = royRef(`/games/${gameId}/moveCount`);
         set(moveCountRef, newMoveCount).catch((error) => {
           console.error("Error updating move count:", error);
         });
@@ -360,7 +360,7 @@ const Grid = ({ route }) => {
     updateTurn(1);
     updateGridData(null);
     if (isStrategist) {
-      const moveCountRef = ref(database, `/games/${gameId}/moveCount`);
+      const moveCountRef = royRef(`/games/${gameId}/moveCount`);
       set(moveCountRef, { player1: 0, player2: 0 }).catch((error) => {
         console.error("Error resetting move count:", error);
       });
@@ -378,7 +378,7 @@ const Grid = ({ route }) => {
   const writeAnimationToGame = (animId) => {
     if (!gameId || !whichPlayerRef.current) return;
     const playerKey = whichPlayerRef.current === 1 ? "player1" : "player2";
-    const animRef = ref(database, `/games/${gameId}/animations/${playerKey}`);
+    const animRef = royRef(`/games/${gameId}/animations/${playerKey}`);
     set(animRef, animId).catch(() => {});
   };
 

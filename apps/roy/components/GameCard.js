@@ -3,13 +3,13 @@ import {
   StyleSheet,
   View,
   Text,
-  Alert,
   TouchableOpacity,
   Dimensions,
 } from "react-native";
+import alert from "../utils/alert";
 import { useNavigation } from "@react-navigation/native";
-import { ref, set } from "firebase/database";
-import { database } from "../admin/firebaseConfig";
+import { set } from "firebase/database";
+import { royRef } from "../admin/firebaseConfig";
 
 const { width } = Dimensions.get("window");
 const cardWidth = width * 0.85; // Responsive card width
@@ -19,8 +19,8 @@ const GameCard = ({ game, userId }) => {
   const navigation = useNavigation();
 
   const deleteGame = () => {
-    gameRef.current = ref(database, `/games/${game.gameId}`);
-    Alert.alert(
+    gameRef.current = royRef(`/games/${game.gameId}`);
+    alert(
       "Confirm Deletion",
       "Are you sure you want to delete this game?",
       [

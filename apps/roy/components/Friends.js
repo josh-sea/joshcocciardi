@@ -6,16 +6,16 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Alert,
   Platform,
   StatusBar,
   Dimensions,
   ActivityIndicator,
 } from "react-native";
+import alert from "../utils/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { database } from "../admin/firebaseConfig";
-import { ref, get, set, remove, onValue } from "firebase/database";
+import { royRef } from "../admin/firebaseConfig";
+import { get, set, remove, onValue } from "firebase/database";
 import { useNavigation } from "@react-navigation/native";
 
 const { height } = Dimensions.get("window");
@@ -29,7 +29,7 @@ const Friends = ({ route }) => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const friendsRef = ref(database, `/users/${userId}/friends`);
+    const friendsRef = royRef(`/users/${userId}/friends`);
     const unsubscribe = onValue(friendsRef, async (snapshot) => {
       if (!snapshot.exists()) {
         setFriends([]);
@@ -38,7 +38,7 @@ const Friends = ({ route }) => {
       const friendIds = Object.keys(snapshot.val());
       const profiles = await Promise.all(
         friendIds.map(async (fid) => {
-          const snap = await get(ref(database, `/users/${fid}`));
+          const snap = await get(royRef(`/users/${fid}`));
           return snap.exists()
             ? { id: fid, username: snap.val().username, friendCode: snap.val().friendCode }
             : null;
@@ -55,10 +55,10 @@ const Friends = ({ route }) => {
 
     setLoading(true);
     try {
-      const usersRef = ref(database, "/users");
+      const usersRef = royRef("/users");
       const snapshot = await get(usersRef);
       if (!snapshot.exists()) {
-        Alert.alert("Not Found", "No user found with that username or friend code.");
+        alert("Not Found", "No user found with that username or friend code.");
         return;
       }
 
@@ -76,38 +76,38 @@ const Friends = ({ route }) => {
       });
 
       if (!foundId) {
-        Alert.alert("Not Found", "No user found with that username or friend code.");
+        alert("Not Found", "No user found with that username or friend code.");
         return;
       }
       if (foundId === userId) {
-        Alert.alert("Oops", "You can't add yourself.");
+        alert("Oops", "You can't add yourself.");
         return;
       }
 
       const alreadyFriend = friends.some((f) => f.id === foundId);
       if (alreadyFriend) {
-        Alert.alert("Already Friends", `${foundUsername} is already your friend.`);
+        alert("Already Friends", `${foundUsername} is already your friend.`);
         return;
       }
 
-      await set(ref(database, `/users/${userId}/friends/${foundId}`), true);
+      await set(royRef(`/users/${userId}/friends/${foundId}`), true);
       setIdentifier("");
-      Alert.alert("Friend Added", `${foundUsername} has been added to your friends.`);
+      alert("Friend Added", `${foundUsername} has been added to your friends.`);
     } catch (e) {
       console.error("Error adding friend:", e);
-      Alert.alert("Error", "Something went wrong. Please try again.");
+      alert("Error", "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleRemove = (friendId, username) => {
-    Alert.alert("Remove Friend", `Remove ${username}?`, [
+    alert("Remove Friend", `Remove ${username}?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => remove(ref(database, `/users/${userId}/friends/${friendId}`)),
+        onPress: () => remove(royRef(`/users/${userId}/friends/${friendId}`)),
       },
     ]);
   };
