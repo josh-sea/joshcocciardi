@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Swing Coach · Golf</title>
+<meta name="description" content="A golf swing coach that runs entirely in your browser. Point a camera at your swing, or upload a clip, and it reads your body position and talks you through the fixes.">
+<meta name="theme-color" content="#0E1A14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%B3%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../shared/swing-coach.css">
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<footer class="wrap">
+  <details>
+    <summary>How this works, and what it can't do</summary>
+    <p>A pose model (Google's MediaPipe BlazePose) runs in this tab and finds 33 body landmarks in every frame. Everything after that is plain geometry: joint angles, how far the head travels, how fast the hands move, and when the hips and shoulders each reach their peak turn. The thresholds are coaching rules of thumb, not measurements from a lab, so treat this as a second set of eyes and not the last word.</p>
+    <p>It does not see the bat, the club, or the ball. It cannot tell you where the barrel was or what the exit velocity was. The timing numbers are only as fine as the frame rate: a normal 30 fps clip puts each frame 33 ms apart, which is coarse for a swing that takes 150 ms. A slow-motion clip from a phone gives you much better resolution, so for the sequencing read, record in slow motion.</p>
+    <p>The model, about 6 MB, downloads once from Google's CDN and is then cached by the browser. Your video is never uploaded anywhere.</p>
+  </details>
+</footer>
+<script type="module">
+  import { initSwingCoach } from "../../shared/swing-coach.mjs";
+  initSwingCoach({ mount: document.getElementById("app"), sport: "golf" });
+</script>
+</body>
+</html>

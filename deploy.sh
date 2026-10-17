@@ -213,6 +213,7 @@ build_portfolio() {
     log "Testing Swing Coach..."
     cd "$PORTFOLIO_DIR"
     node test/swing-coach.test.mjs || fail "Swing Coach tests failed"
+    node test/caddy.test.mjs || fail "Golf Caddy tests failed"
 
     log "Testing Meal Planner helpers..."
     node test/meal-planner.test.mjs || fail "Meal Planner tests failed"
@@ -251,6 +252,7 @@ deploy_hosting() {
     echo "  Dead Net:       https://www.joshcocciardi.com/projects/deadnet"
     echo "  Disney Trivia:  https://www.joshcocciardi.com/projects/disney-trivia"
     echo "  Swing Coach:    https://www.joshcocciardi.com/projects/swing-coach"
+    echo "  Golf Caddy:     https://www.joshcocciardi.com/projects/swing-coach/golf/caddy"
     echo "  Boulder Smash:  https://www.joshcocciardi.com/projects/boulder-smash"
     echo "  Tophat&Spears:  https://www.joshcocciardi.com/projects/tophat-spears"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"

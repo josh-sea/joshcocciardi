@@ -1,0 +1,166 @@
+/* Caddy — the map, the hole bar and the bag, on top of the shared tokens. */
+
+.tabs { margin-bottom: 14px; }
+.tabs button { padding: 11px 8px; }
+
+/* ---------- sync bar ---------- */
+.syncbar {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px;
+  font-size: 12.5px; color: var(--text-dim);
+}
+.syncbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--unknown); }
+.syncbar .dot.cloud { background: var(--good); }
+.syncbar .dot.local { background: var(--fix); }
+.link {
+  background: none; border: 0; padding: 0;
+  font: inherit; font-weight: 700; font-size: 12.5px;
+  color: var(--accent); cursor: pointer; text-decoration: underline;
+}
+
+/* ---------- hole bar ---------- */
+.holebar { padding: 12px; }
+.holegrid { display: flex; gap: 8px; flex-wrap: wrap; }
+.mini { flex: 1 1 150px; min-width: 0; display: block; }
+.mini.narrow { flex: 0 1 74px; }
+.mini > span {
+  display: block; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-dim); margin-bottom: 5px;
+}
+.mini input, .mini select {
+  width: 100%; padding: 9px 10px;
+  font: inherit; font-size: 15px; font-weight: 600;
+  color: var(--text); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 10px;
+  -webkit-appearance: none; appearance: none;
+}
+.mini select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%239DB3A7' d='M6 8 0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 10px;
+  padding-right: 26px;
+}
+.mini input:focus, .mini select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.inputs { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- map ---------- */
+.mapwrap { position: relative; margin-bottom: 12px; }
+#map {
+  height: min(58vh, 460px);
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #0A120E;
+  z-index: 0;
+}
+.leaflet-container { background: #0A120E; font-family: var(--body); }
+.leaflet-control-attribution {
+  background: rgba(6,11,8,0.72) !important;
+  color: #9DB3A7 !important; font-size: 10px !important;
+}
+.leaflet-control-attribution a { color: #CFE3D7 !important; }
+.leaflet-bar a {
+  background: #15241C !important; color: #E8F2EC !important;
+  border-bottom-color: rgba(255,255,255,0.12) !important;
+}
+.leaflet-bar a:hover { background: #1B2E24 !important; }
+
+.maptools { position: absolute; right: 10px; top: 10px; z-index: 500; display: grid; gap: 8px; }
+.maptool {
+  width: 42px; height: 42px; display: grid; place-items: center;
+  font-size: 18px; line-height: 1;
+  background: rgba(6,11,8,0.85); color: var(--text);
+  border: 1px solid var(--line-2); border-radius: 12px; cursor: pointer;
+}
+.maptool[aria-pressed="true"] { background: var(--accent); color: #180A05; border-color: var(--accent); }
+.maphint {
+  position: absolute; left: 10px; right: 62px; bottom: 10px; z-index: 500;
+  background: rgba(6,11,8,0.85);
+  border: 1px solid var(--line-2); border-radius: 11px;
+  padding: 8px 11px; font-size: 12.5px; color: var(--text);
+  pointer-events: none;
+}
+.maphint b { color: var(--accent); }
+
+/* course marks */
+.cm { display: grid; place-items: center; font-size: 20px; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.cm.me span {
+  display: block; width: 15px; height: 15px; border-radius: 50%;
+  background: #4ADE80; border: 2.5px solid #06110A; box-shadow: 0 0 0 1.5px #4ADE80;
+}
+.cm.aim span { color: #4ADE80; font-size: 25px; font-weight: 700; }
+
+/* ---------- readout ---------- */
+.readout { display: flex; gap: 10px; margin-bottom: 12px; }
+.readout .stat { flex: 1 1 0; text-align: left; }
+.readout .stat b { font-size: 26px; }
+
+.actions.tight { gap: 8px; margin-bottom: 10px; }
+.actions.tight .btn { flex: 1 1 110px; padding: 12px 10px; font-size: 14px; }
+.btn.danger { color: var(--bad); border-color: rgba(248,113,113,.35); }
+.btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #180A05; }
+
+/* ---------- caddy card ---------- */
+.caddycard { border-left: 3px solid var(--accent); }
+.caddytop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.kicker { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); margin-bottom: 3px; }
+.caddytop h2 { font-family: var(--display); font-size: 29px; margin: 0; color: var(--chalk); text-transform: none; letter-spacing: 0; }
+.clubnum { text-align: right; flex: 0 0 auto; }
+.clubnum b { display: block; font-family: var(--display); font-size: 29px; line-height: 1; color: var(--good); font-variant-numeric: tabular-nums; }
+.clubnum span { display: block; font-size: 10.5px; color: var(--text-dim); margin-top: 3px; }
+.strategy { margin: 0 0 8px; font-size: 14.5px; font-weight: 600; line-height: 1.45; }
+.aimtext { margin: 0 0 8px; font-size: 13.5px; color: var(--text-dim); }
+.notes { margin: 0 0 10px; padding-left: 17px; }
+.notes li { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; margin-bottom: 4px; }
+
+/* ---------- shots ---------- */
+.shots { margin: 0; padding-left: 20px; }
+.shots li { font-size: 13.5px; margin-bottom: 7px; line-height: 1.45; }
+.shots b { color: var(--chalk); }
+.shots .vs { color: var(--text-dim); font-size: 12.5px; }
+
+/* ---------- bag ---------- */
+.clublist { display: grid; gap: 8px; }
+.club {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 11px; padding: 10px 11px;
+}
+.club.out { opacity: 0.45; }
+.club input[type=checkbox] { width: 19px; height: 19px; accent-color: var(--accent); }
+.club .name { font-weight: 600; font-size: 14.5px; }
+.club .src { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.club .src.measured { color: var(--good); }
+.club .src.yours { color: var(--accent); }
+.club .yds { display: flex; align-items: center; gap: 6px; }
+.club .yds input {
+  width: 62px; padding: 7px 8px; text-align: right;
+  font: inherit; font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+}
+.club .yds small { color: var(--text-dim); font-size: 11px; }
+.club.putter .yds { color: var(--text-dim); font-size: 12px; }
+
+/* ---------- learned ---------- */
+/* Five columns do not fit a 320px phone, and dropping one loses the
+   comparison that makes the table worth having, so let it scroll sideways
+   inside its panel rather than pushing the whole page over. */
+.learned { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.learned table { width: 100%; min-width: 290px; border-collapse: collapse; font-size: 13.5px; }
+.learned th, .learned td { text-align: left; padding: 7px 5px; white-space: nowrap; border-bottom: 1px solid var(--line); }
+.learned th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); font-weight: 600; }
+.learned td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.learned td.num.measured { color: var(--good); }
+.roundrow {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px;
+}
+.roundrow span { color: var(--text-dim); font-size: 12.5px; }
+
+.maploadfail {
+  height: 100%; display: grid; place-content: center; gap: 7px;
+  text-align: center; padding: 26px; color: var(--text-dim); font-size: 13.5px;
+}
+.maploadfail strong { color: var(--text); font-size: 15px; }

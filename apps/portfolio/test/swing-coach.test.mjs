@@ -1,38 +1,15 @@
 /**
  * Swing Coach: geometry tests.
  *
- * The page is one static file with its analysis engine inlined, so this
- * suite pulls the engine straight out of the shipped HTML and drives it with
- * synthetic swings built from angles. That way the thing under test is
- * literally the thing that gets deployed — it cannot drift from a copy.
+ * The analysis engine is a plain module, so this drives it directly with
+ * synthetic swings built from joint angles. No DOM, no camera, no model.
  *
  * Dependency-free. From apps/portfolio:  node test/swing-coach.test.mjs
  */
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
-const PAGE = new URL("../public/projects/swing-coach/index.html", import.meta.url);
-
-/* ---- lift the engine out of the page ---- */
-
-const html = fs.readFileSync(PAGE, "utf8");
-const script = html.match(/<script type="module">([\s\S]*?)<\/script>/);
-if (!script) throw new Error("no module script found in the swing coach page");
-
-const afterImport = script[1].split('vision_bundle.mjs";')[1];
-if (!afterImport) throw new Error("the MediaPipe import line moved; update this test");
-
-const engine = afterImport.split("/* ==================================================================\n   Page wiring")[0];
-if (engine.length < 2000) throw new Error("the engine section came out suspiciously small");
-
-const tmp = path.join(os.tmpdir(), `swing-engine-${process.pid}.mjs`);
-fs.writeFileSync(tmp, engine + "\nexport { L, cfg, readFrame, buildSeries, findPhases, buildReport };\n");
-process.on("exit", () => { try { fs.unlinkSync(tmp); } catch {} });
-
-const { L, cfg, readFrame, buildSeries, findPhases, buildReport } =
-  await import(`file://${tmp}`);
+import {
+  L, cfg, readFrame, buildSeries, findPhases, buildReport,
+} from "../public/projects/swing-coach/shared/swing-engine.mjs";
 
 /* ---- a swing, built from angles rather than pixels ---- */
 
