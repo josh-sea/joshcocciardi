@@ -222,3 +222,40 @@ export function recordShot(club, yards) {
 export function clubLabel(id) {
   return CLUB_CATALOG.find((c) => c.id === id)?.label || id;
 }
+
+/**
+ * Club averages, derived from the shot log rather than accumulated into the
+ * bag as you go.
+ *
+ * This is what makes a shot editable after the fact. If the running totals
+ * lived on the club, changing a shot's club later would mean unpicking one
+ * average and adding to another, and a deleted shot would leave its yards
+ * behind forever. Recomputing from the log means an edit is just an edit.
+ *
+ * Shots must be in the order they were hit: each one is judged against what
+ * the club looked like at the time, which is the baseline until there are
+ * enough real shots to beat it.
+ */
+export function measuredFromShots(shots, handicap) {
+  const byClub = {};
+  for (const s of shots) {
+    if (!s.club || s.club === "putter" || !Number.isFinite(s.yards)) continue;
+    const m = (byClub[s.club] ||= { count: 0, sum: 0, recent: [], rejected: 0 });
+    const expected = m.count >= 3 ? m.sum / m.count : baselineCarry(s.club, handicap);
+    if (believableShot(s.yards, expected).ok) {
+      m.count += 1;
+      m.sum += s.yards;
+      m.recent.push(Math.round(s.yards));
+      if (m.recent.length > 20) m.recent.shift();
+    } else {
+      m.rejected += 1;
+    }
+  }
+  return byClub;
+}
+
+/** The bag with every club's measured record rebuilt from the log. */
+export function bagWithMeasured(bag, shots, handicap) {
+  const stats = measuredFromShots(shots, handicap);
+  return bag.map((c) => ({ ...c, measured: stats[c.id] || { count: 0, sum: 0, recent: [], rejected: 0 } }));
+}

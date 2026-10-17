@@ -205,3 +205,58 @@
   color: #180A05; background: #FF6B3D;
   border: 2px solid #06110A;
 }
+
+/* ---------- the one button ---------- */
+.bigbtn {
+  display: block; width: 100%;
+  padding: 20px 16px; margin-bottom: 10px;
+  font-family: var(--display);
+  font-size: 26px; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #180A05; background: var(--accent);
+  border: 0; border-radius: 16px; cursor: pointer;
+}
+.bigbtn:active { transform: translateY(1px); }
+.bigbtn:disabled { opacity: 0.5; cursor: default; }
+.bighint { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); text-align: center; }
+.hint.source { margin: -4px 0 12px; font-size: 12.5px; }
+
+/* ---------- shot rows ---------- */
+.loghead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.holenav { display: flex; gap: 6px; }
+.btn.tiny { flex: 0 0 auto; padding: 6px 10px; font-size: 12px; }
+.shots { margin: 0 0 10px; padding-left: 20px; }
+.shot { margin-bottom: 12px; }
+.shotmain { display: flex; align-items: center; gap: 9px; }
+.clubpick {
+  flex: 1 1 auto; min-width: 0; padding: 8px 9px;
+  font: inherit; font-size: 14px; font-weight: 600;
+  color: var(--text); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 9px;
+  -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%239DB3A7' d='M6 8 0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center; background-size: 9px;
+  padding-right: 24px;
+}
+.shotmain .yds {
+  flex: 0 0 auto; font-family: var(--display); font-size: 20px;
+  color: var(--chalk); font-variant-numeric: tabular-nums;
+}
+.shotmeta { margin: 3px 0 5px; }
+.shotmeta .vs { font-size: 12px; color: var(--text-dim); }
+.shotedit { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------- the map, now folded away ---------- */
+.mapbox {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 16px; padding: 12px; margin-bottom: 14px;
+}
+.mapbox > summary {
+  cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--text-dim);
+  list-style: none;
+}
+.mapbox > summary::-webkit-details-marker { display: none; }
+.mapbox > summary::before { content: "▸ "; color: var(--accent); }
+.mapbox[open] > summary { margin-bottom: 12px; }
+.mapbox[open] > summary::before { content: "▾ "; }
+.mapbox #map { height: min(46vh, 380px); }
+.learned .rej { color: var(--fix); font-weight: 600; font-size: 11px; }
