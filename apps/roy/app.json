@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "Roy",
+    "slug": "roy",
+    "version": "1.0.2",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.joshcocciardi.royapp",
+      "versionCode": 3
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#ffffff"
+        }
+      ],
+      "expo-asset",
+      "expo-font"
+    ],
+    "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "7137a7b5-196c-481f-911c-2a052519dc7d"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/7137a7b5-196c-481f-911c-2a052519dc7d"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Roy",
+      "shortName": "Roy",
+      "themeColor": "#1a1a2e",
+      "backgroundColor": "#f5f5f5",
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roy - Delete Account</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: #16213e;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #ff6b6b, #ffa500, #ffd700, #4ecdc4, #45b7d1, #6c5ce7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { color: #888; margin-bottom: 32px; font-size: 14px; }
+    .warning {
+      background: #2d1b1b;
+      border: 1px solid #5c2a2a;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: left;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .warning strong { color: #ff6b6b; }
+    .warning ul { margin: 8px 0 0 20px; color: #ccc; }
+    .warning li { margin-bottom: 4px; }
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid #333;
+      border-radius: 10px;
+      background: #0f1629;
+      color: #e0e0e0;
+      font-size: 16px;
+      margin-bottom: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: #4ecdc4; }
+    input::placeholder { color: #555; }
+    button {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:hover { opacity: 0.9; }
+    button:active { transform: scale(0.98); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-login {
+      background: linear-gradient(135deg, #4ecdc4, #45b7d1);
+      color: #fff;
+      margin-bottom: 12px;
+    }
+    .btn-delete {
+      background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+      color: #fff;
+      display: none;
+    }
+    .btn-cancel {
+      background: transparent;
+      border: 1px solid #444;
+      color: #888;
+      margin-top: 8px;
+    }
+    .status {
+      margin-top: 16px;
+      font-size: 14px;
+      min-height: 20px;
+    }
+    .status.error { color: #ff6b6b; }
+    .status.success { color: #4ecdc4; }
+    .status.loading { color: #ffd700; }
+    .logged-in-as {
+      background: #0f1629;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: #4ecdc4;
+    }
+    #login-section, #delete-section, #done-section { display: none; }
+    .confirm-text {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 16px;
+    }
+    .confirm-text input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+      margin-bottom: 0;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      text-align: left;
+      margin-bottom: 16px;
+    }
+    .check-row input { width: auto; margin-bottom: 0; margin-right: 10px; flex-shrink: 0; }
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid #555;
+      border-top-color: #ffd700;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Roy</h1>
+    <p class="subtitle">Account Deletion</p>
+
+    <!-- Login Section -->
+    <div id="login-section">
+      <div class="warning">
+        <strong>Sign in to delete your account</strong>
+        <p style="margin-top:8px; color:#ccc;">Enter the email and password for the account you want to delete.</p>
+      </div>
+      <input type="email" id="email" placeholder="Email address" autocomplete="email">
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+      <button class="btn-login" id="login-btn" onclick="signIn()">Sign In</button>
+    </div>
+
+    <!-- Delete Confirmation Section -->
+    <div id="delete-section">
+      <div class="logged-in-as">Signed in as <strong id="user-email"></strong></div>
+      <div class="warning">
+        <strong>This action is permanent and cannot be undone.</strong>
+        <ul>
+          <li>Your Roy account will be deleted</li>
+          <li>Your game history will be removed</li>
+          <li>Your profile and stats will be erased</li>
+          <li>Active games you're in will be deleted</li>
+        </ul>
+        <p style="margin-top:8px; color:#ccc;">Your sign-in is shared with the other apps on joshcocciardi.com, so the login itself stays. Only your Roy data is removed.</p>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="confirm-check" onchange="toggleDelete()">
+        <label for="confirm-check" class="confirm-text">I understand this is permanent and want to delete my account</label>
+      </div>
+      <button class="btn-delete" id="delete-btn" onclick="deleteAccount()" disabled>Delete My Account</button>
+      <button class="btn-cancel" onclick="cancelDelete()">Cancel</button>
+    </div>
+
+    <!-- Done Section -->
+    <div id="done-section">
+      <div style="font-size:48px; margin-bottom:16px;">&#10003;</div>
+      <h2 style="color:#4ecdc4; margin-bottom:12px;">Account Deleted</h2>
+      <p style="color:#888; font-size:14px;">Your Roy account and all associated data have been permanently removed. You can close this page.</p>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDg4KwFy06tmJ9T_rop8Q10_9mPjfOYrxc",
+      authDomain: "josh-cocciardi.firebaseapp.com",
+      projectId: "josh-cocciardi",
+      storageBucket: "josh-cocciardi.firebasestorage.app",
+      messagingSenderId: "21223323384",
+      appId: "1:21223323384:web:2df2e363a8a4a52adaed0d",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    // Expose to global scope for onclick handlers
+    window._auth = auth;
+    window._signInWithEmailAndPassword = signInWithEmailAndPassword;
+
+    // Show login section on load
+    document.getElementById("login-section").style.display = "block";
+  </script>
+
+  <script>
+    function setStatus(msg, type) {
+      const el = document.getElementById("status");
+      el.className = "status " + (type || "");
+      el.innerHTML = msg;
+    }
+
+    async function signIn() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      if (!email || !password) {
+        setStatus("Please enter your email and password.", "error");
+        return;
+      }
+
+      const btn = document.getElementById("login-btn");
+      btn.disabled = true;
+      setStatus('<span class="spinner"></span> Signing in...', "loading");
+
+      try {
+        await window._signInWithEmailAndPassword(window._auth, email, password);
+        document.getElementById("login-section").style.display = "none";
+        document.getElementById("delete-section").style.display = "block";
+        document.getElementById("user-email").textContent = email;
+        document.getElementById("delete-btn").style.display = "block";
+        setStatus("");
+      } catch (err) {
+        let msg = "Sign in failed.";
+        if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+          msg = "Invalid email or password.";
+        } else if (err.code === "auth/too-many-requests") {
+          msg = "Too many attempts. Please try again later.";
+        }
+        setStatus(msg, "error");
+        btn.disabled = false;
+      }
+    }
+
+    function toggleDelete() {
+      document.getElementById("delete-btn").disabled = !document.getElementById("confirm-check").checked;
+    }
+
+    async function deleteAccount() {
+      const btn = document.getElementById("delete-btn");
+      btn.disabled = true;
+      setStatus('<span class="spinner"></span> Deleting account and data...', "loading");
+
+      try {
+        const user = window._auth.currentUser;
+        if (!user) throw new Error("Not signed in");
+
+        const token = await user.getIdToken();
+
+        const response = await fetch("/api/delete-account", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token,
+          },
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "Deletion failed");
+        }
+
+        document.getElementById("delete-section").style.display = "none";
+        document.getElementById("done-section").style.display = "block";
+        setStatus("");
+      } catch (err) {
+        setStatus(err.message || "Failed to delete account. Please try again.", "error");
+        btn.disabled = false;
+        document.getElementById("confirm-check").checked = false;
+      }
+    }
+
+    function cancelDelete() {
+      window._auth.signOut();
+      document.getElementById("delete-section").style.display = "none";
+      document.getElementById("login-section").style.display = "block";
+      document.getElementById("email").value = "";
+      document.getElementById("password").value = "";
+      setStatus("");
+    }
+
+    // Allow Enter key to submit
+    document.getElementById("password").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") signIn();
+    });
+  </script>
+</body>
+</html>
