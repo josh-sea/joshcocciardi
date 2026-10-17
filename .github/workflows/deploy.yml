@@ -170,7 +170,7 @@ jobs:
         working-directory: apps/roy
         run: |
           npm ci
-          npx expo export -p web
+          npx expo export -p web --clear
 
       - name: Install Roy functions dependencies
         working-directory: apps/roy/functions

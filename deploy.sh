@@ -308,7 +308,7 @@ deploy_roy() {
     log "Building Roy for the web..."
     cd "$ROOT_DIR/apps/roy"
     npm ci || fail "Roy install failed"
-    npx expo export -p web || fail "Roy web export failed"
+    npx expo export -p web --clear || fail "Roy web export failed"
     cd "$ROOT_DIR/apps/roy/functions"
     npm ci || fail "Roy functions install failed"
     cd "$ROOT_DIR"

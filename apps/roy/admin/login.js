@@ -8,8 +8,8 @@ import {
   Text
 } from "react-native";
 import alert from "../utils/alert";
-import { auth, royRef } from "./firebaseConfig";
-import { get } from "firebase/database";
+import { auth } from "./firebaseConfig";
+import { canUseGoogle, signInWithGoogle, googleErrorMessage } from "./session";
 import { useNavigation } from "@react-navigation/native";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import Banner from "../components/royBanner";
@@ -24,19 +24,9 @@ const Login = () => {
 
   const handleLogin = async () => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      const userId = user.uid;
-      const userEmail = user.email;
-      // A login from the shared user pool that has never played Roy has no
-      // profile yet; send them to Sign Up to pick a username.
-      const profile = await get(royRef(`/users/${userId}/username`));
-      if (!profile.exists()) {
-        alert("Almost there", "Pick a username on the Sign Up screen to start playing Roy.");
-        navigation.navigate("Signup");
-        return;
-      }
-      navigation.navigate("Games", { userEmail, userId });
+      // The session listener in App takes it from here: straight to the
+      // games, or to picking a username if this login has never played Roy.
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
       const errorCode = error.code;
       const errorMessage = error.message;
@@ -44,9 +34,20 @@ const Login = () => {
       const alertMessage = errorCode === "auth/user-not-found" 
         ? "That account is not signed up yet, try signing up first!" 
         : errorCode === "auth/wrong-password" || errorCode === "auth/invalid-credential"
-        ? "Wrong email or password, try again!"
+        ? canUseGoogle
+          ? "Wrong email or password. If you signed up with Google, use Continue with Google."
+          : "Wrong email or password, try again!"
         : "Login failed. Please try again.";
       alert('Login Failed', alertMessage);
+    }
+  };
+
+  const handleGoogle = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      const message = googleErrorMessage(error);
+      if (message) alert("Login Failed", message);
     }
   };
 
@@ -98,6 +99,15 @@ const Login = () => {
       >
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
+      {canUseGoogle && (
+        <TouchableOpacity
+          style={[styles.button, styles.googleButton, { width: width * 0.5 }]}
+          onPress={handleGoogle}
+        >
+          <Ionicons name="logo-google" size={16} color="darkgreen" />
+          <Text style={[styles.buttonText, styles.googleButtonText]}>Google</Text>
+        </TouchableOpacity>
+      )}
       <TouchableOpacity
         style={[styles.button, { width: width * 0.5 }]}
         onPress={handleSignup}
@@ -167,6 +177,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  googleButton: {
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "white",
+    borderWidth: 2,
+    borderColor: "darkgreen",
+  },
+  googleButtonText: {
+    color: "darkgreen",
   },
   buttonText: {
     color: "white",

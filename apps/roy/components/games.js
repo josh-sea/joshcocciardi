@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
+import { useUserId } from "../admin/session";
 import CreateGameForm from "./newgame";
 import GameCard from "./GameCard";
 import { useGames } from "../hooks/useGames";
@@ -24,7 +25,7 @@ const MAX_FREE_GAMES = 3;
 
 const Games = ({ route }) => {
   const navigation = useNavigation();
-  const { userId } = route.params;
+  const userId = useUserId();
   const [showCreateGameForm, setShowCreateGameForm] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 

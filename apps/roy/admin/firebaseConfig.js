@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { initializeApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
-import { getDatabase, ref } from "firebase/database";
+import { initializeAuth, getReactNativePersistence, getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getDatabase, ref, connectDatabaseEmulator } from "firebase/database";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Roy lives in the shared josh-cocciardi project. Auth is the shared user
@@ -26,6 +26,12 @@ const auth = Platform.OS === 'web'
       persistence: getReactNativePersistence(AsyncStorage),
     });
 const database = getDatabase(appAuth);
+
+// Local testing against the emulators: EXPO_PUBLIC_USE_EMULATORS=1 npm run web
+if (process.env.EXPO_PUBLIC_USE_EMULATORS === "1") {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectDatabaseEmulator(database, "127.0.0.1", 9000);
+}
 
 // A database ref inside Roy's namespace: royRef(`/games/${id}`) → /roy/games/{id}
 const royRef = (path = "") => ref(database, `${ROOT}/${path.replace(/^\/+/, "")}`);

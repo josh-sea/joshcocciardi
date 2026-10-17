@@ -21,6 +21,7 @@ import ShapePreview from "./ShapePreview";
 import useFeatureFlags from "../hooks/useFeatureFlags";
 import useTheme from "../hooks/useTheme";
 import { useNavigation } from "@react-navigation/native";
+import { useUserId } from "../admin/session";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getAnimation } from "../utils/animationData";
@@ -44,7 +45,8 @@ const Grid = ({ route }) => {
   const navigation = useNavigation();
   const dbActiveRef = useRef(null);
 
-  const { gameId, userId, gameName, player1, player2, boardSize: routeBoardSize } = route.params;
+  const userId = useUserId();
+  const { gameId, gameName, player1, player2, boardSize: routeBoardSize } = route.params;
   const boardSize = routeBoardSize || "10x10";
   const config = BOARD_CONFIGS[boardSize];
   const { emotes: ownedEmotePacks, themes: ownedThemes, animations: ownedAnimations } = useFeatureFlags(userId);
