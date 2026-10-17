@@ -17,12 +17,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { royRef } from "../admin/firebaseConfig";
 import { get, set, remove, onValue } from "firebase/database";
 import { useNavigation } from "@react-navigation/native";
+import { useUserId } from "../admin/session";
 
 const { height } = Dimensions.get("window");
 const isSmallScreen = height < 667;
 
 const Friends = ({ route }) => {
-  const { userId } = route.params;
+  const userId = useUserId();
   const navigation = useNavigation();
   const [identifier, setIdentifier] = useState("");
   const [friends, setFriends] = useState([]);

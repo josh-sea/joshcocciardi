@@ -51,7 +51,6 @@ const GameCard = ({ game, userId }) => {
 
     navigation.navigate("Grid", {
       gameId: game.gameId,
-      userId,
       gameName: game.name,
       active: true,
       player1,

@@ -17,6 +17,7 @@ import * as Clipboard from "expo-clipboard";
 import { royRef } from "../admin/firebaseConfig";
 import { get, update } from "firebase/database";
 import { useNavigation } from "@react-navigation/native";
+import { useUserId } from "../admin/session";
 
 const { height } = Dimensions.get("window");
 const isSmallScreen = height < 667;
@@ -28,7 +29,7 @@ const DEFAULT_NOTIF_PREFS = {
 };
 
 const Profile = ({ route }) => {
-  const { userId } = route.params;
+  const userId = useUserId();
   const navigation = useNavigation();
   const [profile, setProfile] = useState(null);
   const [copied, setCopied] = useState(false);

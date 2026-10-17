@@ -22,10 +22,7 @@ const HamburgerMenu = ({ onNewGame, userId }) => {
   const handleLogout = () => {
     auth
       .signOut()
-      .then(() => {
-        console.log('Logged out successfully!');
-        navigation.navigate('Login');
-      })
+      // The session listener in App swaps back to the login screens.
       .catch((error) => {
         alert('Logout Failed', error.message);
       });
@@ -39,12 +36,12 @@ const HamburgerMenu = ({ onNewGame, userId }) => {
 
   const handleFriends = () => {
     setMenuVisible(false);
-    navigation.navigate('Friends', { userId });
+    navigation.navigate('Friends');
   };
 
   const handleProfile = () => {
     setMenuVisible(false);
-    navigation.navigate('Profile', { userId });
+    navigation.navigate('Profile');
   };
 
   return (
