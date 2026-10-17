@@ -74,6 +74,12 @@ jobs:
         working-directory: apps/portfolio
         run: node test/swing-coach.test.mjs
 
+      # The caddy's distance model, geometry and recommendation engine are
+      # plain modules with no DOM, so they run the same way.
+      - name: Test Golf Caddy
+        working-directory: apps/portfolio
+        run: node test/caddy.test.mjs
+
       # Meal Planner week math and inventory splitting. Pure functions, no
       # install needed.
       - name: Test Meal Planner helpers

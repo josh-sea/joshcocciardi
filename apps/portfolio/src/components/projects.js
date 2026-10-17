@@ -31,6 +31,13 @@ const apps = [
     link: "/projects/collector",
   },
   {
+    title: "🏌️ Swing Coach",
+    description:
+      "Two sports, three tools. The analyzer points a camera at a swing and a pose model reads the body 30 times a second: stance width, knee bend, spine angle, how far the head travels, whether the hips start the swing before the shoulders, and whether you finish on balance. It talks you through the fixes out loud, or breaks down an uploaded clip frame by frame, and never uploads the video. The golf side adds a GPS caddy: mark your ball and the flag on a satellite map, trace a dogleg if the hole bends, and it reads the distance, checks the terrain height and picks a club with a reason. Every shot you log teaches it how far you actually hit that club, so the estimates it starts with get replaced by your own numbers.",
+    tech: ["JavaScript", "MediaPipe BlazePose", "WebAssembly", "Leaflet", "Geolocation", "Firebase Auth", "Firestore", "Web Speech API"],
+    link: "/projects/swing-coach",
+  },
+  {
     title: "📖 Workbook Reader",
     description:
       "A reading aid for a kid who's still learning. Snap a photo of a workbook page and AI rebuilds the questions and directions on screen — then tapping any word reads it aloud. Spoken-word audio is cached in a shared, cross-family bank so common words play instantly and never regenerate, with an on-device voice fallback for offline or older devices. Grown-ups sign in and manage a profile per child; the child does the work on paper.",
@@ -104,13 +111,6 @@ const tools = [
 
 // ── Games, toys and experiments ──────────────────────────────────────────────
 const playthings = [
-  {
-    title: "⚾ Swing Coach",
-    description:
-      "Point a camera at a swing and a pose model reads the body 30 times a second: stance width, knee bend, spine angle, how far the head travels, whether the hips start the swing before the shoulders, and whether you finish on balance. It talks you through the fixes out loud while you hit, or breaks down a clip you upload frame by frame. The model runs in the tab, so no video ever leaves the phone.",
-    tech: ["JavaScript", "MediaPipe BlazePose", "WebAssembly", "Canvas API", "Web Speech API", "getUserMedia"],
-    link: "/projects/swing-coach",
-  },
   {
     title: "🎟️ Ticket Book: Disney Trivia",
     description:

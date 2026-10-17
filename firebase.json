@@ -135,6 +135,15 @@
           ]
         },
         {
+          "source": "/projects/swing-coach/**/*.@(js|mjs|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/disney-trivia/**/*.@(js|css)",
           "headers": [
             {

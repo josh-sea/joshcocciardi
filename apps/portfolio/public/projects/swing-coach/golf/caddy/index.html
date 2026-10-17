@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Caddy</title>
+<meta name="description" content="A GPS golf caddy that recommends a club and a target from where you actually stand, then learns how far you really hit each club from the shots you log.">
+<meta name="theme-color" content="#0E1A14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="../../shared/swing-coach.css">
+<link rel="stylesheet" href="caddy.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <a class="crumb" href="../">&larr; Golf</a>
+    <div class="masthead">
+      <div>
+        <h1>The<em>Caddy</em></h1>
+        <p class="tagline">Stand where your ball is, mark where you're going, and it tells you the club and the target. Every shot you log teaches it how far you really hit.</p>
+      </div>
+      <button class="iconbtn" id="voiceBtn" aria-pressed="true" title="Caddy's voice" aria-label="Toggle the caddy's voice">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m23 9-6 6"/><path d="m17 9 6 6"/></svg>
+      </button>
+    </div>
+    <div class="syncbar" id="syncBar">
+      <span class="dot" id="syncDot"></span>
+      <span id="syncText">Starting up…</span>
+      <button class="link" id="authBtn" hidden>Sign in</button>
+    </div>
+  </header>
+
+  <nav class="seg tabs" id="tabs" role="tablist" aria-label="Caddy sections">
+    <button data-tab="play" aria-pressed="true" role="tab">Play</button>
+    <button data-tab="bag" aria-pressed="false" role="tab">Bag</button>
+    <button data-tab="history" aria-pressed="false" role="tab">History</button>
+  </nav>
+
+  <!-- ───────────────────────── PLAY ───────────────────────── -->
+  <section id="tab-play">
+    <div class="panel holebar">
+      <div class="holegrid">
+        <label class="mini"><span>Course</span><input type="text" id="courseName" placeholder="Where are you?" autocomplete="off"></label>
+        <label class="mini narrow"><span>Hole</span><input type="number" id="holeNo" min="1" max="36" value="1" inputmode="numeric"></label>
+        <label class="mini narrow"><span>Par</span>
+          <select id="holePar"><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
+        </label>
+        <label class="mini narrow"><span>Tees</span>
+          <select id="teeColor">
+            <option>Red</option><option>Gold</option><option>White</option>
+            <option selected>Blue</option><option>Black</option>
+          </select>
+        </label>
+        <label class="mini narrow"><span>Shot</span><input type="number" id="shotNo" min="1" max="12" value="1" inputmode="numeric"></label>
+      </div>
+    </div>
+
+    <div class="mapwrap">
+      <div id="map" aria-label="Course map"></div>
+      <div class="maptools">
+        <button class="maptool" id="layerBtn" title="Satellite or street">🛰️</button>
+        <button class="maptool" id="locateBtn" title="Find me">◎</button>
+      </div>
+      <div class="maphint" id="mapHint">Tap <b>I'm at my ball</b> to drop your position, then tap the map where the flag is.</div>
+    </div>
+
+    <div class="readout" id="readout" hidden>
+      <div class="stat"><b id="distFlat">--</b><span>Yards out</span></div>
+      <div class="stat"><b id="distPlays">--</b><span>Plays like</span></div>
+      <div class="stat"><b id="distRise">--</b><span>Elevation</span></div>
+    </div>
+
+    <div class="actions tight">
+      <button class="btn primary" id="hereBtn">I'm at my ball</button>
+      <button class="btn" id="pinHereBtn">I'm at the flag</button>
+    </div>
+    <div class="actions tight">
+      <button class="btn ghost" id="doglegBtn" aria-pressed="false">Trace a dogleg</button>
+      <button class="btn ghost" id="clearLineBtn">Clear line</button>
+      <button class="btn ghost" id="elevBtn">Check elevation</button>
+    </div>
+
+    <section class="panel caddycard" id="caddyCard" hidden>
+      <div class="caddytop">
+        <div>
+          <span class="kicker">The caddy says</span>
+          <h2 id="caddyClub">—</h2>
+        </div>
+        <div class="clubnum"><b id="caddyYards">--</b><span id="caddySource">&nbsp;</span></div>
+      </div>
+      <p class="strategy" id="caddyStrategy"></p>
+      <p class="aimtext" id="caddyAim"></p>
+      <ul class="notes" id="caddyNotes"></ul>
+      <div class="actions tight">
+        <button class="btn" id="speakBtn">Say it</button>
+        <button class="btn primary" id="hitBtn">I hit it &rarr;</button>
+      </div>
+    </section>
+
+    <section class="panel" id="shotLog" hidden>
+      <h2>This hole</h2>
+      <ol class="shots" id="shotList"></ol>
+    </section>
+  </section>
+
+  <!-- ───────────────────────── BAG ───────────────────────── -->
+  <section id="tab-bag" hidden>
+    <div class="panel">
+      <h2>How you play</h2>
+      <div class="field">
+        <label for="skillSeg">Skill level</label>
+        <div class="seg" id="skillSeg" role="group" aria-label="Skill level">
+          <button data-skill="beginner" aria-pressed="true">Beginner<small>rarely play</small></button>
+          <button data-skill="intermediate" aria-pressed="false">Intermediate<small>have a handicap</small></button>
+          <button data-skill="pro" aria-pressed="false">Low / pro<small>single digits</small></button>
+        </div>
+      </div>
+      <div class="inputs" id="beginnerInputs">
+        <label class="mini"><span>Average score</span><input type="number" id="avgScore" min="60" max="180" placeholder="110" inputmode="numeric"></label>
+        <label class="mini"><span>Best round (optional)</span><input type="number" id="bestScore" min="55" max="180" placeholder="—" inputmode="numeric"></label>
+      </div>
+      <div class="inputs" id="handicapInputs" hidden>
+        <label class="mini"><span>Handicap index</span><input type="number" id="handicap" min="-5" max="54" step="0.1" placeholder="15" inputmode="decimal"></label>
+      </div>
+      <p class="hint" id="skillHint"></p>
+
+      <div class="field" style="margin-top:12px">
+        <label for="preferSeg">Which of your numbers to trust</label>
+        <div class="seg" id="preferSeg" role="group" aria-label="Distance source">
+          <button data-prefer="lifetime" aria-pressed="true">Lifetime<small>every shot</small></button>
+          <button data-prefer="rolling" aria-pressed="false">Last five<small>recent form</small></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Your clubs</h2>
+      <p class="hint">Tick what's in the bag. Distances start as estimates for your skill level and get replaced by your own numbers once you've logged three shots with a club. Type a number in to override both.</p>
+      <div class="clublist" id="clubList"></div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────── HISTORY ─────────────────────── -->
+  <section id="tab-history" hidden>
+    <div class="panel">
+      <h2>What the caddy has learned</h2>
+      <div class="learned" id="learned"><p class="empty-note">Nothing logged yet. Play a hole and mark where your ball ends up, and the numbers start landing here.</p></div>
+    </div>
+    <div class="panel">
+      <h2>Rounds</h2>
+      <div id="rounds"><p class="empty-note">No rounds yet.</p></div>
+      <div class="actions tight" style="margin-top:12px">
+        <button class="btn ghost" id="exportBtn">Export everything</button>
+        <button class="btn ghost danger" id="resetBtn">Clear this device</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <details>
+      <summary>What this knows and what it's guessing</summary>
+      <p><b>Your distances.</b> The starting numbers come from Shot Scope's tracked-shot data for male golfers at 5, 15 and 25 handicap, picked because it is measured rather than self-reported — shot-tracking studies find golfers overestimate their own carry by 10 to 20 percent. Your skill level is turned into a handicap, and the table is interpolated for it. Those are carry numbers. A distance the caddy measures from two GPS marks is total: carry plus roll. Total is the honest number for "can I reach that", so once a club has three logged shots its measured number takes over, and the card tells you which one it used.</p>
+      <p><b>Elevation.</b> Heights come from a terrain model, not your phone's altimeter, because GPS altitude is only good to tens of metres vertically. The terrain model does not know about a raised green. The adjustment uses TrackMan's one-to-one rule, a yard of distance per yard of climb; other rules in circulation are three times smaller, so treat it as a starting point.</p>
+      <p><b>Distance accuracy.</b> A phone's GPS is typically good to 3 to 10 metres, which is 3 to 11 yards. The accuracy circle on the map is the real one your phone reports. That is fine for picking between a 7 and an 8 iron and not fine for arguing about a yardage.</p>
+      <p><b>What it cannot see.</b> Bunkers, water, trees, wind, lie and how the green sits. It measures ground you point at. It will happily send you straight over a lake, so look up.</p>
+    </details>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
