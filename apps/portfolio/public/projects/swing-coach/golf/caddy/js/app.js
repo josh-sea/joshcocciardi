@@ -31,6 +31,7 @@ const state = {
   waypoints: [],        // extra dogleg corners between ball and pin
   rise: null,           // metres the pin sits above the ball, or null if unchecked
   dogleg: false,
+  moving: null,        // a mark armed for repositioning by the next tap
   last: null,           // the last recommendation shown
   watchId: null,
 };
@@ -153,6 +154,96 @@ function targetPath() {
   return [state.ball, ...state.waypoints, ...(state.pin ? [state.pin] : [])];
 }
 
+/** Push the current marks back onto the map. Called after any edit. */
+function redrawMarks() {
+  gmap.setBall(state.ball);
+  gmap.setPin(state.pin);
+  gmap.setPath(targetPath(), state.waypoints);
+  renderMarks();
+  setMapHint();
+}
+
+/**
+ * A chip per mark, each with a way to take it back. Marking the ball or the
+ * flag in the wrong place is the easiest mistake to make out there, and
+ * before this there was no way to undo one short of reloading.
+ */
+function renderMarks() {
+  const row = $("marks");
+  const chips = [];
+  if (state.ball) chips.push(["ball", "⛳", "Ball"]);
+  if (state.pin) chips.push(["pin", "🚩", "Flag"]);
+  if (state.waypoints.length) {
+    chips.push(["corners", "↳", `${state.waypoints.length} corner${state.waypoints.length === 1 ? "" : "s"}`]);
+  }
+  row.hidden = !chips.length;
+  row.innerHTML = "";
+  for (const [key, glyph, label] of chips) {
+    const chip = document.createElement("span");
+    chip.className = `chip${state.moving === key ? " arming" : ""}`;
+    chip.innerHTML = `<span>${glyph}</span><b></b>` +
+      (key === "corners" ? "" : `<button class="mv" type="button"></button>`) +
+      `<button class="x" type="button"></button>`;
+    chip.querySelector("b").textContent = label;
+
+    const mv = chip.querySelector(".mv");
+    if (mv) {
+      mv.textContent = state.moving === key ? "cancel" : "move";
+      mv.setAttribute("aria-label", `Move the ${label.toLowerCase()}`);
+      on(mv, "click", () => {
+        state.moving = state.moving === key ? null : key;
+        if (state.moving) {
+          state.dogleg = false;
+          $("doglegBtn").setAttribute("aria-pressed", "false");
+        }
+        renderMarks();
+        setMapHint();
+      });
+    }
+
+    const x = chip.querySelector(".x");
+    x.textContent = "×";
+    x.setAttribute("aria-label", `Remove ${label.toLowerCase()}`);
+    on(x, "click", () => clearMark(key));
+    row.appendChild(chip);
+  }
+  if (chips.length) {
+    const hint = document.createElement("span");
+    hint.className = "chip hint";
+    hint.textContent = state.moving
+      ? `tap the map to move the ${state.moving === "ball" ? "ball" : "flag"}`
+      : "move or remove any mark";
+    row.appendChild(hint);
+  }
+}
+
+function clearMark(which) {
+  if (which === "ball") state.ball = null;
+  else if (which === "pin") state.pin = null;
+  else if (which === "corners") state.waypoints = [];
+  if (state.moving === which) state.moving = null;
+  state.rise = null;
+  redrawMarks();
+  updateReadout();
+}
+
+/** The line under the map, which changes with whatever mode you're in. */
+function setMapHint() {
+  const hint = $("mapHint");
+  if (state.moving) {
+    hint.hidden = false;
+    hint.innerHTML = `Tap where the <b>${state.moving === "ball" ? "ball" : "flag"}</b> should be.`;
+  } else if (state.dogleg) {
+    hint.hidden = false;
+    hint.innerHTML = "Tap each corner the ball has to go round, in order. Tap <b>Trace a dogleg</b> again when you're done.";
+  } else if (state.ball && state.pin) {
+    hint.hidden = true;
+  } else {
+    hint.hidden = false;
+    hint.innerHTML = "Tap <b>I'm at my ball</b> to drop your position, then tap the map where the flag is.";
+  }
+}
+
 function updateReadout() {
   const path = targetPath();
   const have = path.length >= 2;
@@ -231,12 +322,12 @@ async function markHere(what) {
   try {
     const p = await here();
     gmap.showMe(p, p.accuracy);
-    if (what === "ball") { state.ball = { lat: p.lat, lng: p.lng }; gmap.setBall(state.ball); }
-    else { state.pin = { lat: p.lat, lng: p.lng }; gmap.setPin(state.pin); }
+    if (what === "ball") state.ball = { lat: p.lat, lng: p.lng };
+    else state.pin = { lat: p.lat, lng: p.lng };
     state.rise = null;
+    redrawMarks();
     gmap.centerOn(p, 18);
     if (p.accuracy > 15) toast(`Your phone only has you to about ${Math.round(p.accuracy)} m, so treat the yardage loosely.`);
-    $("mapHint").hidden = !!(state.ball && state.pin);
     updateReadout();
   } catch (e) {
     toast(e.message);
@@ -335,8 +426,7 @@ async function hitIt() {
   state.ball = to;
   state.waypoints = [];
   state.rise = null;
-  gmap.setBall(to);
-  gmap.setWaypoints([]);
+  redrawMarks();
   gmap.showMe(landed, landed.accuracy);
   $("shotNo").value = String((Number($("shotNo").value) || 1) + 1);
 
@@ -456,18 +546,19 @@ async function main() {
   store = await createStore();
   gmap = createMap($("map"), {
     onMapTap(point) {
-      if (state.dogleg) {
-        state.waypoints.push(point);
-        gmap.setWaypoints([state.ball, ...state.waypoints, ...(state.pin ? [state.pin] : [])].filter(Boolean));
-      } else if (!state.ball) {
-        state.ball = point;
-        gmap.setBall(point);
-      } else {
-        state.pin = point;
-        gmap.setPin(point);
-        state.rise = null;
-      }
-      $("mapHint").hidden = !!(state.ball && state.pin);
+      if (state.moving === "ball") { state.ball = point; state.moving = null; }
+      else if (state.moving === "pin") { state.pin = point; state.moving = null; }
+      else if (state.dogleg) state.waypoints.push(point);
+      else if (!state.ball) state.ball = point;
+      else state.pin = point;
+      state.rise = null;
+      redrawMarks();
+      updateReadout();
+    },
+    onCornerTap(index) {
+      state.waypoints.splice(index, 1);
+      state.rise = null;
+      redrawMarks();
       updateReadout();
     },
   });
@@ -498,15 +589,16 @@ async function main() {
   on($("speakBtn"), "click", () => state.last?.ok && say(state.last.spoken));
   on($("doglegBtn"), "click", () => {
     state.dogleg = !state.dogleg;
+    if (state.dogleg) state.moving = null;
     $("doglegBtn").setAttribute("aria-pressed", String(state.dogleg));
-    $("mapHint").hidden = false;
-    $("mapHint").innerHTML = state.dogleg
-      ? "Tap each corner the ball has to go round, in order. Tap <b>Trace a dogleg</b> again when you're done."
-      : "Tap <b>I'm at my ball</b> to drop your position, then tap the map where the flag is.";
+    renderMarks();
+    setMapHint();
   });
-  on($("clearLineBtn"), "click", () => {
-    state.waypoints = [];
-    gmap.setWaypoints([]);
+  on($("undoCornerBtn"), "click", () => {
+    if (!state.waypoints.length) return toast("No corners to undo.");
+    state.waypoints.pop();
+    state.rise = null;
+    redrawMarks();
     updateReadout();
   });
   on($("layerBtn"), "click", () => {
