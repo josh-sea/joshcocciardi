@@ -22,7 +22,7 @@
     <div class="masthead">
       <div>
         <h1>The<em>Caddy</em></h1>
-        <p class="tagline">Stand where your ball is, mark where you're going, and it tells you the club and the target. Every shot you log teaches it how far you really hit.</p>
+        <p class="tagline">Tap once on the tee, play your shot, walk to your ball and tap again. It works out what is left from the par, picks you a club, and learns how far you really hit each one. The map is there when you want an exact yardage, and ignorable when you don't.</p>
       </div>
       <button class="iconbtn" id="voiceBtn" aria-pressed="true" title="Caddy's voice" aria-label="Toggle the caddy's voice">
         <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/></svg>
@@ -57,36 +57,18 @@
             <option selected>Blue</option><option>Black</option>
           </select>
         </label>
-        <label class="mini narrow"><span>Shot</span><input type="number" id="shotNo" min="1" max="12" value="1" inputmode="numeric"></label>
       </div>
     </div>
 
-    <div class="mapwrap">
-      <div id="map" aria-label="Course map"></div>
-      <div class="maptools">
-        <button class="maptool" id="layerBtn" title="Satellite or street">🛰️</button>
-        <button class="maptool" id="locateBtn" title="Find me">◎</button>
-      </div>
-      <div class="maphint" id="mapHint">Tap <b>I'm at my ball</b> to drop your position, then tap the map where the flag is.</div>
-    </div>
-
-    <div class="marks" id="marks" hidden></div>
+    <button class="bigbtn" id="goBtn">Start the hole</button>
+    <p class="bighint" id="goHint">Stand on the tee and tap. Then play your shot, walk to the ball, and tap again.</p>
 
     <div class="readout" id="readout" hidden>
-      <div class="stat"><b id="distFlat">--</b><span>Yards out</span></div>
+      <div class="stat"><b id="distLeft">--</b><span>Yards left</span></div>
       <div class="stat"><b id="distPlays">--</b><span>Plays like</span></div>
-      <div class="stat"><b id="distRise">--</b><span>Elevation</span></div>
+      <div class="stat"><b id="shotCount">--</b><span>Shots on this hole</span></div>
     </div>
-
-    <div class="actions tight">
-      <button class="btn primary" id="hereBtn">I'm at my ball</button>
-      <button class="btn" id="pinHereBtn">I'm at the flag</button>
-    </div>
-    <div class="actions tight">
-      <button class="btn ghost" id="doglegBtn" aria-pressed="false">Trace a dogleg</button>
-      <button class="btn ghost" id="undoCornerBtn">Undo corner</button>
-      <button class="btn ghost" id="elevBtn">Check elevation</button>
-    </div>
+    <p class="hint source" id="distSource" hidden></p>
 
     <section class="panel caddycard" id="caddyCard" hidden>
       <div class="caddytop">
@@ -99,16 +81,39 @@
       <p class="strategy" id="caddyStrategy"></p>
       <p class="aimtext" id="caddyAim"></p>
       <ul class="notes" id="caddyNotes"></ul>
-      <div class="actions tight">
-        <button class="btn" id="speakBtn">Say it</button>
-        <button class="btn primary" id="hitBtn">I hit it &rarr;</button>
-      </div>
+      <button class="btn" id="speakBtn">Say it</button>
     </section>
 
     <section class="panel" id="shotLog" hidden>
-      <h2>This hole</h2>
+      <div class="loghead">
+        <h2>This hole</h2>
+        <div class="holenav">
+          <button class="btn ghost tiny" id="prevHoleBtn">&larr; Hole</button>
+          <button class="btn ghost tiny" id="nextHoleBtn">Hole &rarr;</button>
+        </div>
+      </div>
       <ol class="shots" id="shotList"></ol>
+      <p class="hint">Change a club and the bag relearns from the new one. Fixing a point re-measures the shot.</p>
     </section>
+
+    <details class="mapbox" id="mapBox">
+      <summary>Map &middot; drop a flag for an exact yardage</summary>
+      <div class="mapwrap">
+        <div id="map" aria-label="Course map"></div>
+        <div class="maptools">
+          <button class="maptool" id="layerBtn" title="Satellite or street">🛰️</button>
+          <button class="maptool" id="locateBtn" title="Find me">◎</button>
+        </div>
+        <div class="maphint" id="mapHint">Tap the map where the flag is and the yardage stops being an estimate.</div>
+      </div>
+      <div class="marks" id="marks" hidden></div>
+      <div class="actions tight">
+        <button class="btn ghost" id="pinHereBtn">I'm at the flag</button>
+        <button class="btn ghost" id="doglegBtn" aria-pressed="false">Trace a dogleg</button>
+        <button class="btn ghost" id="undoCornerBtn">Undo corner</button>
+        <button class="btn ghost" id="elevBtn">Check elevation</button>
+      </div>
+    </details>
   </section>
 
   <!-- ───────────────────────── BAG ───────────────────────── -->
@@ -169,6 +174,7 @@
       <summary>What this knows and what it's guessing</summary>
       <p><b>Your distances.</b> The starting numbers come from Shot Scope's tracked-shot data for male golfers at 5, 15 and 25 handicap, picked because it is measured rather than self-reported — shot-tracking studies find golfers overestimate their own carry by 10 to 20 percent. Your skill level is turned into a handicap, and the table is interpolated for it. Those are carry numbers. A distance the caddy measures from two GPS marks is total: carry plus roll. Total is the honest number for "can I reach that", so once a club has three logged shots its measured number takes over, and the card tells you which one it used.</p>
       <p><b>Elevation.</b> Heights come from a terrain model, not your phone's altimeter, because GPS altitude is only good to tens of metres vertically. The terrain model does not know about a raised green. The adjustment uses TrackMan's one-to-one rule, a yard of distance per yard of climb; other rules in circulation are three times smaller, so treat it as a starting point.</p>
+      <p><b>How far is left.</b> Until you drop a flag, this is estimated: a typical hole length for the par you entered, scaled for the tees you are on, less the straight line from the tee to where your ball now sits. Straight line rather than the sum of your shots, because a sliced drive travels 200 yards without getting 200 yards closer. It is a decent guess on a normal hole and a poor one on a very long or very short hole, so drop a flag on the map when the number matters.</p>
       <p><b>Distance accuracy.</b> A phone's GPS is typically good to 3 to 10 metres, which is 3 to 11 yards. The accuracy circle on the map is the real one your phone reports. That is fine for picking between a 7 and an 8 iron and not fine for arguing about a yardage.</p>
       <p><b>What it cannot see.</b> Bunkers, water, trees, wind, lie and how the green sits. It measures ground you point at. It will happily send you straight over a lake, so look up.</p>
     </details>

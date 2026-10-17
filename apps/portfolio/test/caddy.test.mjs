@@ -8,12 +8,13 @@
 import {
   CLUB_CATALOG, STARTER_BAG, effectiveHandicap, baselineCarry,
   playingDistance, rankedBag, recordShot, rollingAverage, lifetimeAverage, believableShot,
+  measuredFromShots, bagWithMeasured,
 } from "../public/projects/swing-coach/golf/caddy/js/clubs.js";
 import {
   distance, bearing, destination, pathLength, pointAlongPath,
   yards, metres, feet, elevations, elevationAdjustmentYards,
 } from "../public/projects/swing-coach/golf/caddy/js/geo.js";
-import { recommend, shotsToGreen } from "../public/projects/swing-coach/golf/caddy/js/caddy.js";
+import { recommend, shotsToGreen, estimatedHoleYards, remainingYards } from "../public/projects/swing-coach/golf/caddy/js/caddy.js";
 
 let failed = 0;
 const check = (name, pass, extra = "") => {
@@ -220,6 +221,57 @@ check("it flags that a club distance is still a guess", r.notes.some((n) => /sti
 const taught = bag.map((c) => (c.id === r.club.id ? [1, 2, 3, 4].reduce((k) => recordShot(k, r.clubYards), c) : c));
 const r2 = recommend({ ...beginner, bag: taught, yardsToTarget: 150, par: 3, shotNumber: 1 });
 check("once taught, it stops saying so", !r2.notes.some((n) => /still an estimate/.test(n)), r2.source);
+
+console.log("\n── how long is the hole, without marking the flag ──");
+check("a par 3 is about 160 off the whites", estimatedHoleYards(3, "white") === 152, `${estimatedHoleYards(3, "white")}`);
+check("a par 4 off the blues is longer", estimatedHoleYards(4, "blue") > estimatedHoleYards(4, "white"));
+check("the reds play shortest", estimatedHoleYards(5, "red") < estimatedHoleYards(5, "gold"));
+check("the blacks play longest", estimatedHoleYards(5, "black") > estimatedHoleYards(5, "blue"));
+check("an odd par falls back to a par 4", estimatedHoleYards(9, "white") === estimatedHoleYards(4, "white"));
+check("an unknown tee just doesn't scale", estimatedHoleYards(4, "purple") === 380);
+const card = [3, 4, 5].map((p) => estimatedHoleYards(p, "white"));
+check("and the pars come out in order", card[0] < card[1] && card[1] < card[2], card.join(" / "));
+
+console.log("\n── what's left to the green ──");
+let rem = remainingYards({ par: 4, teeColor: "blue", progressYards: 0 });
+check("off the tee it is the whole hole", rem.yards === estimatedHoleYards(4, "blue"), `${rem.yards}`);
+check("and it says the number is an estimate", rem.source === "par" && /estimated/.test(rem.label));
+rem = remainingYards({ par: 4, teeColor: "blue", progressYards: 200 });
+check("after 200 yards of progress it is 200 shorter", rem.yards === estimatedHoleYards(4, "blue") - 200, `${rem.yards}`);
+check("it never goes negative", remainingYards({ par: 3, teeColor: "red", progressYards: 999 }).yards === 0);
+rem = remainingYards({ par: 4, teeColor: "blue", pinYards: 143, progressYards: 200 });
+check("a dropped pin overrides the estimate entirely", rem.yards === 143 && rem.source === "pin", `${rem.yards} ${rem.source}`);
+check("and says so", /flag you dropped/.test(rem.label));
+
+console.log("\n── club averages rebuilt from the shot log ──");
+const log = [
+  { club: "7i", yards: 118 }, { club: "7i", yards: 124 }, { club: "7i", yards: 121 },
+  { club: "driver", yards: 180 }, { club: "putter", yards: 4 },
+  { club: "7i", yards: 400 },                      // a mismark
+  { club: null, yards: 90 },                       // no club recorded
+];
+let stats = measuredFromShots(log, 25);
+check("good shots are counted", stats["7i"].count === 3, `${stats["7i"].count}`);
+check("the mismark is held back, not silently folded in", stats["7i"].rejected === 1);
+check("the average is of the real ones", Math.round(stats["7i"].sum / stats["7i"].count) === 121);
+check("putts never count", !stats.putter);
+check("nor do shots with no club", Object.keys(stats).length === 2, Object.keys(stats).join(","));
+
+// The whole point: change a shot's club afterwards and both move.
+const edited = log.map((s, i) => (i === 1 ? { ...s, club: "8i" } : s));
+stats = measuredFromShots(edited, 25);
+check("re-assigning a shot takes it off the old club", stats["7i"].count === 2);
+check("and puts it on the new one", stats["8i"].count === 1 && stats["8i"].sum === 124);
+const deleted = log.filter((_, i) => i !== 0);
+check("deleting a shot removes its yards for good", measuredFromShots(deleted, 25)["7i"].count === 2);
+
+const rebuilt = bagWithMeasured(bagOf(["7i", "driver", "putter"]), log, 25);
+check("the bag comes back with the log's numbers on it",
+  rebuilt.find((c) => c.id === "7i").measured.count === 3);
+check("and a club with no shots is left empty",
+  rebuilt.find((c) => c.id === "putter").measured.count === 0);
+check("the derived bag feeds straight into the distance model",
+  playingDistance(rebuilt.find((c) => c.id === "7i"), 25).source === "measured");
 
 console.log("\n── an empty bag ──");
 const none = recommend({ yardsToTarget: 150, par: 4, shotNumber: 1, bag: [], handicap: 20 });

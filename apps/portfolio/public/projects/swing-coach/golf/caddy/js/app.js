@@ -1,20 +1,24 @@
 /**
  * Caddy — the wiring.
  *
- * The shape of a hole: you stand at your ball, you say where you are going,
- * and the caddy reads the distance off the map and picks a club. When you hit,
- * you mark where it finished, which both advances the hole and teaches the bag
- * one more real number about that club.
+ * One button carries the hole. Tap on the tee, play your shot, walk to the
+ * ball, tap again: that logs the shot and sets up the next one. Everything
+ * else — which club it actually was, where the shot really started and
+ * finished, where the flag is — is editable afterwards, because fiddling
+ * with a map while three people wait on you is not a thing anyone does.
+ *
+ * Distances come from par and the tee you are on until you drop a flag, at
+ * which point the real measurement takes over.
  */
 
 import { createStore, uuid } from "./store.js";
 import {
-  CLUB_CATALOG, STARTER_BAG, effectiveHandicap, playingDistance, recordShot, believableShot,
-  lifetimeAverage, rollingAverage,
+  CLUB_CATALOG, STARTER_BAG, effectiveHandicap, playingDistance,
+  lifetimeAverage, rollingAverage, bagWithMeasured, clubLabel,
 } from "./clubs.js";
 import { createMap } from "./map.js";
 import { distance, pathLength, pointAlongPath, elevations, elevationAdjustmentYards, yards, metres, feet } from "./geo.js";
-import { recommend } from "./caddy.js";
+import { recommend, remainingYards, estimatedHoleYards } from "./caddy.js";
 
 const $ = (id) => document.getElementById(id);
 const on = (el, ev, fn) => el && el.addEventListener(ev, fn);
@@ -25,19 +29,26 @@ const state = {
   profile: { skill: "beginner", handicap: null, avgScore: null, bestScore: null, prefer: "lifetime", voice: true },
   bag: [],
   round: null,
-  shots: [],            // shots in the current round
-  ball: null,           // {lat,lng}
+  shots: [],          // every shot in the round, oldest first
+  tee: null,          // where this hole started
+  ball: null,         // where the ball is now
   pin: null,
-  waypoints: [],        // extra dogleg corners between ball and pin
-  rise: null,           // metres the pin sits above the ball, or null if unchecked
+  waypoints: [],
+  rise: null,
   dogleg: false,
-  moving: null,        // a mark armed for repositioning by the next tap
-  last: null,           // the last recommendation shown
-  watchId: null,
+  moving: null,       // "pin", or {shot: id, end: "from"|"to"}
+  last: null,
 };
 
 let store = null;
 let gmap = null;
+
+const hole = () => Number($("holeNo").value) || 1;
+const par = () => Number($("holePar").value) || 4;
+const tee = () => $("teeColor").value || "White";
+const handicap = () => effectiveHandicap(state.profile);
+const distOpts = () => ({ prefer: state.profile.prefer });
+const holeShots = () => state.shots.filter((s) => s.hole === hole());
 
 /* ---------------- chrome ---------------- */
 
@@ -47,7 +58,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 4800);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 5000);
 }
 
 function say(text) {
@@ -73,14 +84,35 @@ function setSync() {
   btn.textContent = cloud ? "Sign out" : "Sign in";
 }
 
+/* ---------------- geolocation ---------------- */
+
+function here({ timeout = 12000 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("This browser will not share a location."));
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+      (e) => reject(new Error(
+        e.code === e.PERMISSION_DENIED
+          ? "Location is blocked for this site. Allow it and try again."
+          : e.code === e.TIMEOUT ? "Could not get a fix in time. Try again out in the open."
+          : "Could not read your location.")),
+      { enableHighAccuracy: true, timeout, maximumAge: 2000 }
+    );
+  });
+}
+
 /* ---------------- the bag ---------------- */
 
 function defaultBag() {
-  return CLUB_CATALOG.map((c) => ({ ...c, inBag: STARTER_BAG.includes(c.id), measured: { count: 0, sum: 0, recent: [] } }));
+  return CLUB_CATALOG.map((c) => ({ ...c, inBag: STARTER_BAG.includes(c.id) }));
 }
 
-const handicap = () => effectiveHandicap(state.profile);
-const distOpts = () => ({ prefer: state.profile.prefer });
+/** The bag's own numbers are a projection of the shot log, so rebuild on any change. */
+function refreshBag() {
+  state.bag = bagWithMeasured(state.bag, state.shots, handicap());
+  renderBag();
+  renderLearned();
+}
 
 function renderBag() {
   const list = $("clubList");
@@ -117,6 +149,7 @@ function renderBag() {
         club.carryOverride = Number.isFinite(v) && v > 0 ? v : null;
         await store.saveBag(state.bag);
         renderBag();
+        updateCaddy();
       });
       const unit = document.createElement("small");
       unit.textContent = "yds";
@@ -129,6 +162,7 @@ function renderBag() {
       club.inBag = e.target.checked;
       await store.saveBag(state.bag);
       renderBag();
+      updateCaddy();
     });
     list.appendChild(row);
   }
@@ -147,15 +181,15 @@ function renderSkill() {
       : `Starting distances are interpolated from tracked-shot data for a ${Math.round(h)} handicap. Log shots and these get replaced by your own.`;
 }
 
-/* ---------------- distances and the recommendation ---------------- */
+/* ---------------- the map, which is now optional ---------------- */
 
 function targetPath() {
   if (!state.ball) return [];
   return [state.ball, ...state.waypoints, ...(state.pin ? [state.pin] : [])];
 }
 
-/** Push the current marks back onto the map. Called after any edit. */
 function redrawMarks() {
+  if (!gmap) return;
   gmap.setBall(state.ball);
   gmap.setPin(state.pin);
   gmap.setPath(targetPath(), state.waypoints);
@@ -163,15 +197,9 @@ function redrawMarks() {
   setMapHint();
 }
 
-/**
- * A chip per mark, each with a way to take it back. Marking the ball or the
- * flag in the wrong place is the easiest mistake to make out there, and
- * before this there was no way to undo one short of reloading.
- */
 function renderMarks() {
   const row = $("marks");
   const chips = [];
-  if (state.ball) chips.push(["ball", "⛳", "Ball"]);
   if (state.pin) chips.push(["pin", "🚩", "Flag"]);
   if (state.waypoints.length) {
     chips.push(["corners", "↳", `${state.waypoints.length} corner${state.waypoints.length === 1 ? "" : "s"}`]);
@@ -185,82 +213,87 @@ function renderMarks() {
       (key === "corners" ? "" : `<button class="mv" type="button"></button>`) +
       `<button class="x" type="button"></button>`;
     chip.querySelector("b").textContent = label;
-
     const mv = chip.querySelector(".mv");
     if (mv) {
       mv.textContent = state.moving === key ? "cancel" : "move";
-      mv.setAttribute("aria-label", `Move the ${label.toLowerCase()}`);
       on(mv, "click", () => {
         state.moving = state.moving === key ? null : key;
-        if (state.moving) {
-          state.dogleg = false;
-          $("doglegBtn").setAttribute("aria-pressed", "false");
-        }
+        if (state.moving) { state.dogleg = false; $("doglegBtn").setAttribute("aria-pressed", "false"); }
         renderMarks();
         setMapHint();
       });
     }
-
     const x = chip.querySelector(".x");
     x.textContent = "×";
     x.setAttribute("aria-label", `Remove ${label.toLowerCase()}`);
     on(x, "click", () => clearMark(key));
     row.appendChild(chip);
   }
-  if (chips.length) {
-    const hint = document.createElement("span");
-    hint.className = "chip hint";
-    hint.textContent = state.moving
-      ? `tap the map to move the ${state.moving === "ball" ? "ball" : "flag"}`
-      : "move or remove any mark";
-    row.appendChild(hint);
-  }
 }
 
 function clearMark(which) {
-  if (which === "ball") state.ball = null;
-  else if (which === "pin") state.pin = null;
+  if (which === "pin") state.pin = null;
   else if (which === "corners") state.waypoints = [];
   if (state.moving === which) state.moving = null;
   state.rise = null;
   redrawMarks();
-  updateReadout();
+  updateCaddy();
 }
 
-/** The line under the map, which changes with whatever mode you're in. */
 function setMapHint() {
-  const hint = $("mapHint");
-  if (state.moving) {
-    hint.hidden = false;
-    hint.innerHTML = `Tap where the <b>${state.moving === "ball" ? "ball" : "flag"}</b> should be.`;
+  const h = $("mapHint");
+  if (typeof state.moving === "object" && state.moving) {
+    h.hidden = false;
+    h.innerHTML = `Tap where that shot <b>${state.moving.end === "from" ? "started" : "finished"}</b>.`;
+  } else if (state.moving === "pin") {
+    h.hidden = false;
+    h.innerHTML = "Tap where the <b>flag</b> is.";
   } else if (state.dogleg) {
-    hint.hidden = false;
-    hint.innerHTML = "Tap each corner the ball has to go round, in order. Tap <b>Trace a dogleg</b> again when you're done.";
-  } else if (state.ball && state.pin) {
-    hint.hidden = true;
+    h.hidden = false;
+    h.innerHTML = "Tap each corner the ball has to go round, in order.";
+  } else if (state.pin) {
+    h.hidden = true;
   } else {
-    hint.hidden = false;
-    hint.innerHTML = "Tap <b>I'm at my ball</b> to drop your position, then tap the map where the flag is.";
+    h.hidden = false;
+    h.innerHTML = "Tap the map where the flag is and the yardage stops being an estimate.";
   }
 }
 
-function updateReadout() {
-  const path = targetPath();
-  const have = path.length >= 2;
-  $("readout").hidden = !have;
-  if (!have) { $("caddyCard").hidden = true; gmap.setAimLine(null, null); gmap.setAim(null); return;}
+/* ---------------- what's left, and what to hit ---------------- */
 
-  const flat = yards(pathLength(path));
+/** Straight line from the tee to the ball: how much of the hole is behind you. */
+function progressYards() {
+  if (!state.tee || !state.ball) return 0;
+  return yards(distance(state.tee, state.ball));
+}
+
+function updateCaddy() {
+  const shots = holeShots();
+  const started = !!state.ball;
+  $("readout").hidden = !started;
+  $("distSource").hidden = !started;
+  $("shotLog").hidden = !started;
+  $("caddyCard").hidden = !started;
+  if (!started) { $("goHint").hidden = false; return; }
+  $("goHint").hidden = true;
+
+  const pinYards = state.pin ? yards(pathLength(targetPath())) : null;
+  const left = remainingYards({
+    par: par(), teeColor: tee(), pinYards, progressYards: progressYards(),
+  });
   const riseYds = state.rise == null ? 0 : elevationAdjustmentYards(state.rise);
-  $("distFlat").textContent = Math.round(flat);
-  $("distPlays").textContent = Math.round(flat + riseYds);
-  $("distRise").textContent = state.rise == null ? "—" : `${state.rise >= 0 ? "+" : "−"}${Math.abs(Math.round(feet(state.rise)))} ft`;
+
+  $("distLeft").textContent = left.yards;
+  $("distPlays").textContent = Math.max(0, Math.round(left.yards + riseYds));
+  $("shotCount").textContent = shots.length;
+  $("distSource").textContent =
+    left.label + (state.rise == null ? "" : `. The green sits about ${Math.abs(Math.round(feet(state.rise)))} ft ${state.rise >= 0 ? "above" : "below"} you.`);
 
   const rec = recommend({
-    yardsToTarget: flat,
+    yardsToTarget: left.yards,
     riseYards: riseYds,
-    par: Number($("holePar").value) || 4,
-    shotNumber: Number($("shotNo").value) || 1,
+    par: par(),
+    shotNumber: shots.length + 1,
     bag: state.bag,
     handicap: handicap(),
     skill: state.profile.skill,
@@ -268,9 +301,7 @@ function updateReadout() {
   });
   state.last = rec;
 
-  const card = $("caddyCard");
   if (!rec.ok) {
-    card.hidden = false;
     $("caddyClub").textContent = "No clubs yet";
     $("caddyYards").textContent = "--";
     $("caddySource").textContent = "";
@@ -280,7 +311,6 @@ function updateReadout() {
     return;
   }
 
-  card.hidden = false;
   $("caddyClub").textContent = rec.clubLabel;
   $("caddyYards").textContent = `${rec.clubYards}y`;
   $("caddySource").textContent = rec.sourceLabel;
@@ -294,168 +324,191 @@ function updateReadout() {
     notes.appendChild(li);
   }
 
-  // Put the aim marker where the ball should finish, measured along the line
-  // you traced, so a dogleg aims at the corner rather than through the trees.
-  const aimAt = pointAlongPath(path, metres(rec.targetYards));
-  gmap.setAim(aimAt);
-  gmap.setAimLine(state.ball, aimAt);
+  if (gmap && state.pin) {
+    const aimAt = pointAlongPath(targetPath(), metres(rec.targetYards));
+    gmap.setAim(aimAt);
+    gmap.setAimLine(state.ball, aimAt);
+  } else if (gmap) {
+    gmap.setAim(null);
+    gmap.setAimLine(null, null);
+  }
 }
 
-/* ---------------- geolocation ---------------- */
+/* ---------------- the one button ---------------- */
 
-function here({ timeout = 12000 } = {}) {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) return reject(new Error("This browser will not share a location."));
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
-      (e) => reject(new Error(
-        e.code === e.PERMISSION_DENIED
-          ? "Location is blocked for this site. Allow it and try again."
-          : e.code === e.TIMEOUT ? "Could not get a fix in time. Try again in the open."
-          : "Could not read your location.")),
-      { enableHighAccuracy: true, timeout, maximumAge: 2000 }
-    );
-  });
+function setGoButton() {
+  $("goBtn").textContent = state.ball ? "I'm at my ball" : "Start the hole";
 }
 
-async function markHere(what) {
+async function go() {
+  const btn = $("goBtn");
+  btn.disabled = true;
   try {
     const p = await here();
-    gmap.showMe(p, p.accuracy);
-    if (what === "ball") state.ball = { lat: p.lat, lng: p.lng };
-    else state.pin = { lat: p.lat, lng: p.lng };
-    state.rise = null;
-    redrawMarks();
-    gmap.centerOn(p, 18);
+    const point = { lat: p.lat, lng: p.lng };
+    if (gmap) { gmap.showMe(p, p.accuracy); gmap.centerOn(p, 18); }
     if (p.accuracy > 15) toast(`Your phone only has you to about ${Math.round(p.accuracy)} m, so treat the yardage loosely.`);
-    updateReadout();
+
+    if (!state.ball) {
+      state.tee = point;
+      state.ball = point;
+      redrawMarks();
+      setGoButton();
+      updateCaddy();
+      renderShots();
+      say(`Hole ${hole()}, par ${par()}.`);
+      return;
+    }
+
+    const from = state.ball;
+    const went = Math.round(yards(distance(from, point)));
+    if (went < 5) {
+      return toast("That's less than five yards from where you hit. Walk to the ball first, then tap.");
+    }
+
+    await ensureRound();
+    const club = state.last?.ok ? state.last.club : null;
+    const shot = await store.saveShot({
+      id: uuid(),
+      roundId: state.round.id,
+      hole: hole(), par: par(), teeColor: tee(),
+      shotNumber: holeShots().length + 1,
+      club: club?.id || null,
+      recommendedYards: state.last?.ok ? state.last.clubYards : null,
+      from, to: point,
+      yards: went,
+      accuracy: p.accuracy,
+      createdAt: Date.now(),
+    });
+    state.shots.push(shot);
+    state.ball = point;
+    state.waypoints = [];
+    state.rise = null;
+
+    redrawMarks();
+    refreshBag();
+    renderShots();
+    updateCaddy();
+    toast(`${went} yards${club ? ` with the ${club.label}` : ""}. Tap the club below if that wasn't it.`);
+    say(`${went} yards.`);
   } catch (e) {
     toast(e.message);
-  }
-}
-
-async function checkElevation() {
-  const path = targetPath();
-  if (path.length < 2) return toast("Mark your ball and the flag first.");
-  try {
-    $("elevBtn").disabled = true;
-    const [ballEl, pinEl] = await elevations([path[0], path[path.length - 1]]);
-    state.rise = pinEl - ballEl;
-    updateReadout();
-    const ft = Math.round(feet(state.rise));
-    toast(Math.abs(ft) < 3
-      ? "The green is about level with you."
-      : `The green sits about ${Math.abs(ft)} ft ${ft > 0 ? "above" : "below"} you, so it plays ${ft > 0 ? "longer" : "shorter"}.`);
-  } catch (e) {
-    toast(`Could not look up the elevation: ${e.message}`);
   } finally {
-    $("elevBtn").disabled = false;
+    btn.disabled = false;
+    setGoButton();
   }
 }
-
-/* ---------------- playing a hole ---------------- */
 
 async function ensureRound() {
   if (state.round) return state.round;
   state.round = await store.saveRound({
     id: uuid(),
     course: $("courseName").value.trim() || "Unnamed course",
-    teeColor: $("teeColor").value,
+    teeColor: tee(),
     startedAt: Date.now(),
-    shots: 0,
   });
   return state.round;
 }
 
-async function hitIt() {
-  if (!state.ball) return toast("Mark where your ball is first.");
-  const rec = state.last;
-  let landed;
-  try {
-    landed = await here();
-  } catch (e) {
-    return toast(`${e.message} Walk to the ball and try again, or tap the map where it finished.`);
-  }
-
-  const from = state.ball;
-  const to = { lat: landed.lat, lng: landed.lng };
-  const wentYards = Math.round(yards(distance(from, to)));
-
-  if (wentYards < 5) {
-    return toast("That's less than five yards from where you hit it. Walk to the ball first, then tap this.");
-  }
-
-  await ensureRound();
-  const club = rec?.ok ? rec.club : null;
-  const shot = await store.saveShot({
-    id: uuid(),
-    roundId: state.round.id,
-    hole: Number($("holeNo").value) || 1,
-    par: Number($("holePar").value) || 4,
-    teeColor: $("teeColor").value,
-    shotNumber: Number($("shotNo").value) || 1,
-    club: club?.id || null,
-    clubLabel: club?.label || null,
-    recommendedYards: rec?.ok ? rec.clubYards : null,
-    playsLike: rec?.ok ? rec.playsLike : null,
-    from, to,
-    yards: wentYards,
-    accuracy: landed.accuracy,
-    createdAt: Date.now(),
-  });
-  state.shots.push(shot);
-
-  // Teach the bag, but only from a shot that could plausibly be this club.
-  let rejected = null;
-  if (club && club.id !== "putter" && wentYards >= 25) {
-    const i = state.bag.findIndex((c) => c.id === club.id);
-    if (i >= 0) {
-      const expected = playingDistance(state.bag[i], handicap(), distOpts())?.yards;
-      const verdict = believableShot(wentYards, expected);
-      if (verdict.ok) {
-        state.bag[i] = recordShot(state.bag[i], wentYards);
-        await store.saveBag(state.bag);
-        renderBag();
-      } else {
-        rejected = verdict.why;
-      }
-    }
-  }
-
-  // The ball is where you now stand, and you're one shot further along.
-  state.ball = to;
-  state.waypoints = [];
-  state.rise = null;
-  redrawMarks();
-  gmap.showMe(landed, landed.accuracy);
-  $("shotNo").value = String((Number($("shotNo").value) || 1) + 1);
-
-  renderShots();
-  updateReadout();
-
-  if (rejected) {
-    toast(`Logged ${wentYards} yards, but not added to your ${club.label} average: ${rejected}. Check you marked the right spot.`);
-  } else {
-    const vs = rec?.ok ? ` The caddy had that club at ${rec.clubYards}.` : "";
-    toast(`${wentYards} yards with the ${club?.label || "club"}.${vs}`);
-  }
-  say(`${wentYards} yards.`);
-}
+/* ---------------- the shot list, which is where editing happens ---------------- */
 
 function renderShots() {
   const list = $("shotList");
-  const mine = state.shots.filter((s) => s.hole === (Number($("holeNo").value) || 1));
-  $("shotLog").hidden = !mine.length;
+  const shots = holeShots();
   list.innerHTML = "";
-  for (const s of mine) {
+  for (const s of shots) {
     const li = document.createElement("li");
+    li.className = "shot";
     const gap = Number.isFinite(s.recommendedYards) ? s.yards - s.recommendedYards : null;
-    li.innerHTML = `<b></b> <span class="vs"></span>`;
-    li.querySelector("b").textContent = `${s.clubLabel || "Club"} — ${s.yards} yds`;
+    li.innerHTML = `
+      <div class="shotmain">
+        <select class="clubpick" aria-label="Club used"></select>
+        <b class="yds"></b>
+      </div>
+      <div class="shotmeta"><span class="vs"></span></div>
+      <div class="shotedit">
+        <button class="btn ghost tiny" data-end="from">Fix start</button>
+        <button class="btn ghost tiny" data-end="to">Fix end</button>
+        <button class="btn ghost tiny danger" data-del="1">Delete</button>
+      </div>`;
+
+    const pick = li.querySelector(".clubpick");
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "No club";
+    pick.appendChild(none);
+    for (const c of state.bag.filter((c) => c.inBag !== false)) {
+      const o = document.createElement("option");
+      o.value = c.id;
+      o.textContent = c.label;
+      pick.appendChild(o);
+    }
+    pick.value = s.club || "";
+    on(pick, "change", async () => {
+      s.club = pick.value || null;
+      await store.saveShot(s);
+      refreshBag();
+      renderShots();
+      updateCaddy();
+    });
+
+    li.querySelector(".yds").textContent = `${s.yards} yds`;
     li.querySelector(".vs").textContent =
-      gap === null ? "" : `(caddy said ${s.recommendedYards}, you went ${gap >= 0 ? "+" : ""}${gap})`;
+      gap === null ? "" : `caddy said ${s.recommendedYards} · you went ${gap >= 0 ? "+" : ""}${gap}`;
+
+    for (const b of li.querySelectorAll("[data-end]")) {
+      on(b, "click", () => {
+        state.moving = { shot: s.id, end: b.dataset.end };
+        state.dogleg = false;
+        $("mapBox").open = true;
+        gmap?.invalidate();
+        setMapHint();
+        renderMarks();
+        toast(`Tap the map where that shot ${b.dataset.end === "from" ? "started" : "finished"}.`);
+      });
+    }
+    on(li.querySelector("[data-del]"), "click", () => deleteShot(s.id));
     list.appendChild(li);
   }
+}
+
+/** Keep each shot starting where the last one finished. */
+function relinkHole() {
+  const shots = holeShots();
+  shots.forEach((s, i) => {
+    if (i > 0) s.from = shots[i - 1].to;
+    s.shotNumber = i + 1;
+    s.yards = Math.round(yards(distance(s.from, s.to)));
+  });
+  state.tee = shots[0]?.from || state.tee;
+  state.ball = shots[shots.length - 1]?.to || state.tee;
+  return shots;
+}
+
+async function commitHole(shots) {
+  for (const s of shots) await store.saveShot(s);
+  redrawMarks();
+  refreshBag();
+  renderShots();
+  updateCaddy();
+}
+
+async function moveShotEnd(shotId, end, point) {
+  const s = state.shots.find((x) => x.id === shotId);
+  if (!s) return;
+  s[end] = point;
+  await commitHole(relinkHole());
+  toast(`Shot re-measured: ${s.yards} yards.`);
+}
+
+async function deleteShot(id) {
+  const s = state.shots.find((x) => x.id === id);
+  if (!s) return;
+  state.shots = state.shots.filter((x) => x.id !== id);
+  await store.deleteShot(id);
+  const shots = relinkHole();
+  if (!shots.length) { state.ball = state.tee; }
+  await commitHole(shots);
 }
 
 /* ---------------- history ---------------- */
@@ -464,14 +517,15 @@ function renderLearned() {
   const el = $("learned");
   const taught = state.bag.filter((c) => (c.measured?.count || 0) > 0);
   if (!taught.length) {
-    el.innerHTML = `<p class="empty-note">Nothing logged yet. Play a hole and mark where your ball ends up, and the numbers start landing here.</p>`;
+    el.innerHTML = `<p class="empty-note">Nothing logged yet. Play a hole and the numbers start landing here.</p>`;
     return;
   }
   const rows = taught.map((c) => {
     const est = playingDistance({ ...c, carryOverride: null, measured: { count: 0, sum: 0, recent: [] } }, handicap());
+    const rej = c.measured.rejected || 0;
     return `<tr>
       <td>${c.label}</td>
-      <td class="num">${c.measured.count}</td>
+      <td class="num">${c.measured.count}${rej ? ` <span class="rej">+${rej}?</span>` : ""}</td>
       <td class="num">${est?.yards ?? "—"}</td>
       <td class="num measured">${lifetimeAverage(c)}</td>
       <td class="num">${rollingAverage(c) ?? "—"}</td>
@@ -480,7 +534,7 @@ function renderLearned() {
   el.innerHTML = `<table>
     <thead><tr><th>Club</th><th class="num">Shots</th><th class="num">Estimate</th><th class="num">Lifetime</th><th class="num">Last 5</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <p class="hint" style="margin-top:10px">Estimate is what the chart predicted for your skill level. Lifetime and last five are yours, measured ground to ground, so they include roll.</p>`;
+    <p class="hint" style="margin-top:10px">Estimate is what the chart predicted for your skill level. Lifetime and last five are yours, measured ground to ground, so they include roll. A number in orange is a shot held back as an unlikely mark.</p>`;
 }
 
 async function renderRounds() {
@@ -489,29 +543,34 @@ async function renderRounds() {
   if (!rounds.length) { el.innerHTML = `<p class="empty-note">No rounds yet.</p>`; return; }
   const all = await store.listShots();
   el.innerHTML = rounds.map((r) => {
-    const n = all.filter((s) => s.roundId === r.id).length;
+    const mine = all.filter((s) => s.roundId === r.id);
+    const holes = new Set(mine.map((s) => s.hole)).size;
     const when = new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-    return `<div class="roundrow"><div>${r.course}<br><span>${when} · ${r.teeColor} tees</span></div><div>${n} shot${n === 1 ? "" : "s"}</div></div>`;
+    return `<div class="roundrow"><div>${r.course}<br><span>${when} · ${r.teeColor} tees</span></div><div>${mine.length} shot${mine.length === 1 ? "" : "s"}<br><span>${holes} hole${holes === 1 ? "" : "s"}</span></div></div>`;
   }).join("");
 }
 
 /* ---------------- boot ---------------- */
 
 async function load() {
-  const [profile, bag] = await Promise.all([store.getProfile(), store.getBag()]);
+  const [profile, bag, shots] = await Promise.all([store.getProfile(), store.getBag(), store.listShots()]);
   if (profile) state.profile = { ...state.profile, ...profile };
-  state.bag = bag?.length
+  state.shots = shots || [];
+  const saved = bag?.length
     ? CLUB_CATALOG.map((c) => ({ ...c, ...(bag.find((b) => b.id === c.id) || { inBag: STARTER_BAG.includes(c.id) }) }))
     : defaultBag();
+  state.bag = saved;
   if (!bag?.length) await store.saveBag(state.bag);
   $("voiceBtn").setAttribute("aria-pressed", String(state.profile.voice !== false));
   if (Number.isFinite(state.profile.avgScore)) $("avgScore").value = state.profile.avgScore;
   if (Number.isFinite(state.profile.bestScore)) $("bestScore").value = state.profile.bestScore;
   if (Number.isFinite(state.profile.handicap)) $("handicap").value = state.profile.handicap;
   renderSkill();
-  renderBag();
-  renderLearned();
+  refreshBag();
+  renderShots();
   await renderRounds();
+  setGoButton();
+  updateCaddy();
 }
 
 const saveProfile = () => store.saveProfile(state.profile);
@@ -528,65 +587,84 @@ function wireTabs() {
 }
 
 async function main() {
-  // Leaflet comes off a CDN as a plain script. If that is blocked or the
-  // network died mid-load, say so rather than throwing a bare ReferenceError
-  // from inside the map and taking the whole caddy down with it.
   if (typeof L === "undefined") {
     $("map").innerHTML =
       `<div class="maploadfail"><strong>The map could not load.</strong>` +
       `<span>Leaflet is served from a CDN and this network did not hand it over. ` +
-      `The bag and your history still work; the course map needs a connection.</span></div>`;
+      `The hole, the caddy and your history all still work — you just cannot drop a flag.</span></div>`;
     store = await createStore();
     setSync();
     await load();
     wireTabs();
+    wireRest();
     return;
   }
 
   store = await createStore();
   gmap = createMap($("map"), {
     onMapTap(point) {
-      if (state.moving === "ball") { state.ball = point; state.moving = null; }
-      else if (state.moving === "pin") { state.pin = point; state.moving = null; }
+      if (typeof state.moving === "object" && state.moving) {
+        const { shot, end } = state.moving;
+        state.moving = null;
+        moveShotEnd(shot, end, point);
+        return;
+      }
+      if (state.moving === "pin") { state.pin = point; state.moving = null; }
       else if (state.dogleg) state.waypoints.push(point);
-      else if (!state.ball) state.ball = point;
       else state.pin = point;
       state.rise = null;
       redrawMarks();
-      updateReadout();
+      updateCaddy();
     },
     onCornerTap(index) {
       state.waypoints.splice(index, 1);
       state.rise = null;
       redrawMarks();
-      updateReadout();
+      updateCaddy();
     },
   });
   gmap.invalidate();
 
   store.onAuth?.(async (user) => {
     setSync();
-    if (user) {
-      try { await store.adoptLocal(); } catch (e) { console.warn("[Caddy] adopt failed:", e.message); }
-    }
+    if (user) { try { await store.adoptLocal(); } catch (e) { console.warn("[Caddy] adopt failed:", e.message); } }
     await load();
   });
   setSync();
   await load();
 
-  // Drop the map on the player's rough position so the first tap is near home.
   here({ timeout: 8000 })
     .then((p) => { gmap.showMe(p, p.accuracy); gmap.centerOn(p, 16); })
-    .catch(() => { /* they can search by hand; no need to shout about it */ });
+    .catch(() => { /* they can start the hole and it will ask again */ });
 
   wireTabs();
+  wireRest();
+}
 
-  /* play */
-  on($("hereBtn"), "click", () => markHere("ball"));
-  on($("pinHereBtn"), "click", () => markHere("pin"));
-  on($("elevBtn"), "click", checkElevation);
-  on($("hitBtn"), "click", hitIt);
+function wireRest() {
+  on($("goBtn"), "click", go);
   on($("speakBtn"), "click", () => state.last?.ok && say(state.last.spoken));
+
+  for (const [id, delta] of [["prevHoleBtn", -1], ["nextHoleBtn", 1]]) {
+    on($(id), "click", () => {
+      const next = Math.max(1, Math.min(36, hole() + delta));
+      $("holeNo").value = String(next);
+      startFreshHole();
+    });
+  }
+  on($("holeNo"), "change", startFreshHole);
+  for (const id of ["holePar", "teeColor"]) on($(id), "change", updateCaddy);
+
+  on($("pinHereBtn"), "click", async () => {
+    try {
+      const p = await here();
+      state.pin = { lat: p.lat, lng: p.lng };
+      state.rise = null;
+      gmap?.showMe(p, p.accuracy);
+      redrawMarks();
+      updateCaddy();
+    } catch (e) { toast(e.message); }
+  });
   on($("doglegBtn"), "click", () => {
     state.dogleg = !state.dogleg;
     if (state.dogleg) state.moving = null;
@@ -599,8 +677,9 @@ async function main() {
     state.waypoints.pop();
     state.rise = null;
     redrawMarks();
-    updateReadout();
+    updateCaddy();
   });
+  on($("elevBtn"), "click", checkElevation);
   on($("layerBtn"), "click", () => {
     const now = gmap.setLayer(gmap.layer === "satellite" ? "street" : "satellite");
     $("layerBtn").textContent = now === "satellite" ? "🛰️" : "🗺️";
@@ -609,34 +688,31 @@ async function main() {
     try { const p = await here(); gmap.showMe(p, p.accuracy); gmap.centerOn(p, 18); }
     catch (e) { toast(e.message); }
   });
-  for (const id of ["holePar", "shotNo"]) on($(id), "change", updateReadout);
-  on($("holeNo"), "change", renderShots);
+  on($("mapBox"), "toggle", () => gmap?.invalidate());
 
-  /* bag */
   on($("skillSeg"), "click", async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
     state.profile.skill = btn.dataset.skill;
     await saveProfile();
-    renderSkill(); renderBag(); renderLearned(); updateReadout();
+    renderSkill(); refreshBag(); updateCaddy();
   });
   on($("preferSeg"), "click", async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
     state.profile.prefer = btn.dataset.prefer;
     await saveProfile();
-    renderSkill(); renderBag(); renderLearned(); updateReadout();
+    renderSkill(); refreshBag(); updateCaddy();
   });
   for (const [id, key] of [["avgScore", "avgScore"], ["bestScore", "bestScore"], ["handicap", "handicap"]]) {
     on($(id), "change", async () => {
       const v = Number($(id).value);
       state.profile[key] = Number.isFinite(v) && $(id).value !== "" ? v : null;
       await saveProfile();
-      renderSkill(); renderBag(); renderLearned(); updateReadout();
+      renderSkill(); refreshBag(); updateCaddy();
     });
   }
 
-  /* chrome */
   on($("voiceBtn"), "click", async () => {
     state.profile.voice = !(state.profile.voice !== false);
     $("voiceBtn").setAttribute("aria-pressed", String(state.profile.voice));
@@ -672,8 +748,43 @@ async function main() {
   });
 }
 
+/** Moving to another hole starts its own tee, ball and flag from nothing. */
+function startFreshHole() {
+  const shots = holeShots();
+  state.tee = shots[0]?.from || null;
+  state.ball = shots[shots.length - 1]?.to || null;
+  state.pin = null;
+  state.waypoints = [];
+  state.rise = null;
+  state.moving = null;
+  redrawMarks();
+  setGoButton();
+  renderShots();
+  updateCaddy();
+}
+
+async function checkElevation() {
+  const path = targetPath();
+  if (path.length < 2) return toast("Drop a flag first — elevation needs two points.");
+  try {
+    $("elevBtn").disabled = true;
+    const [ballEl, pinEl] = await elevations([path[0], path[path.length - 1]]);
+    state.rise = pinEl - ballEl;
+    updateCaddy();
+    const ft = Math.round(feet(state.rise));
+    toast(Math.abs(ft) < 3
+      ? "The green is about level with you."
+      : `The green sits about ${Math.abs(ft)} ft ${ft > 0 ? "above" : "below"} you, so it plays ${ft > 0 ? "longer" : "shorter"}.`);
+  } catch (e) {
+    toast(`Could not look up the elevation: ${e.message}`);
+  } finally {
+    $("elevBtn").disabled = false;
+  }
+}
+
 main().catch((e) => {
   console.error(e);
-  document.getElementById("toast").textContent = `The caddy failed to start: ${e.message}`;
-  document.getElementById("toast").classList.add("show");
+  const t = document.getElementById("toast");
+  t.textContent = `The caddy failed to start: ${e.message}`;
+  t.classList.add("show");
 });

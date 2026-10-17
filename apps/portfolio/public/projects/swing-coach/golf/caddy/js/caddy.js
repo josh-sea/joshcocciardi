@@ -156,3 +156,57 @@ export function recommend({
 }
 
 export { clubLabel, playingDistance };
+
+/* ==================================================================
+   Playing a hole without marking the flag
+   ------------------------------------------------------------------
+   Most of the time you do not want to fiddle with a map. Par plus the
+   tee you are on is enough to estimate how long the hole is, and the
+   straight line from the tee to where your ball now sits is enough to
+   estimate how much of it you have covered. Drop a pin and the real
+   measurement takes over.
+   ================================================================== */
+
+/**
+ * Typical length of a hole at each par, from the middle tees.
+ *
+ * The USGA defines par by effective playing length — for men, up to 250
+ * yards is a par 3, 251 to 470 a par 4, 471 to 690 a par 5 — so these sit
+ * inside those bands rather than at their edges, because real courses
+ * cluster well short of the maximum.
+ */
+const PAR_YARDS = { 3: 160, 4: 380, 5: 510, 6: 620 };
+
+/** Roughly how much each tee stretches or shortens a hole. */
+const TEE_SCALE = {
+  black: 1.10, blue: 1.03, white: 0.95, gold: 0.87, red: 0.80,
+};
+
+export function estimatedHoleYards(par, teeColor = "white") {
+  const base = PAR_YARDS[par] ?? PAR_YARDS[4];
+  const scale = TEE_SCALE[String(teeColor).toLowerCase()] ?? 1;
+  return Math.round(base * scale);
+}
+
+/**
+ * What is left to the green, and how sure we are of it.
+ *
+ * `pinYards` wins whenever a flag has been dropped. Otherwise it is the
+ * estimated hole length less the ground already covered, measured as the
+ * straight line from the tee rather than the sum of the shots — a sliced
+ * drive travels 200 yards without getting 200 yards closer.
+ */
+export function remainingYards({ par, teeColor, pinYards = null, progressYards = 0 }) {
+  if (Number.isFinite(pinYards)) {
+    return { yards: Math.max(0, Math.round(pinYards)), source: "pin", label: "to the flag you dropped" };
+  }
+  const hole = estimatedHoleYards(par, teeColor);
+  const left = Math.max(0, Math.round(hole - progressYards));
+  return {
+    yards: left,
+    source: "par",
+    label: progressYards > 0
+      ? `estimated: a par ${par} off the ${teeColor} tees is about ${hole} yards, and you have covered ${Math.round(progressYards)}`
+      : `estimated: a par ${par} off the ${teeColor} tees is about ${hole} yards`,
+  };
+}
