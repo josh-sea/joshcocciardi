@@ -14,6 +14,7 @@ import SoloMode from "./components/soloMode";
 import Friends from "./components/Friends";
 import Profile from "./components/Profile";
 import { useSession, UserContext } from "./admin/session";
+import { refreshWebPush } from "./admin/webPush";
 
 const Stack = createNativeStackNavigator();
 
@@ -68,6 +69,11 @@ const App = () => {
   }, []);
 
   const { status, user } = session;
+
+  // Keep this device's web push token current once someone is playing.
+  useEffect(() => {
+    if (status === "ready" && Platform.OS === "web") refreshWebPush(user.uid);
+  }, [status, user?.uid]);
   if (!fontsLoaded || status === "loading") {
     return null;
   }

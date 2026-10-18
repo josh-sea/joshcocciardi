@@ -18,6 +18,7 @@ import { royRef } from "../admin/firebaseConfig";
 import { get, update } from "firebase/database";
 import { useNavigation } from "@react-navigation/native";
 import { useUserId } from "../admin/session";
+import { webPushStatus, enableWebPush } from "../admin/webPush";
 
 const { height } = Dimensions.get("window");
 const isSmallScreen = height < 667;
@@ -34,6 +35,23 @@ const Profile = ({ route }) => {
   const [profile, setProfile] = useState(null);
   const [copied, setCopied] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState(DEFAULT_NOTIF_PREFS);
+  const [pushStatus, setPushStatus] = useState("unsupported");
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    webPushStatus().then(setPushStatus);
+  }, []);
+
+  const handleEnablePush = async () => {
+    setPushBusy(true);
+    try {
+      setPushStatus(await enableWebPush(userId));
+    } catch (e) {
+      alert("Notifications", e?.message || "Could not turn on notifications.");
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   useEffect(() => {
     get(royRef(`/users/${userId}`)).then((snap) => {
@@ -113,6 +131,27 @@ const Profile = ({ route }) => {
 
             <View style={styles.notifCard}>
               <Text style={styles.notifTitle}>Notifications</Text>
+
+              {pushStatus !== "unsupported" && (
+                <View style={styles.pushBox}>
+                  {pushStatus === "granted" ? (
+                    <Text style={styles.notifHint}>Notifications are on for this device.</Text>
+                  ) : pushStatus === "needsInstall" ? (
+                    <Text style={styles.notifHint}>
+                      To get notifications on iPhone, tap Share, then Add to Home Screen, and open Roy from there.
+                    </Text>
+                  ) : pushStatus === "denied" ? (
+                    <Text style={styles.notifHint}>
+                      Notifications are blocked for Roy. Allow them in your browser or device settings.
+                    </Text>
+                  ) : (
+                    <TouchableOpacity style={styles.actionButton} onPress={handleEnablePush} disabled={pushBusy}>
+                      <Ionicons name="notifications-outline" size={18} color="white" />
+                      <Text style={styles.actionText}>{pushBusy ? "Turning on..." : "Turn on for this device"}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
 
               <View style={styles.notifRow}>
                 <View>
@@ -266,6 +305,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 3,
+  },
+  pushBox: {
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
   },
   notifTitle: {
     fontSize: 12,
