@@ -49,6 +49,9 @@ await check('owner removes a friend', assertSucceeds(remove(r(A, `users/${A}/fri
 await check('owner toggles a notification pref', assertSucceeds(update(r(A, `users/${A}/notifications`), { turns: false })));
 await check('unknown notification pref rejected', assertFails(update(r(A, `users/${A}/notifications`), { spam: true })));
 await check('owner saves a push token', assertSucceeds(set(r(A, `users/${A}/pushToken`), 'ExponentPushToken[x]')));
+await check('owner saves a web push token', assertSucceeds(set(r(A, `users/${A}/webPushTokens/fcm:tok_1`), true)));
+await check('someone else cannot add a web push token for me', assertFails(set(r(B, `users/${A}/webPushTokens/fcm:tok_2`), true)));
+await check('web push token entries are just true', assertFails(set(r(A, `users/${A}/webPushTokens/fcm:tok_3`), 'x')));
 await check('owner cannot grant themselves features', assertFails(set(r(A, `users/${A}/features/unlimitedGames`), true)));
 await check('owner cannot sneak features in via update()', assertFails(update(r(A, `users/${A}`), { 'features/deathmatch': true })));
 
@@ -57,6 +60,7 @@ await check('player1 creates a game', assertSucceeds(set(r(A, 'games/g1'), game)
 await check('cannot create a game as someone else', assertFails(set(r(C, 'games/g2'), game)));
 await check('player2 takes a turn', assertSucceeds(set(r(B, 'games/g1/turn'), 1)));
 await check('player1 writes the grid', assertSucceeds(set(r(A, 'games/g1/grid'), { 0: 1 })));
+await check('a whole move saves in one update()', assertSucceeds(update(r(B, 'games/g1'), { grid: { 3: 5 }, selected: 3, turn: 1, lastMove: { id: 'm1', by: 2, index: 3, shape: 'classic', anim: 'wave' } })));
 await check('player sends trash talk', assertSucceeds(set(r(B, 'games/g1/message'), { sender: 2, value: 'hi' })));
 await check('outsider cannot touch the game', assertFails(set(r(C, 'games/g1/turn'), 2)));
 await check('players cannot be swapped out', assertFails(set(r(A, 'games/g1/player2'), C)));

@@ -13,7 +13,7 @@ import ResetButton from "./resetButton";
 import Scoreboard from "./scoreboard";
 import * as Haptics from "expo-haptics";
 import { royRef } from "../admin/firebaseConfig";
-import { set, get, onValue, update } from "firebase/database";
+import { set, get, onValue, update, onDisconnect } from "firebase/database";
 import ActionMenu from "./ActionMenu";
 import EmoteStore from "./EmoteStore";
 import GameOverModal from "./gameOverModal";
@@ -37,9 +37,6 @@ import {
   generateShapeOrder,
   getShapeIndices,
 } from "../utils/gameEngine";
-
-// Outside the component, declare a variable to track the previous active status
-let prevActiveData = null;
 
 const Grid = ({ route }) => {
   const navigation = useNavigation();
@@ -95,14 +92,15 @@ const Grid = ({ route }) => {
       updateMessageData({ value: name, sender: whichPlayerRef.current });
   };
 
-  const dbGridRef = useRef(null);
   const dbGameRef = useRef(null);
-  const dbTurnRef = useRef(null);
-  const dbIndexRef = useRef(null);
   const dbMessageRef = useRef(null);
+  // undefined until the first snapshot, so opening a game never replays the last move
+  const lastMoveIdRef = useRef(undefined);
+  const prevActiveDataRef = useRef(null);
 
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
+      if (!whichPlayerRef.current) return;
       const playerKey = whichPlayerRef.current === 1 ? "player1" : "player2";
       const isActive = nextAppState === "active";
       update(dbActiveRef.current, { [playerKey]: isActive }).catch((error) => {
@@ -136,9 +134,6 @@ const Grid = ({ route }) => {
   useEffect(() => {
     if (gameId) {
       dbGameRef.current = royRef(`/games/${gameId}`);
-      dbTurnRef.current = royRef(`/games/${gameId}/turn`);
-      dbIndexRef.current = royRef(`/games/${gameId}/selected`);
-      dbGridRef.current = royRef(`/games/${gameId}/grid`);
       dbMessageRef.current = royRef(`/games/${gameId}/message`);
       dbActiveRef.current = royRef(`/games/${gameId}/active`);
 
@@ -182,13 +177,9 @@ const Grid = ({ route }) => {
           update(dbActiveRef.current, { [playerKey]: true }).catch((error) => {
             console.error(`Error updating ${playerKey} active status:`, error);
           });
-
-          // Write current animation preference to Firebase now that player is identified
-          AsyncStorage.getItem("roy_move_animation").then((saved) => {
-            const animId = saved || "pulse";
-            const animRef = royRef(`/games/${gameId}/animations/${playerKey}`);
-            set(animRef, animId).catch(() => {});
-          });
+          // Closing the tab never unmounts this screen on the web, so let the
+          // server mark us away; otherwise turn notifications stay muted.
+          onDisconnect(royRef(`/games/${gameId}/active/${playerKey}`)).set(false).catch(() => {});
         }
       });
 
@@ -207,8 +198,8 @@ const Grid = ({ route }) => {
   }, [gameId, userId]);
 
   const handleActiveStatus = (activeData) => {
-    if (activeData && activeData !== prevActiveData) {
-      prevActiveData = activeData;
+    if (activeData && activeData !== prevActiveDataRef.current) {
+      prevActiveDataRef.current = activeData;
       if (whichPlayerRef.current === 1) {
         setActive(activeData.player2 || false);
       } else {
@@ -254,18 +245,20 @@ const Grid = ({ route }) => {
 
     setCurrentPlayer(dataTurn);
 
-    // Trigger opponent animation when they make a move
-    if (dataSelected !== null && dataSelected !== undefined && whichPlayerRef.current) {
-      const movedPlayer = dataTurn === 1 ? 2 : 1; // whoever just moved
-      if (movedPlayer !== whichPlayerRef.current && dataSelected !== selectedIndex) {
-        const opponentKey = movedPlayer === 1 ? "player1" : "player2";
-        const opponentAnimId = data.animations?.[opponentKey] || "pulse";
-        const opponentShape = data.gameType === "strategist" && data.shapeOrder?.[opponentKey]
-          ? getCurrentShape((data.moveCount?.[opponentKey] || 1) - 1, data.shapeOrder[opponentKey])
-          : "classic";
-        const { playerIndices, redIndices } = getShapeIndices(dataSelected, config.size, opponentShape);
-        triggerCellAnimation([dataSelected, ...playerIndices, ...redIndices], opponentAnimId);
+    // Play the opponent's effect once per move. Every move carries its own
+    // lastMove record (who, where, which shape, which effect, a unique id), so
+    // a trash talk message, a presence change or our own write can never
+    // replay an old move, and the effect is always the one the mover picked.
+    const lastMove = data.lastMove;
+    if (lastMove) {
+      const isNewMove = lastMoveIdRef.current !== undefined && lastMove.id !== lastMoveIdRef.current;
+      lastMoveIdRef.current = lastMove.id;
+      if (isNewMove && whichPlayerRef.current && lastMove.by !== whichPlayerRef.current) {
+        const { playerIndices, redIndices } = getShapeIndices(lastMove.index, config.size, lastMove.shape || "classic");
+        triggerCellAnimation([lastMove.index, ...playerIndices, ...redIndices], lastMove.anim || "pulse");
       }
+    } else {
+      lastMoveIdRef.current = null;
     }
 
     // Sync strategist state from DB
@@ -287,24 +280,6 @@ const Grid = ({ route }) => {
       setGridData(parsedGridData);
       updatePlayerScores(parsedGridData);
     }
-  };
-
-  const updateTurn = (data) => {
-    set(dbTurnRef.current, data).catch((error) => {
-      console.error("Error updating turn data:", error);
-    });
-  };
-
-  const updateIndexData = (data) => {
-    set(dbIndexRef.current, data).catch((error) => {
-      console.error("Error updating game index data:", error);
-    });
-  };
-
-  const updateGridData = (data) => {
-    set(dbGridRef.current, data).catch((error) => {
-      console.error("Error updating grid data:", error);
-    });
   };
 
   // Player 2 picks their starting shape (Strategist only)
@@ -341,32 +316,37 @@ const Grid = ({ route }) => {
       const { playerIndices, redIndices } = getShapeIndices(index, config.size, shapeName);
       triggerCellAnimation([index, ...playerIndices, ...redIndices], myAnimationId);
 
-      // Update move count for strategist
+      // The whole move in one write, so the other player's screen sees it
+      // all at once and never a half-applied move.
+      const move = {
+        grid: updatedGridData,
+        selected: index,
+        turn: currentPlayer === 1 ? 2 : 1,
+        lastMove: {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          by: whichPlayerRef.current,
+          index,
+          shape: shapeName,
+          anim: myAnimationId,
+        },
+      };
       if (isStrategist) {
-        const newMoveCount = { ...moveCount, [playerKey]: (moveCount[playerKey] || 0) + 1 };
-        const moveCountRef = royRef(`/games/${gameId}/moveCount`);
-        set(moveCountRef, newMoveCount).catch((error) => {
-          console.error("Error updating move count:", error);
-        });
+        move.moveCount = { ...moveCount, [playerKey]: (moveCount[playerKey] || 0) + 1 };
       }
-
-      updateGridData(updatedGridData);
-      updateIndexData(index);
-      updateTurn(currentPlayer === 1 ? 2 : 1);
+      update(dbGameRef.current, move).catch((error) => {
+        console.error("Error saving move:", error);
+      });
     }
   };
 
   const handleReset = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowModal(false);
-    updateTurn(1);
-    updateGridData(null);
-    if (isStrategist) {
-      const moveCountRef = royRef(`/games/${gameId}/moveCount`);
-      set(moveCountRef, { player1: 0, player2: 0 }).catch((error) => {
-        console.error("Error resetting move count:", error);
-      });
-    }
+    const reset = { turn: 1, grid: null, selected: null, lastMove: null };
+    if (isStrategist) reset.moveCount = { player1: 0, player2: 0 };
+    update(dbGameRef.current, reset).catch((error) => {
+      console.error("Error resetting game:", error);
+    });
   };
 
   // Load animation preference from AsyncStorage (persists across games)
@@ -376,18 +356,9 @@ const Grid = ({ route }) => {
     });
   }, []);
 
-  // Write animation preference to Firebase for the current game
-  const writeAnimationToGame = (animId) => {
-    if (!gameId || !whichPlayerRef.current) return;
-    const playerKey = whichPlayerRef.current === 1 ? "player1" : "player2";
-    const animRef = royRef(`/games/${gameId}/animations/${playerKey}`);
-    set(animRef, animId).catch(() => {});
-  };
-
   const selectAnimation = (animId) => {
     setMyAnimationId(animId);
     AsyncStorage.setItem("roy_move_animation", animId).catch(() => {});
-    writeAnimationToGame(animId);
   };
 
   // Get or create an Animated.Value for a cell index
@@ -809,4 +780,29 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Grid;
+// A game opened from a link, a refresh or a notification only has its id in
+// the URL. Load the rest (board size, names) before rendering the board, since
+// the board's size can't change once it is on screen.
+const GridLoader = ({ route }) => {
+  const params = route.params || {};
+  const [loaded, setLoaded] = useState(params.boardSize ? params : null);
+
+  useEffect(() => {
+    if (loaded || !params.gameId) return;
+    get(royRef(`/games/${params.gameId}`)).then((snap) => {
+      const game = snap.val() || {};
+      setLoaded({
+        ...params,
+        gameName: game.name,
+        boardSize: game.boardSize || "10x10",
+        player1: game.players?.player1?.username || "",
+        player2: game.players?.player2?.username || "",
+      });
+    });
+  }, [params.gameId]);
+
+  if (!loaded) return null;
+  return <Grid route={{ ...route, params: loaded }} />;
+};
+
+export default GridLoader;

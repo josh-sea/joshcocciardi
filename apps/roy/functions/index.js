@@ -7,6 +7,8 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.database();
 const ROOT = "/roy";
+// Where a tapped web notification opens. Change with the custom domain.
+const APP_URL = "https://josh-cocciardi-roy.web.app";
 
 // ──────────────────────────────────────────────
 // Account Deletion API (removes the caller's Roy data)
@@ -94,6 +96,61 @@ async function sendExpoPushNotifications(messages) {
   return result;
 }
 
+// FCM errors that mean the browser or home screen app no longer has this token.
+const GONE_TOKEN_ERRORS = new Set([
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+]);
+
+/**
+ * Send to every browser and installed home screen app the user turned
+ * notifications on for, pruning tokens FCM reports as gone.
+ * @param {string} userId
+ * @param {{title: string, body: string, data: {gameId: string, type: string}}} message
+ */
+async function sendWebPush(userId, { title, body, data }) {
+  const snapshot = await db.ref(`${ROOT}/users/${userId}/webPushTokens`).once("value");
+  const tokens = Object.keys(snapshot.val() || {});
+  if (tokens.length === 0) return;
+
+  const result = await admin.messaging().sendEachForMulticast({
+    tokens,
+    data,
+    webpush: {
+      notification: {
+        title,
+        body,
+        icon: `${APP_URL}/icons/icon-192.png`,
+        // One notification per game: a newer one replaces the older.
+        tag: `roy-${data.gameId}`,
+        renotify: true,
+      },
+      fcmOptions: { link: `${APP_URL}/game/${data.gameId}` },
+    },
+  });
+
+  const gone = result.responses
+    .map((response, i) => (!response.success && GONE_TOKEN_ERRORS.has(response.error?.code) ? tokens[i] : null))
+    .filter(Boolean);
+  await Promise.all(gone.map((token) => db.ref(`${ROOT}/users/${userId}/webPushTokens/${token}`).remove()));
+}
+
+/**
+ * Notify a user on every device they have: the native app (Expo) and the web.
+ * @param {string} userId
+ * @param {{title: string, body: string, data: {gameId: string, type: string}}} message
+ */
+async function notify(userId, message) {
+  const expoToken = await getUserPushToken(userId);
+  await Promise.all([
+    expoToken
+      ? sendExpoPushNotifications([{ to: expoToken, sound: "default", ...message }])
+      : null,
+    sendWebPush(userId, message).catch((err) => console.error("Web push error:", err)),
+  ]);
+  return null;
+}
+
 /**
  * Get a user's push token from the database.
  * @param {string} userId
@@ -159,24 +216,14 @@ const onTurnChange = functions.database
     const enabled = await isNotificationEnabled(recipientId, "turns");
     if (!enabled) return null;
 
-    const [pushToken, senderName] = await Promise.all([
-      getUserPushToken(recipientId),
-      getUsername(senderId),
-    ]);
-
-    if (!pushToken) return null;
-
+    const senderName = await getUsername(senderId);
     const gameName = game.name || "your game";
 
-    return sendExpoPushNotifications([
-      {
-        to: pushToken,
-        title: "Your Turn! 🎮",
-        body: `${senderName} made a move in ${gameName}`,
-        data: { gameId, type: "turn" },
-        sound: "default",
-      },
-    ]);
+    return notify(recipientId, {
+      title: "Your Turn! 🎮",
+      body: `${senderName} made a move in ${gameName}`,
+      data: { gameId, type: "turn" },
+    });
   });
 
 // ──────────────────────────────────────────────
@@ -193,24 +240,14 @@ const onGameCreated = functions.database
     const enabled = await isNotificationEnabled(game.player2, "invites");
     if (!enabled) return null;
 
-    const [pushToken, senderName] = await Promise.all([
-      getUserPushToken(game.player2),
-      getUsername(game.player1),
-    ]);
-
-    if (!pushToken) return null;
-
+    const senderName = await getUsername(game.player1);
     const gameName = game.name || "a new game";
 
-    return sendExpoPushNotifications([
-      {
-        to: pushToken,
-        title: "Game On! 🕹️",
-        body: `${senderName} invited you to ${gameName}`,
-        data: { gameId, type: "invite" },
-        sound: "default",
-      },
-    ]);
+    return notify(game.player2, {
+      title: "Game On! 🕹️",
+      body: `${senderName} invited you to ${gameName}`,
+      data: { gameId, type: "invite" },
+    });
   });
 
 // ──────────────────────────────────────────────
@@ -218,7 +255,8 @@ const onGameCreated = functions.database
 // ──────────────────────────────────────────────
 const onTrashTalk = functions.database
   .ref(`${ROOT}/games/{gameId}/message`)
-  .onUpdate(async (change, context) => {
+  // onWrite, not onUpdate: a game's very first message is a create.
+  .onWrite(async (change, context) => {
     const newMessage = change.after.val();
     const gameId = context.params.gameId;
 
@@ -246,22 +284,13 @@ const onTrashTalk = functions.database
     const enabled = await isNotificationEnabled(recipientId, "emotes");
     if (!enabled) return null;
 
-    const [pushToken, senderName] = await Promise.all([
-      getUserPushToken(recipientId),
-      getUsername(senderId),
-    ]);
+    const senderName = await getUsername(senderId);
 
-    if (!pushToken) return null;
-
-    return sendExpoPushNotifications([
-      {
-        to: pushToken,
-        title: `${senderName} says...`,
-        body: newMessage.value,
-        data: { gameId, type: "trashtalk" },
-        sound: "default",
-      },
-    ]);
+    return notify(recipientId, {
+      title: `${senderName} says...`,
+      body: String(newMessage.value),
+      data: { gameId, type: "trashtalk" },
+    });
   });
 
 exports.roy = {

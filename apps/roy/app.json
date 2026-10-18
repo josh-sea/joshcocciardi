@@ -53,7 +53,7 @@
       "output": "single",
       "name": "Roy",
       "shortName": "Roy",
-      "themeColor": "#1a1a2e",
+      "themeColor": "#f5f5f5",
       "backgroundColor": "#f5f5f5",
       "favicon": "./assets/favicon.png"
     }

@@ -55,7 +55,16 @@ On merge to `master`, CI exports the web build and deploys `hosting:roy` and `fu
 
 Every screen has a path (`/`, `/signup`, `/practice`, `/games`, `/game/:gameId`, `/solo`, `/friends`, `/profile`; see `linking` in `App.js`), so browser back, the iOS edge swipe and refresh all follow the app's stack.
 
+## Push notifications
+
+- **Turning it on:** Profile → "Turn on for this device" asks for permission and saves the device's FCM token to `/roy/users/{uid}/webPushTokens/{token}` (`admin/webPush.js`). The app re-saves the current token on every start, because tokens rotate. On iPhone, web push only works from the home screen app (Share → Add to Home Screen), so Profile shows that hint instead of the button.
+- **Sending:** `notify()` in `functions/index.js` sends to the native Expo token (if any) and to every web token through `admin.messaging()`, pruning tokens FCM reports as gone. A tap opens `/game/{gameId}`. Turn, invite and trash-talk notifications still skip a player who is in that game right now. `onDisconnect` clears that presence flag when a tab closes.
+- **Installable app:** `public/index.html` (the template Expo builds from), `public/manifest.json`, `public/icons/` and `public/firebase-messaging-sw.js`.
+
+## Move effects
+
+Each move is one `update()` of the game: grid, selected, turn, moveCount, and a `lastMove` record `{ id, by, index, shape, anim }`. A screen plays an effect only for a `lastMove.id` it hasn't seen, made by the other player, using the effect stored in that move. Opening a game never replays the last move.
+
 ## Web limits (for now)
 
-- **Push notifications:** the functions still send through Expo push. That only reaches native builds, so the web build skips registration. Web push (FCM plus an installed PWA) is the next step.
 - **Haptics:** `expo-haptics` vibrates on Android browsers and does nothing on iOS Safari.

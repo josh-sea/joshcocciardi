@@ -61,6 +61,12 @@
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.isString() && newData.val().length < 512"
           },
+          "webPushTokens": {
+            "$token": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "newData.val() === true"
+            }
+          },
           "features": {
             ".write": false
           }
