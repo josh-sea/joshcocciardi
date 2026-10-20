@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Camboy</title>
+<meta name="description" content="The Camboy by Cambo Industries: a pocket game player with a book of cartridges. Pick one, slide it in, and play.">
+<meta name="theme-color" content="#2a2833">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Camboy">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/camboy.css">
+</head>
+<body data-view="book">
+
+<!-- The cartridge book: pick a game. -->
+<main class="book" id="book" aria-label="Cartridge book">
+  <header class="book-head">
+    <a class="home-link" href="/projects">&larr; Projects</a>
+    <span class="maker">CAMBO INDUSTRIES</span>
+  </header>
+  <h1 class="book-title">Camboy<small>Cartridge Book</small></h1>
+  <div class="binder">
+    <div class="rings" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="pages" id="pages"><div class="track" id="track"></div></div>
+  </div>
+  <nav class="pager">
+    <button id="prev" aria-label="Previous page">&lsaquo;</button>
+    <span class="dots" id="dots"></span>
+    <button id="next" aria-label="Next page">&rsaquo;</button>
+  </nav>
+  <p class="hint">Tap a cartridge to slide it in.</p>
+</main>
+
+<!-- The Camboy itself. The back shows while a cartridge goes in, then it turns around. -->
+<div class="stage" id="stage">
+  <div class="device" id="device">
+    <div class="face back" aria-hidden="true">
+      <div class="slot"><div class="drop" id="drop"></div></div>
+      <div class="sticker">
+        <b>CAMBO INDUSTRIES</b>
+        <span>CAMBOY &middot; MODEL CB-01</span>
+        <span>MADE FOR CAM &amp; BO</span>
+      </div>
+      <div class="battery"><i></i><i></i><i></i><i></i><span>BATTERY &middot; 4 &times; AA</span></div>
+    </div>
+
+    <div class="face front shell">
+      <button class="power-switch" id="power" aria-label="Power off and take the cartridge out"><span class="track"><span class="knob"></span></span><em>OFF &middot; ON</em></button>
+      <div class="bezel">
+        <div class="bezel-top"><i class="led" id="led"></i>DOT MATRIX &middot; CAMBO SOUND</div>
+        <canvas id="lcd" width="160" height="144" aria-label="Game screen"></canvas>
+      </div>
+      <div class="brandrow">
+        <div class="wheel" data-wheel="contrast" role="slider" tabindex="0" aria-label="Contrast" aria-valuemin="0" aria-valuemax="100"><span>CONTRAST</span></div>
+        <div class="brand">Camboy<small>BY CAMBO</small></div>
+        <div class="wheel" data-wheel="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100"><span>VOLUME</span></div>
+      </div>
+
+      <div class="controls">
+        <div class="padzone" id="padzone">
+          <div class="dpad" id="dpad" role="group" aria-label="Direction pad">
+            <i class="hub"></i><i class="arrow up"></i><i class="arrow down"></i><i class="arrow left"></i><i class="arrow right"></i>
+          </div>
+        </div>
+        <div class="ab">
+          <button class="btn" id="btnB" data-key="b" aria-label="B"><span>B</span></button>
+          <button class="btn" id="btnA" data-key="a" aria-label="A"><span>A</span></button>
+        </div>
+        <div class="pills">
+          <button class="pill" data-key="select" aria-label="Select"><span>SELECT</span></button>
+          <button class="pill" data-key="start" aria-label="Start"><span>START</span></button>
+        </div>
+      </div>
+      <div class="grille" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
+  <p class="help">
+    <kbd>Arrows</kbd>/<kbd>WASD</kbd> move &middot; <kbd>Z</kbd>/<kbd>Space</kbd> A &middot; <kbd>X</kbd> B &middot; <kbd>Enter</kbd> start &middot; <kbd>M</kbd> select &middot; scroll the wheels for contrast and volume
+  </p>
+</div>
+
+<script type="module">
+import { createHardware } from "./js/hardware.mjs";
+import { makeLcd } from "./js/lcd.mjs";
+import { CARTS, PER_PAGE } from "./carts/index.mjs";
+
+const hw = createHardware();
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- the book ---------- */
+
+const pages = Math.max(1, Math.ceil(CARTS.length / PER_PAGE));
+let page = 0;
+
+function cartEl(c) {
+  const b = document.createElement("button");
+  b.className = "cart";
+  b.dataset.id = c.id;
+  b.style.setProperty("--label", c.label);
+  b.setAttribute("aria-label", `Play ${c.title}`);
+  b.innerHTML = `<span class="cart-top">CAMBOY</span><span class="label"><canvas width="160" height="144"></canvas><b>${c.title}</b></span><span class="arrow">&#9660;</span>`;
+  c.load().then((mod) => mod.cover(makeLcd(b.querySelector("canvas").getContext("2d"))));
+  b.addEventListener("click", () => insert(c));
+  return b;
+}
+
+function buildBook() {
+  const track = $("track");
+  for (let p = 0; p < pages; p++) {
+    const sheet = document.createElement("section");
+    sheet.className = "sheet";
+    sheet.setAttribute("aria-label", `Page ${p + 1}`);
+    for (let k = 0; k < PER_PAGE; k++) {
+      const c = CARTS[p * PER_PAGE + k];
+      const pocket = document.createElement("div");
+      pocket.className = "pocket";
+      if (c) pocket.append(cartEl(c));
+      else pocket.innerHTML = '<span class="empty">MORE FROM<br>CAMBO SOON</span>';
+      sheet.append(pocket);
+    }
+    track.append(sheet);
+  }
+  $("dots").innerHTML = Array.from({ length: pages }, (_, i) => `<i data-p="${i}"></i>`).join("");
+  showPage(0);
+}
+
+function showPage(p) {
+  page = Math.max(0, Math.min(pages - 1, p));
+  $("track").style.transform = `translateX(${-page * 100}%)`;
+  document.querySelectorAll("#dots i").forEach((d, i) => d.classList.toggle("on", i === page));
+  $("prev").disabled = page === 0;
+  $("next").disabled = page === pages - 1;
+}
+$("prev").addEventListener("click", () => { showPage(page - 1); hw.haptic(8); });
+$("next").addEventListener("click", () => { showPage(page + 1); hw.haptic(8); });
+
+// Swipe to turn pages.
+let swipeFrom = null;
+$("pages").addEventListener("pointerdown", (e) => { swipeFrom = e.clientX; });
+$("pages").addEventListener("pointerup", (e) => {
+  if (swipeFrom == null) return;
+  const dx = e.clientX - swipeFrom;
+  swipeFrom = null;
+  if (Math.abs(dx) > 50) { showPage(page + (dx < 0 ? 1 : -1)); hw.haptic(8); }
+});
+
+/* ---------- putting a cartridge in, taking it out ---------- */
+
+const device = $("device");
+let busy = false;
+
+function pose(s, ty, ry, ms) {
+  device.style.transition = ms ? `transform ${ms}ms cubic-bezier(.35,.1,.25,1)` : "none";
+  device.style.transform = `translateY(${ty}%) scale(${s}) rotateY(${ry}deg)`;
+  if (!ms) void device.offsetWidth;
+  return sleep(ms);
+}
+
+async function insert(c, push = true) {
+  if (busy) return;
+  busy = true;
+  hw.unlock();
+  hw.haptic(10);
+  const mod = await c.load();
+  if (push) history.pushState({ cart: c.id }, "", `?cart=${c.id}`);
+  document.body.dataset.view = "play";
+  const drop = $("drop");
+  drop.innerHTML = "";
+  const flying = cartEl(c);
+  flying.tabIndex = -1;
+  drop.append(flying);
+  if (reduced) {
+    await pose(1, 0, 0, 0);
+  } else {
+    // Back of the Camboy, small, while the cartridge slides into the slot.
+    await pose(0.62, 10, 180, 0);
+    await flying.animate([{ transform: "translateY(-115%)" }, { transform: "translateY(18%)" }],
+      { duration: 650, easing: "cubic-bezier(.3,.6,.4,1)", fill: "forwards" }).finished;
+    hw.clunk();
+    hw.haptic(30);
+    await pose(0.6, 11, 180, 90);
+    await pose(0.62, 10, 180, 90);
+    // Turn it around and bring it up to size.
+    await pose(0.62, 10, 0, 800);
+    await pose(1, 0, 0, 420);
+  }
+  device.style.transform = "";
+  hw.powerOn(mod);
+  busy = false;
+}
+
+async function eject(pop = false) {
+  if (busy || hw.state === "off") return;
+  busy = true;
+  hw.haptic(20);
+  hw.powerOff();
+  if (!reduced) {
+    await sleep(250);
+    await pose(0.62, 10, 0, 420);
+    await pose(0.62, 10, 180, 700);
+    const flying = $("drop").firstElementChild;
+    if (flying) await flying.animate([{ transform: "translateY(18%)" }, { transform: "translateY(-115%)" }],
+      { duration: 500, easing: "cubic-bezier(.6,0,.7,.4)", fill: "forwards" }).finished;
+  }
+  document.body.dataset.view = "book";
+  device.style.transform = "";
+  if (!pop) history.pushState({}, "", location.pathname);
+  busy = false;
+}
+
+$("power").addEventListener("click", () => eject());
+addEventListener("popstate", (e) => {
+  const id = e.state?.cart;
+  const c = id && CARTS.find((k) => k.id === id);
+  if (c && hw.state === "off") insert(c, false);
+  else if (!c) eject(true);
+});
+
+buildBook();
+
+// /projects/camboy/?cart=sweat-boy goes straight to the game, with the insert.
+const start = CARTS.find((c) => c.id === new URLSearchParams(location.search).get("cart"));
+if (start) {
+  history.replaceState({ cart: start.id }, "", location.href);
+  insert(start, false);
+}
+</script>
+</body>
+</html>

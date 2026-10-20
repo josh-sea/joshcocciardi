@@ -257,7 +257,7 @@ deploy_hosting() {
     echo "  Golf Caddy:     https://www.joshcocciardi.com/projects/swing-coach/golf/caddy"
     echo "  Boulder Smash:  https://www.joshcocciardi.com/projects/boulder-smash"
     echo "  Tophat&Spears:  https://www.joshcocciardi.com/projects/tophat-spears"
-    echo "  Sweat Boy:      https://www.joshcocciardi.com/projects/sweat-boy"
+    echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy and future cartridges)"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
     echo "  Reading Buddy:  https://www.joshcocciardi.com/tools/myreadingbuddy"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
