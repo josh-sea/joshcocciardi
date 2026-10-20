@@ -216,6 +216,7 @@ build_portfolio() {
     node test/swing-coach.test.mjs || fail "Swing Coach tests failed"
     node test/caddy.test.mjs || fail "Golf Caddy tests failed"
     node test/sweat-boy.test.mjs || fail "Sweat Boy tests failed"
+    node test/boulder.test.mjs || fail "Boulder Smash cartridge tests failed"
 
     log "Testing Meal Planner helpers..."
     node test/meal-planner.test.mjs || fail "Meal Planner tests failed"
@@ -257,7 +258,7 @@ deploy_hosting() {
     echo "  Golf Caddy:     https://www.joshcocciardi.com/projects/swing-coach/golf/caddy"
     echo "  Boulder Smash:  https://www.joshcocciardi.com/projects/boulder-smash"
     echo "  Tophat&Spears:  https://www.joshcocciardi.com/projects/tophat-spears"
-    echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy and future cartridges)"
+    echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy, Boulder Smash)"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
     echo "  Reading Buddy:  https://www.joshcocciardi.com/tools/myreadingbuddy"
     echo "  Tools:          https://www.joshcocciardi.com/tools"
