@@ -155,6 +155,13 @@ const playthings = [
     link: "/projects/boulder-smash",
   },
   {
+    title: "💦 Sweat Boy",
+    description:
+      "A Game Boy style 8-bit game where you're the court mopper at a pro basketball game. The players scrum under the hoop, drip sweat everywhere and run to the other end. You get a few seconds to scrub every puddle before they come back up the floor. Big puddles take several swipes of the mop, and the players reach the drips near midcourt first, so you have to pick your order. Every puddle they hit while it's still wet is a slip that costs your team the shot. A spotless floor means they go for three. Pick a men's or women's game, and play with the on-screen D-pad on a phone.",
+    tech: ["JavaScript", "Canvas API", "Web Audio"],
+    link: "/projects/sweat-boy",
+  },
+  {
     title: "🎩 Tophat & Spears",
     description:
       "A co-op RTS and FPS in one match, for up to five friends. One player is the Tophat, commanding three squads of marines from above as a swarm pours over the ridge. Up to four Spears drop into those marines in first person and hop from body to body. The Tophat can leash a Spear to a zone; miss the deadline and you bleed. Everyone types the same password to land in the same lobby. One player's browser runs the battle and streams it to the rest through Firebase, and if that player leaves, the next one picks the match up where it was.",

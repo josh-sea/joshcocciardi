@@ -1,0 +1,108 @@
+/* Sweat Boy: the mopping rules, tested without a browser.
+ *
+ * The things a player would notice going wrong (a puddle spawning off the
+ * court or on top of another, a swipe that takes two units, the returning
+ * players skipping a wet puddle, a clean floor not getting its three) are
+ * all checkable on the plain rules module.
+ *
+ * Run: node apps/portfolio/test/sweat-boy.test.mjs
+ */
+import {
+  COURT, TRIPS, makeRng, tripSpec, puddleRadius, puddleShape, spawnPuddles, wetUnits,
+  mopTime, puddleUnder, swipe, sweep, slippedUnits, shotFor, awayPoints, quarterOf,
+} from '../public/projects/sweat-boy/rules.mjs';
+
+let failures = 0;
+const ok = (name, cond, extra = '') => {
+  if (cond) console.log(`  ok   ${name}`);
+  else { console.log(`  FAIL ${name}${extra ? ' — ' + extra : ''}`); failures++; }
+};
+
+console.log('\ntrips');
+{
+  ok('the first trip is a few single drops', tripSpec(0).count === 3 && tripSpec(0).maxUnits === 1);
+  ok('later trips bring more and bigger puddles',
+    tripSpec(TRIPS - 1).count > tripSpec(0).count && tripSpec(TRIPS - 1).maxUnits === 4);
+  ok('the players come back faster as the game goes on', tripSpec(7).waveSpeed > tripSpec(0).waveSpeed);
+  ok('two trips a quarter, four quarters', quarterOf(0) === 1 && quarterOf(1) === 1 && quarterOf(2) === 2 && quarterOf(7) === 4);
+  ok('bigger puddles are drawn bigger', [1, 2, 3, 4].every((u) => puddleRadius(u) > puddleRadius(u - 1)));
+}
+
+console.log('\nspawning');
+{
+  let bad = '';
+  for (let seed = 1; seed <= 300 && !bad; seed++) {
+    for (let trip = 0; trip < TRIPS && !bad; trip++) {
+      const spec = tripSpec(trip);
+      const ps = spawnPuddles(trip, makeRng(seed * 31 + trip));
+      if (ps.length !== spec.count) bad = `seed ${seed} trip ${trip}: ${ps.length} of ${spec.count}`;
+      for (const p of ps) {
+        const { rx, ry } = puddleShape(p.units);
+        if (p.units < 1 || p.units > spec.maxUnits) bad = `units ${p.units} on trip ${trip}`;
+        if (p.x - rx < COURT.x0 || p.x + rx > COURT.x1 || p.y - ry < COURT.y0 || p.y + ry > COURT.y1) bad = `off court at ${p.x},${p.y}`;
+      }
+      for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+        if (Math.hypot(ps[i].x - ps[j].x, ps[i].y - ps[j].y) < puddleRadius(ps[i].units) + puddleRadius(ps[j].units)) bad = `overlap on trip ${trip}`;
+      }
+      if (spec.maxUnits > 1 && !ps.some((p) => p.units > 1)) bad = `no big puddle on trip ${trip}`;
+    }
+  }
+  ok('every puddle is on the court, apart, and the right size', !bad, bad);
+  const a = spawnPuddles(5, makeRng(9)), b = spawnPuddles(5, makeRng(9));
+  ok('the same seed lays out the same floor', JSON.stringify(a) === JSON.stringify(b));
+  const ps = spawnPuddles(6, makeRng(4));
+  const bigX = ps.filter((p) => p.units > 1).map((p) => p.x);
+  ok('big puddles land around the key, where the scrum was', bigX.every((x) => x >= 104));
+}
+
+console.log('\nmopping');
+{
+  const p = { x: 60, y: 70, units: 3, max: 3, locked: false };
+  const ps = [p, { x: 100, y: 70, units: 1, max: 1, locked: false }];
+  ok('the mop head over a puddle finds it', puddleUnder(ps, 61, 71) === 0);
+  ok('a near miss still counts', puddleUnder(ps, 60 + puddleShape(3).rx + 2, 70) === 0);
+  ok('open floor finds nothing', puddleUnder(ps, 80, 70) === -1);
+  ok('one swipe takes one unit', swipe(p) === false && p.units === 2);
+  swipe(p);
+  ok('the last swipe dries it', swipe(p) === true && p.units === 0);
+  ok('a dry spot cannot be mopped again', swipe(p) === false && p.units === 0);
+  ok('and the mop no longer finds it', puddleUnder(ps, 60, 70) === -1);
+  ok('wet units only count what is left', wetUnits(ps) === 1);
+  const fresh = spawnPuddles(7, makeRng(2));
+  ok('more sweat means more time on the clock', mopTime(7, fresh) > mopTime(7, fresh.slice(0, 2)));
+}
+
+console.log('\nthe players come back');
+{
+  const ps = [
+    { x: 30, y: 40, units: 1, max: 1, locked: false },
+    { x: 80, y: 90, units: 0, max: 2, locked: false },
+    { x: 125, y: 70, units: 3, max: 3, locked: false },
+  ];
+  ok('nothing slips before the front gets there', sweep(ps, 10).length === 0);
+  const first = sweep(ps, 40);
+  ok('the front slips on the near puddle first', first.length === 1 && first[0] === ps[0]);
+  ok('a mopped-dry spot is safe', sweep(ps, 90).length === 0);
+  ok('a slipped puddle cannot be mopped any more', puddleUnder(ps, 30, 40) === -1 && swipe(ps[0]) === false);
+  ps[2].units = 1; // mopped down while the players were still crossing
+  sweep(ps, 200);
+  ok('what is left when they arrive is what counts', slippedUnits(ps) === 2);
+  ok('nothing slips twice', sweep(ps, 300).length === 0 && slippedUnits(ps) === 2);
+}
+
+console.log('\nthe shot');
+{
+  ok('a spotless floor goes for three', shotFor(0).points === 3);
+  ok('any slip makes it a two', shotFor(1).points === 2);
+  ok('every slip costs the shooter', shotFor(1).chance > shotFor(2).chance && shotFor(2).chance > shotFor(3).chance);
+  ok('but you can always get lucky', shotFor(40).chance > 0);
+  const rng = makeRng(11);
+  const pts = Array.from({ length: 2000 }, () => awayPoints(rng));
+  ok('the away team scores 0, 2 or 3', pts.every((p) => [0, 2, 3].includes(p)));
+  const avg = pts.reduce((a, b) => a + b, 0) / pts.length;
+  ok('a clean floor out-scores the away team on average', shotFor(0).chance * 3 > avg + 0.5, `away ${avg.toFixed(2)}`);
+  ok('a sloppy floor does not', shotFor(3).chance * 2 < avg, `away ${avg.toFixed(2)}`);
+}
+
+console.log(failures ? `\n${failures} failing\n` : '\nall passing\n');
+process.exit(failures ? 1 : 0);

@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sweat Boy</title>
+<meta name="description" content="An 8-bit handheld game: you're the court mopper at a pro basketball game. Scrub the sweat puddles off the floor before the players come back up the court, or watch them slip and brick the shot.">
+<meta name="theme-color" content="#2a2833">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%A6%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  /* Layout: one handheld shell centered on the page. Screen on top, D-pad
+     bottom left, A/B bottom right, Select/Start between them. Keyboard
+     hints sit under the shell. */
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --page: #2a2833;
+    --shell: #c9c5c0;
+    --shell-edge: #a9a49e;
+    --bezel: #55536a;
+    --ink: #2f2c46;
+    --berry: #9b2a5c;
+    --berry-edge: #6f1a40;
+    --pad: #2b2b30;
+    --lcd: #e0f8d0;
+    --pixel: "Press Start 2P", ui-monospace, monospace;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: #d8d4e6;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+  }
+  .back {
+    align-self: flex-start;
+    color: #a9a3c2;
+    text-decoration: none;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  .back:hover { color: #fff; }
+
+  .shell {
+    --w: min(400px, calc(100vw - 32px), calc((100dvh - 70px) * 0.6));
+    width: var(--w);
+    background: linear-gradient(170deg, #d3cfca, var(--shell) 40%, #bdb8b2);
+    border-radius: calc(var(--w) * 0.04) calc(var(--w) * 0.04) calc(var(--w) * 0.2) calc(var(--w) * 0.04);
+    box-shadow: inset -4px -6px 0 var(--shell-edge), 0 18px 40px rgba(0,0,0,.45);
+    padding: calc(var(--w) * 0.07) calc(var(--w) * 0.07) calc(var(--w) * 0.1);
+    position: relative;
+  }
+  .bezel {
+    background: var(--bezel);
+    border-radius: calc(var(--w) * 0.025) calc(var(--w) * 0.025) calc(var(--w) * 0.11) calc(var(--w) * 0.025);
+    padding: calc(var(--w) * 0.05) calc(var(--w) * 0.09) calc(var(--w) * 0.035);
+  }
+  .bezel-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #b9b7cc;
+    font-size: calc(var(--w) * 0.024);
+    letter-spacing: .08em;
+    margin: calc(var(--w) * -0.03) 0 calc(var(--w) * 0.018);
+  }
+  .bezel-top::before, .bezel-top::after { content: ""; flex: 1; height: 2px; background: #7a2a52; box-shadow: 0 4px 0 #2c3f7a; }
+  .power { position: absolute; left: calc(var(--w) * 0.1); top: calc(var(--w) * 0.33); width: 7px; height: 7px; border-radius: 50%; background: #e0303c; box-shadow: 0 0 6px #ff4a55; }
+  canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 160 / 144;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: var(--lcd);
+    border-radius: 2px;
+    touch-action: none;
+  }
+  .brand {
+    font-family: var(--pixel);
+    color: var(--ink);
+    font-size: calc(var(--w) * 0.042);
+    font-style: italic;
+    margin: calc(var(--w) * 0.035) 0 0 calc(var(--w) * 0.01);
+    letter-spacing: .02em;
+  }
+  .brand small { font-family: system-ui, sans-serif; font-style: normal; font-size: calc(var(--w) * 0.026); font-weight: 700; letter-spacing: .06em; margin-left: 4px; }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    margin-top: calc(var(--w) * 0.08);
+  }
+  .dpad {
+    --d: calc(var(--w) * 0.33);
+    width: var(--d);
+    height: var(--d);
+    position: relative;
+    touch-action: none;
+    cursor: pointer;
+  }
+  .dpad::before, .dpad::after {
+    content: "";
+    position: absolute;
+    background: var(--pad);
+    border-radius: 4px;
+    box-shadow: 0 3px 0 #111;
+  }
+  .dpad::before { left: 33.3%; width: 33.4%; top: 0; height: 100%; }
+  .dpad::after { top: 33.3%; height: 33.4%; left: 0; width: 100%; }
+  .dpad .hub { position: absolute; inset: 40%; border-radius: 50%; background: #3a3a40; z-index: 1; }
+  .dpad .arrow { position: absolute; z-index: 1; width: 0; height: 0; border: calc(var(--w) * 0.014) solid transparent; opacity: .55; }
+  .dpad .up { left: 50%; top: 8%; transform: translateX(-50%); border-bottom-color: #777; }
+  .dpad .down { left: 50%; bottom: 8%; transform: translateX(-50%); border-top-color: #777; }
+  .dpad .left { top: 50%; left: 8%; transform: translateY(-50%); border-right-color: #777; }
+  .dpad .right { top: 50%; right: 8%; transform: translateY(-50%); border-left-color: #777; }
+  .dpad[data-dir~="up"] .up, .dpad[data-dir~="down"] .down, .dpad[data-dir~="left"] .left, .dpad[data-dir~="right"] .right { opacity: 1; border-color: transparent; }
+  .dpad[data-dir~="up"] .up { border-bottom-color: #ddd; }
+  .dpad[data-dir~="down"] .down { border-top-color: #ddd; }
+  .dpad[data-dir~="left"] .left { border-right-color: #ddd; }
+  .dpad[data-dir~="right"] .right { border-left-color: #ddd; }
+
+  .ab { position: relative; height: calc(var(--w) * 0.3); transform: rotate(-25deg); justify-self: end; width: calc(var(--w) * 0.36); }
+  .btn {
+    position: absolute;
+    width: calc(var(--w) * 0.15);
+    height: calc(var(--w) * 0.15);
+    border-radius: 50%;
+    border: 0;
+    background: radial-gradient(circle at 35% 30%, #c2447c, var(--berry));
+    box-shadow: 0 4px 0 var(--berry-edge);
+    touch-action: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .btn.down { transform: translateY(3px); box-shadow: 0 1px 0 var(--berry-edge); }
+  .btn span {
+    position: absolute;
+    left: 50%;
+    top: 112%;
+    transform: translateX(-50%);
+    font-family: var(--pixel);
+    font-size: calc(var(--w) * 0.03);
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  #btnA { right: 0; top: 18%; }
+  #btnB { left: 0; top: 34%; }
+  .pills { grid-column: 1 / -1; display: flex; justify-content: center; gap: calc(var(--w) * 0.07); margin-top: calc(var(--w) * 0.07); }
+  .pill {
+    width: calc(var(--w) * 0.14);
+    height: calc(var(--w) * 0.035);
+    border-radius: 99px;
+    border: 0;
+    background: #8f8b97;
+    box-shadow: 0 2px 0 #6d6975;
+    transform: rotate(-25deg);
+    position: relative;
+    touch-action: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .pill.down { background: #6d6975; }
+  .pill span {
+    position: absolute;
+    top: 160%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--pixel);
+    font-size: calc(var(--w) * 0.022);
+    color: var(--ink);
+  }
+  button:focus-visible { outline: 3px solid #f5d76e; outline-offset: 3px; }
+  .grille { position: absolute; right: calc(var(--w) * 0.07); bottom: calc(var(--w) * 0.07); display: flex; gap: calc(var(--w) * 0.018); transform: rotate(-28deg); }
+  .grille i { width: calc(var(--w) * 0.014); height: calc(var(--w) * 0.11); border-radius: 99px; background: #9e9993; box-shadow: inset 1px 1px 2px rgba(0,0,0,.35); }
+
+  .help {
+    max-width: 400px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #a9a3c2;
+    text-align: center;
+    margin: 14px 0 0;
+  }
+  .help kbd { font-family: var(--pixel); font-size: 9px; background: #3a3746; border-radius: 4px; padding: 2px 5px; color: #e6e2f3; }
+  @media (hover: none) { .help .keys { display: none; } }
+</style>
+</head>
+<body>
+<a class="back" href="/projects">&larr; Projects</a>
+
+<div class="shell">
+  <div class="bezel">
+    <div class="bezel-top">DOT MOP WITH SQUEAK SOUND</div>
+    <canvas id="lcd" width="160" height="144" aria-label="Sweat Boy game screen"></canvas>
+  </div>
+  <div class="power" title="Power"></div>
+  <div class="brand">Sweat Boy<small>COURTSIDE</small></div>
+
+  <div class="controls">
+    <div class="dpad" id="dpad" role="group" aria-label="Direction pad">
+      <i class="hub"></i><i class="arrow up"></i><i class="arrow down"></i><i class="arrow left"></i><i class="arrow right"></i>
+    </div>
+    <div class="ab">
+      <button class="btn" id="btnB" data-key="b" aria-label="B: hustle"><span>B</span></button>
+      <button class="btn" id="btnA" data-key="a" aria-label="A: mop"><span>A</span></button>
+    </div>
+    <div class="pills">
+      <button class="pill" data-key="select" aria-label="Select"><span>SELECT</span></button>
+      <button class="pill" data-key="start" aria-label="Start"><span>START</span></button>
+    </div>
+  </div>
+  <div class="grille"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+</div>
+
+<p class="help">
+  Mop every puddle before the players come back up the court. A puddle they reach while it's still wet is a slip, and slips cost your team the shot. Leave the floor spotless and they go for three.
+  <span class="keys"><br><kbd>Arrows</kbd>/<kbd>WASD</kbd> move &middot; <kbd>Z</kbd>/<kbd>Space</kbd> mop &middot; <kbd>X</kbd> hustle &middot; <kbd>Enter</kbd> start/pause &middot; <kbd>M</kbd> select</span>
+</p>
+
+<script type="module">
+import {
+  W, H, COURT, HOOP, TRIPS, makeRng, tripSpec, puddleShape, spawnPuddles,
+  wetUnits, mopTime, puddleUnder, swipe, sweep, slippedUnits, shotFor,
+  awayPoints, quarterOf,
+} from "./rules.mjs";
+
+/* ---------- screen ---------- */
+
+const PAL = ["#e0f8d0", "#88c070", "#346856", "#081820"];
+const cv = document.getElementById("lcd");
+const g = cv.getContext("2d");
+g.imageSmoothingEnabled = false;
+
+const px = (x, y, c) => { g.fillStyle = PAL[c]; g.fillRect(x | 0, y | 0, 1, 1); };
+const rect = (x, y, w, h, c) => { g.fillStyle = PAL[c]; g.fillRect(x | 0, y | 0, w | 0, h | 0); };
+
+function ellipse(cx, cy, rx, ry, fill, edge) {
+  for (let y = -ry; y <= ry; y++) {
+    const span = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y / (ry + 0.5)) ** 2)));
+    if (fill != null) rect(cx - span, cy + y, span * 2 + 1, 1, fill);
+    if (edge != null) { px(cx - span, cy + y, edge); px(cx + span, cy + y, edge); }
+  }
+  if (edge != null) {
+    const top = Math.round(rx * Math.sqrt(Math.max(0, 1 - (ry / (ry + 0.5)) ** 2)));
+    rect(cx - top, cy - ry, top * 2 + 1, 1, edge);
+    rect(cx - top, cy + ry, top * 2 + 1, 1, edge);
+  }
+}
+
+function arc(cx, cy, r, a0, a1, c, clip) {
+  const steps = Math.ceil(r * Math.abs(a1 - a0) * 1.5);
+  for (let i = 0; i <= steps; i++) {
+    const a = a0 + (a1 - a0) * (i / steps);
+    const x = Math.round(cx + Math.cos(a) * r);
+    const y = Math.round(cy + Math.sin(a) * r);
+    if (!clip || clip(x, y)) px(x, y, c);
+  }
+}
+
+/* 3x5 pixel font. Each glyph is five rows of three bits. */
+const GLYPHS = {
+  "0": "111101101101111", "1": "010110010010111", "2": "111001111100111", "3": "111001111001111",
+  "4": "101101111001001", "5": "111100111001111", "6": "111100111101111", "7": "111001001010010",
+  "8": "111101111101111", "9": "111101111001111",
+  A: "010101111101101", B: "110101110101110", C: "011100100100011", D: "110101101101110",
+  E: "111100110100111", F: "111100110100100", G: "011100101101011", H: "101101111101101",
+  I: "111010010010111", J: "001001001101010", K: "101101110101101", L: "100100100100111",
+  M: "101111111101101", N: "110101101101101", O: "010101101101010", P: "110101110100100",
+  Q: "010101101110011", R: "110101110101101", S: "011100010001110", T: "111010010010010",
+  U: "101101101101111", V: "101101101101010", W: "101101111111101", X: "101101010101101",
+  Y: "101101010010010", Z: "111001010100111",
+  "!": "010010010000010", "?": "110001010000010", ".": "000000000000010", ":": "000010000010000",
+  "-": "000000111000000", "'": "010010000000000", "/": "001001010100100", "%": "101001010100101",
+  "+": "000010111010000", ",": "000000000010100", "<": "001010100010001", ">": "100010001010100",
+  " ": "000000000000000",
+};
+
+function text(str, x, y, c, s = 1) {
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const glyph = GLYPHS[str[i]] || GLYPHS["?"];
+    for (let b = 0; b < 15; b++) {
+      if (glyph[b] === "1") rect(x + (i * 4 + (b % 3)) * s, y + Math.floor(b / 3) * s, s, s, c);
+    }
+  }
+}
+const textW = (str, s = 1) => (String(str).length * 4 - 1) * s;
+const ctext = (str, y, c, s = 1, cx = W / 2) => text(str, Math.round(cx - textW(str, s) / 2), y, c, s);
+
+/** A boxed message, the kind a handheld throws up mid-game. */
+function banner(lines, y, s = 1) {
+  const w = Math.max(...lines.map((l) => textW(l, s))) + 10;
+  const h = lines.length * 7 * s + 6;
+  const x = Math.round(W / 2 - w / 2);
+  rect(x - 1, y - 1, w + 2, h + 2, 0);
+  rect(x, y, w, h, 3);
+  rect(x + 1, y + 1, w - 2, h - 2, 0);
+  rect(x + 2, y + 2, w - 4, h - 4, 3);
+  lines.forEach((l, i) => ctext(l, y + 4 + i * 7 * s, 0, s));
+}
+
+/* ---------- sprites ---------- */
+
+/** Rows of palette digits, "." is see-through. Drawn from the feet up. */
+function sprite(rows, x, y, flip = false, map = null, s = 1) {
+  const h = rows.length;
+  const w = rows[0].length;
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      let ch = rows[r][flip ? w - 1 - c : c];
+      if (ch === ".") continue;
+      if (map && map[ch] != null) ch = map[ch];
+      rect(x + (c - (w >> 1)) * s, y + (r - h) * s, s, s, +ch);
+    }
+  }
+}
+
+const BOY = [
+  "..333..",
+  ".33333.",
+  ".30003.",
+  "..000..",
+  ".22222.",
+  "2222222",
+  "0.222.0",
+  "..222..",
+  "..3.3..",
+  "..3.3..",
+  ".33.33.",
+];
+const BOY_STEP = [...BOY.slice(0, 8), "..3.3..", ".3...3.", "33...33"];
+
+const PLAYER = [
+  "..333..",
+  "..222..",
+  "..222..",
+  "...2...",
+  ".JJJJJ.",
+  "2JJJJJ2",
+  "2JJJJJ2",
+  ".JJJJJ.",
+  ".SSSSS.",
+  ".S...S.",
+  ".2...2.",
+  ".2...2.",
+  ".3...3.",
+  "33...33",
+];
+const PLAYER_STEP = [...PLAYER.slice(0, 10), "..2.2..", ".2...2.", "3....3.", "3.....3"];
+const PONYTAIL = ["..3333.", "..2223.", "..222.3"];
+const withTail = (rows) => [...PONYTAIL, ...rows.slice(3)];
+const HOME = { J: 0, S: 0 };
+const AWAY = { J: 3, S: 3 };
+
+/* ---------- sound ---------- */
+
+let ac = null;
+let muted = false;
+function audio() {
+  if (!ac) {
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { ac = null; }
+  }
+  if (ac && ac.state === "suspended") ac.resume();
+  return ac;
+}
+function beep(freq, dur, { type = "square", vol = 0.07, to = null, at = 0 } = {}) {
+  if (muted || !ac) return;
+  const t = ac.currentTime + at;
+  const o = ac.createOscillator();
+  const v = ac.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  v.gain.setValueAtTime(vol, t);
+  v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(v).connect(ac.destination);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+const sfx = {
+  squeak: () => { beep(1100, 0.05, { to: 1500, vol: 0.03 }); beep(1500, 0.05, { to: 1000, vol: 0.03, at: 0.14 }); },
+  dry: () => { beep(1320, 0.08, { type: "triangle", vol: 0.12 }); beep(1760, 0.12, { type: "triangle", vol: 0.12, at: 0.07 }); },
+  plop: () => beep(380, 0.12, { type: "sine", to: 110, vol: 0.18 }),
+  slip: () => beep(700, 0.25, { to: 150, vol: 0.08 }),
+  whistle: () => { for (let i = 0; i < 4; i++) beep(2300 + (i % 2) * 160, 0.06, { type: "sine", vol: 0.06, at: i * 0.06 }); },
+  swish: () => { beep(900, 0.25, { type: "triangle", to: 400, vol: 0.12 }); beep(523, 0.1, { at: 0.3 }); beep(659, 0.1, { at: 0.4 }); beep(784, 0.18, { at: 0.5 }); },
+  clank: () => { beep(190, 0.18, { vol: 0.1 }); beep(140, 0.2, { vol: 0.08, at: 0.12 }); },
+  buzzer: () => beep(98, 0.7, { type: "sawtooth", vol: 0.08 }),
+  tick: () => beep(1800, 0.03, { vol: 0.03 }),
+  blip: () => beep(880, 0.05, { vol: 0.05 }),
+};
+
+/* ---------- input ---------- */
+
+const held = { up: false, down: false, left: false, right: false, a: false, b: false, start: false, select: false };
+const pressed = new Set();
+function setKey(k, on) {
+  if (on && !held[k]) pressed.add(k);
+  held[k] = on;
+}
+const KEYMAP = {
+  ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down", ArrowLeft: "left", KeyA: "left",
+  ArrowRight: "right", KeyD: "right", KeyZ: "a", Space: "a", KeyJ: "a", KeyX: "b", KeyK: "b",
+  ShiftLeft: "b", ShiftRight: "b", Enter: "start", KeyP: "start", KeyM: "select", Backspace: "select",
+};
+addEventListener("keydown", (e) => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  audio();
+  if (!e.repeat) setKey(k, true);
+});
+addEventListener("keyup", (e) => { const k = KEYMAP[e.code]; if (k) setKey(k, false); });
+addEventListener("blur", () => Object.keys(held).forEach((k) => (held[k] = false)));
+
+document.querySelectorAll("[data-key]").forEach((el) => {
+  const k = el.dataset.key;
+  const up = () => { setKey(k, false); el.classList.remove("down"); };
+  el.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    audio();
+    el.setPointerCapture?.(e.pointerId);
+    setKey(k, true);
+    el.classList.add("down");
+    navigator.vibrate?.(8);
+  });
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
+  el.addEventListener("lostpointercapture", up);
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+});
+
+// The D-pad reads where the thumb is, so sliding from left to up works
+// without lifting. Near the hub counts as nothing; diagonals count as both.
+const dpad = document.getElementById("dpad");
+function readPad(e) {
+  const r = dpad.getBoundingClientRect();
+  const dx = (e.clientX - r.left) / r.width - 0.5;
+  const dy = (e.clientY - r.top) / r.height - 0.5;
+  const dead = 0.1;
+  const dirs = { up: dy < -dead && Math.abs(dy) > Math.abs(dx) * 0.45, down: dy > dead && Math.abs(dy) > Math.abs(dx) * 0.45,
+                 left: dx < -dead && Math.abs(dx) > Math.abs(dy) * 0.45, right: dx > dead && Math.abs(dx) > Math.abs(dy) * 0.45 };
+  for (const k of ["up", "down", "left", "right"]) setKey(k, dirs[k]);
+  dpad.dataset.dir = Object.keys(dirs).filter((k) => dirs[k]).join(" ");
+}
+function releasePad() {
+  for (const k of ["up", "down", "left", "right"]) setKey(k, false);
+  dpad.dataset.dir = "";
+}
+dpad.addEventListener("pointerdown", (e) => { e.preventDefault(); audio(); dpad.setPointerCapture?.(e.pointerId); readPad(e); });
+dpad.addEventListener("pointermove", (e) => { if (e.buttons || e.pointerType === "touch") readPad(e); });
+dpad.addEventListener("pointerup", releasePad);
+dpad.addEventListener("pointercancel", releasePad);
+dpad.addEventListener("lostpointercapture", releasePad);
+dpad.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* ---------- saved record ---------- */
+
+function loadRecord() {
+  try { return JSON.parse(localStorage.getItem("sweatboy.record")) || { w: 0, l: 0 }; } catch { return { w: 0, l: 0 }; }
+}
+function saveRecord(r) {
+  try { localStorage.setItem("sweatboy.record", JSON.stringify(r)); } catch { /* private window: keep it in memory */ }
+}
+
+/* ---------- game state ---------- */
+
+const SWIPE = 0.34;           // one back-and-forth with the mop
+const WALK = 44, HUSTLE = 70; // pixels per second
+const BENCH = { x: 80, y: COURT.y1 - 1 };
+const LANES = [28, 46, 64, 82, 100, 118];
+const WAVE_END = HOOP.x - 4;
+
+let rng = makeRng(Date.now());
+let league = 0; // 0 men's, 1 women's
+let record = loadRecord();
+const S = {
+  phase: "title",
+  t: 0,
+  trip: 0,
+  home: 0,
+  away: 0,
+  puddles: [],
+  clock: 0,
+  waveX: 0,
+  lanes: [],
+  boy: { x: BENCH.x, y: BENCH.y, fx: 1, fy: 0, swipe: 0, step: 0, gas: 1.5, moving: false },
+  fx: [],
+  toast: null,
+  blinkAway: 0,
+  shot: null,
+  paused: false,
+  stats: { mopped: 0, slips: 0, spotless: 0 },
+  lastTick: 0,
+};
+
+function toast(lines, dur = 1.1, s = 1) { S.toast = { lines: [].concat(lines), t: dur, s }; }
+function setPhase(p) { S.phase = p; S.t = 0; }
+
+function newGame() {
+  rng = makeRng(Date.now());
+  Object.assign(S, { trip: 0, home: 0, away: 0, puddles: [], fx: [], toast: null, shot: null, paused: false,
+    stats: { mopped: 0, slips: 0, spotless: 0 } });
+  S.boy = { x: BENCH.x, y: BENCH.y, fx: 1, fy: -1, swipe: 0, step: 0, gas: 1.5, moving: false };
+  S.lanes = LANES.map((y, i) => ({ y, x: -10 - (i % 3) * 6, home: i % 2 === 0, slip: 0, jx: 0, jy: 0 }));
+  sfx.whistle();
+  setPhase("arrive");
+}
+
+/** Where the mop head is touching the floor right now. */
+function mopHead() {
+  const b = S.boy;
+  const sway = b.swipe > 0 ? Math.sin((1 - b.swipe / SWIPE) * Math.PI * 2) * 3 : 0;
+  const hx = b.x + b.fx * 7 + (b.fy !== 0 ? sway : 0);
+  const hy = b.y - 2 + b.fy * 4 + (b.fx !== 0 && b.fy === 0 ? sway * 0.6 : 0);
+  return { x: Math.round(hx), y: Math.round(hy) };
+}
+
+const canMove = () => ["scrum", "leave", "mop", "return"].includes(S.phase);
+const canMop = () => ["leave", "mop", "return"].includes(S.phase);
+
+function updateBoy(dt) {
+  const b = S.boy;
+  if (b.swipe > 0) {
+    b.swipe -= dt;
+    if (b.swipe <= 0) {
+      b.swipe = 0;
+      const head = mopHead();
+      const i = puddleUnder(S.puddles, head.x, head.y);
+      if (i >= 0) {
+        const p = S.puddles[i];
+        const dry = swipe(p);
+        S.stats.mopped++;
+        for (let k = 0; k < 4; k++) S.fx.push({ kind: "drop", x: head.x, y: head.y, vx: (rng() - 0.5) * 40, vy: -20 - rng() * 30, t: 0.4 });
+        if (dry) {
+          sfx.dry();
+          S.fx.push({ kind: "ring", x: p.x, y: p.y, t: 0.35 });
+        }
+      }
+    }
+  }
+  b.moving = false;
+  if (!canMove()) return;
+
+  const wantMop = canMop() && (pressed.has("a") || held.a);
+  if (b.swipe <= 0 && wantMop) {
+    b.swipe = SWIPE;
+    sfx.squeak();
+  }
+  if (b.swipe > 0) return; // planted while the mop goes back and forth
+
+  let dx = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+  let dy = (held.down ? 1 : 0) - (held.up ? 1 : 0);
+  if (!dx && !dy) { b.gas = Math.min(1.5, b.gas + dt * 0.5); return; }
+  const hustling = held.b && b.gas > 0;
+  b.gas = hustling ? Math.max(0, b.gas - dt) : Math.min(1.5, b.gas + dt * 0.5);
+  const sp = (hustling ? HUSTLE : WALK) * (dx && dy ? Math.SQRT1_2 : 1);
+  b.x = Math.max(COURT.x0 + 3, Math.min(COURT.x1 - 3, b.x + dx * sp * dt));
+  b.y = Math.max(COURT.y0 + 11, Math.min(COURT.y1 - 1, b.y + dy * sp * dt));
+  b.fx = dx;
+  b.fy = dy;
+  if (dx && dy) b.fy = 0; // diagonals mop sideways, which reads better on screen
+  b.moving = true;
+  b.step += dt * (hustling ? 12 : 8);
+}
+
+function runLanes(targetX, dt, speed) {
+  for (const l of S.lanes) {
+    l.x += Math.sign(targetX - l.x) * Math.min(Math.abs(targetX - l.x), speed * dt);
+  }
+}
+
+function update(dt) {
+  if (pressed.has("select")) {
+    if (S.phase === "title") { league = 1 - league; sfx.blip(); }
+    else { muted = !muted; toast(muted ? "SOUND OFF" : "SOUND ON", 0.8); }
+  }
+  if (S.phase === "title" || S.phase === "final") {
+    S.t += dt;
+    if (pressed.has("start") || (S.t > 0.6 && pressed.has("a"))) newGame();
+    return;
+  }
+  if (pressed.has("start")) { S.paused = !S.paused; sfx.blip(); }
+  if (S.paused) return;
+
+  S.t += dt;
+  if (S.toast && (S.toast.t -= dt) <= 0) S.toast = null;
+  if (S.blinkAway > 0) S.blinkAway -= dt;
+  for (const l of S.lanes) if (l.slip > 0) l.slip -= dt;
+  S.fx = S.fx.filter((f) => {
+    f.t -= dt;
+    if (f.kind === "drop" || f.kind === "word") { f.x += (f.vx || 0) * dt; f.y += (f.vy || 0) * dt; if (f.kind === "drop") f.vy += 160 * dt; }
+    return f.t > 0;
+  });
+  updateBoy(dt);
+
+  const spec = tripSpec(S.trip);
+  switch (S.phase) {
+    case "arrive": {
+      // Opening tip: the teams jog in from midcourt to the key.
+      S.lanes.forEach((l, i) => { l.x = Math.min(112 + (i % 3) * 8, l.x + 70 * dt); });
+      if (S.t > 1.6) startScrum();
+      break;
+    }
+    case "scrum": {
+      // Bodies jostle under the hoop and sweat hits the floor one drop at a time.
+      for (const l of S.lanes) {
+        l.jx = Math.sin(S.t * 13 + l.y) * 3;
+        l.jy = Math.cos(S.t * 11 + l.y * 0.7) * 2;
+      }
+      const shown = Math.floor((S.t / 1.8) * (S.pending.length + 1));
+      while (S.puddles.length < Math.min(shown, S.pending.length)) {
+        const p = S.pending[S.puddles.length];
+        S.puddles.push(p);
+        sfx.plop();
+        S.fx.push({ kind: "ring", x: p.x, y: p.y, t: 0.3 });
+      }
+      if (S.t > 2.0) {
+        S.puddles = S.pending;
+        S.awayScore = awayPoints(rng);
+        for (const l of S.lanes) { l.jx = 0; l.jy = 0; }
+        setPhase("leave");
+      }
+      break;
+    }
+    case "leave": {
+      runLanes(-24, dt, 130);
+      if (S.t > 1.4) {
+        S.clock = mopTime(S.trip, S.puddles);
+        S.lastTick = Math.ceil(S.clock);
+        toast("MOP!", 0.7, 2);
+        setPhase("mop");
+      }
+      break;
+    }
+    case "mop": {
+      S.clock -= dt;
+      if (S.t > 1.2 && S.awayScore != null) {
+        // The other end of the floor: the away team's trip plays out while you mop.
+        S.away += S.awayScore;
+        S.blinkAway = S.awayScore ? 1.6 : 0;
+        S.awayScore = null;
+      }
+      const sec = Math.ceil(S.clock);
+      if (sec < S.lastTick && sec <= 3 && sec > 0) sfx.tick();
+      S.lastTick = sec;
+      if (S.clock <= 0 || wetUnits(S.puddles) === 0) {
+        if (S.awayScore != null) { S.away += S.awayScore; S.awayScore = null; }
+        S.clock = 0;
+        S.waveX = COURT.x0 - 10;
+        S.lanes.forEach((l, i) => { l.x = S.waveX - (i % 2) * 4; });
+        toast(wetUnits(S.puddles) ? "HERE THEY COME!" : "ALL DRY!", 1.0);
+        sfx.whistle();
+        setPhase("return");
+      }
+      break;
+    }
+    case "return": {
+      // The players come back up the floor as one front.
+      S.waveX += spec.waveSpeed * dt * (wetUnits(S.puddles) ? 1 : 2.2);
+      S.lanes.forEach((l, i) => { l.x = S.waveX - ((i * 5) % 7); });
+      for (const p of sweep(S.puddles, S.waveX)) {
+        S.stats.slips++;
+        const lane = S.lanes.reduce((a, l) => (Math.abs(l.y - 2 - p.y) < Math.abs(a.y - 2 - p.y) ? l : a));
+        lane.slip = 0.7;
+        sfx.slip();
+        S.fx.push({ kind: "word", x: p.x, y: p.y - 14, vy: -14, t: 0.9, word: "SLIP!" });
+      }
+      if (S.waveX >= WAVE_END) startShot();
+      break;
+    }
+    case "shot": {
+      const sh = S.shot;
+      if (!sh.done && S.t > sh.dur) {
+        sh.done = true;
+        if (sh.make) {
+          S.home += sh.points;
+          sfx.swish();
+          toast([sh.points === 3 ? "SPLASH! +3" : "BUCKET! +2"], 1.2);
+        } else {
+          sfx.clank();
+          toast("CLANK!", 1.0);
+        }
+      }
+      if (S.t > sh.dur + 1.4) {
+        S.trip++;
+        if (S.trip >= TRIPS) finish();
+        else startScrum();
+      }
+      break;
+    }
+  }
+}
+
+function startScrum() {
+  S.puddles = [];
+  S.pending = spawnPuddles(S.trip, rng);
+  S.lanes.forEach((l, i) => {
+    l.x = 108 + (i % 3) * 11;
+    l.y = 40 + i * 13;
+    l.slip = 0;
+  });
+  // The mopper waits on the sideline between trips.
+  Object.assign(S.boy, { x: BENCH.x, y: BENCH.y, fx: 1, fy: -1, swipe: 0 });
+  if (S.trip % 2 === 0 && S.trip > 0) toast(`QUARTER ${quarterOf(S.trip)}`, 1.2);
+  setPhase("scrum");
+}
+
+function startShot() {
+  const slipped = slippedUnits(S.puddles);
+  const { points, chance } = shotFor(slipped);
+  if (slipped === 0) S.stats.spotless++;
+  const make = rng() < chance;
+  const shooter = S.lanes.find((l) => l.home && l.slip <= 0) || S.lanes[0];
+  const sx = points === 3 ? 100 : 132;
+  shooter.x = sx;
+  shooter.y = HOOP.y + 6;
+  S.shot = { from: { x: sx + 2, y: HOOP.y - 8 }, make, points, chance, dur: points === 3 ? 1.0 : 0.7, done: false };
+  if (slipped === 0) toast("SPOTLESS! GOING FOR 3", 1.0);
+  setPhase("shot");
+}
+
+function finish() {
+  sfx.buzzer();
+  const won = S.home > S.away;
+  if (S.home !== S.away) record = { w: record.w + (won ? 1 : 0), l: record.l + (won ? 0 : 1) };
+  saveRecord(record);
+  setPhase("final");
+}
+
+/* ---------- drawing ---------- */
+
+const insideCourt = (x, y) => x >= COURT.x0 && x <= COURT.x1 && y >= COURT.y0 && y <= COURT.y1;
+
+function drawCourt() {
+  rect(0, 0, W, H, 1);
+  // Paint under the hoop.
+  rect(116, 57, COURT.x1 - 116, 33, 2);
+  rect(117, 58, COURT.x1 - 117, 31, 1);
+  for (let y = 60; y < 88; y += 3) for (let x = 119 + (y % 2); x < COURT.x1 - 1; x += 3) px(x, y, 2);
+  // Lines.
+  rect(COURT.x0, COURT.y0, COURT.x1 - COURT.x0 + 1, 1, 0);
+  rect(COURT.x0, COURT.y1, COURT.x1 - COURT.x0 + 1, 1, 0);
+  rect(COURT.x0, COURT.y0, 1, COURT.y1 - COURT.y0, 0);
+  rect(COURT.x1, COURT.y0, 1, COURT.y1 - COURT.y0, 0);
+  arc(COURT.x0, HOOP.y, 14, -Math.PI / 2, Math.PI / 2, 0);
+  arc(116, HOOP.y, 15, Math.PI / 2, Math.PI * 1.5, 0);
+  // Three-point line: corners run straight, the rest is the arc.
+  const r3 = 52;
+  arc(HOOP.x, HOOP.y, r3, Math.PI * 0.62, Math.PI * 1.38, 0, (x, y) => insideCourt(x, y) && y > COURT.y0 + 6 && y < COURT.y1 - 6);
+  const cy = Math.round(Math.sin(Math.PI * 0.38) * r3);
+  const cx = Math.round(HOOP.x + Math.cos(Math.PI * 0.62) * r3);
+  rect(cx, COURT.y0 + 6, COURT.x1 - cx, 1, 0);
+  rect(cx, COURT.y1 - 6, COURT.x1 - cx, 1, 0);
+  if (HOOP.y - cy > COURT.y0 + 6) rect(cx, COURT.y0 + 6, 1, HOOP.y - cy - COURT.y0 - 6, 0);
+  if (HOOP.y + cy < COURT.y1 - 6) rect(cx, HOOP.y + cy, 1, COURT.y1 - 6 - HOOP.y - cy, 0);
+  // Midcourt logo dot.
+  ellipse(COURT.x0, HOOP.y, 4, 3, 2, 0);
+  // Backboard and rim.
+  rect(151, HOOP.y - 10, 2, 21, 3);
+  rect(149, HOOP.y - 1, 2, 2, 3);
+  ellipse(HOOP.x, HOOP.y, 3, 2, null, 3);
+  px(HOOP.x - 1, HOOP.y + 1, 0); px(HOOP.x + 1, HOOP.y + 1, 0); px(HOOP.x, HOOP.y + 2, 0);
+}
+
+function drawPuddles() {
+  const t = performance.now() / 1000;
+  for (const p of S.puddles) {
+    if (p.units <= 0) continue;
+    const { rx, ry } = puddleShape(p.units);
+    if (p.locked) {
+      ellipse(p.x, p.y, rx, ry, 0, Math.floor(t * 6) % 2 ? 3 : 2);
+      continue;
+    }
+    ellipse(p.x, p.y, rx, ry, 0, 2);
+    // A glint that drifts across the water.
+    const gx = Math.round(p.x - rx + 2 + ((t * 4 + p.x) % Math.max(1, rx * 2 - 3)));
+    px(gx, p.y - Math.max(0, ry - 2), 1);
+    if (p.units > 1) px(p.x + Math.round(rx / 2), p.y + 1, 1);
+    // Pips under the bigger puddles show how many swipes are left.
+    if (p.units > 1) for (let k = 0; k < p.units; k++) px(p.x - p.units + 1 + k * 2, p.y + ry + 2, 3);
+  }
+}
+
+function drawPlayer(l, frame) {
+  const base = frame ? PLAYER_STEP : PLAYER;
+  const rows = league ? withTail(base) : base;
+  const map = l.home ? HOME : AWAY;
+  const x = Math.round(l.x + (l.jx || 0));
+  const y = Math.round(l.y + (l.jy || 0));
+  if (l.slip > 0) {
+    // Feet out, flat on the floor.
+    rect(x - 7, y - 3, 14, 3, map.J === 0 ? 0 : 3);
+    rect(x - 7, y - 3, 14, 1, 3);
+    rect(x + 5, y - 4, 3, 4, 2);
+    rect(x - 9, y - 3, 2, 2, 3);
+    return;
+  }
+  sprite(rows, x, y, false, map);
+}
+
+function drawBoy() {
+  const b = S.boy;
+  const head = mopHead();
+  const frame = b.moving && Math.floor(b.step) % 2 ? BOY_STEP : BOY;
+  const flip = b.fx < 0;
+  const handX = b.x + (b.fx || (flip ? -1 : 1)) * 3;
+  const handY = b.y - 6;
+  const drawMop = () => {
+    // Handle from hand to head, then the big round mop head on the floor.
+    const n = Math.max(Math.abs(head.x - handX), Math.abs(head.y - handY));
+    for (let i = 0; i <= n; i++) px(Math.round(handX + (head.x - handX) * (i / n)), Math.round(handY + (head.y - handY) * (i / n)), 3);
+    ellipse(head.x, head.y, 3, 2, 2, 3);
+    px(head.x - 1, head.y - 1, 1);
+  };
+  if (b.fy < 0) drawMop();
+  sprite(frame, Math.round(b.x), Math.round(b.y), flip);
+  if (b.fy >= 0) drawMop();
+}
+
+function drawFx() {
+  for (const f of S.fx) {
+    if (f.kind === "drop") px(f.x, f.y, 0);
+    if (f.kind === "ring") ellipse(Math.round(f.x), Math.round(f.y), Math.round(10 - f.t * 18), Math.round(6 - f.t * 10), null, 0);
+    if (f.kind === "word") { rect(f.x - 11, f.y - 1, 22, 7, 3); ctext(f.word, Math.round(f.y), 0, 1, f.x); }
+  }
+}
+
+function drawBall() {
+  const sh = S.shot;
+  if (!sh) return;
+  const k = Math.min(1, S.t / sh.dur);
+  let x, y;
+  if (!sh.done || sh.make) {
+    x = sh.from.x + (HOOP.x - sh.from.x) * k;
+    y = sh.from.y + (HOOP.y - 2 - sh.from.y) * k - Math.sin(k * Math.PI) * (sh.points === 3 ? 26 : 14);
+    if (sh.done) { x = HOOP.x; y = HOOP.y + Math.min(8, (S.t - sh.dur) * 20); }
+  } else {
+    // Off the rim and out.
+    const e = S.t - sh.dur;
+    x = HOOP.x - e * 40;
+    y = HOOP.y - 4 - Math.sin(Math.min(1, e * 1.6) * Math.PI) * 12 + e * 10;
+  }
+  ellipse(Math.round(x), Math.round(y), 2, 2, 2, 3);
+  px(Math.round(x) - 1, Math.round(y) - 1, 0);
+}
+
+function drawHud() {
+  rect(0, 0, W, 12, 3);
+  text(`HOME ${String(S.home).padStart(2, " ")}`, 3, 4, 0);
+  const awayStr = `AWAY ${String(S.away).padStart(2, " ")}`;
+  if (!(S.blinkAway > 0 && Math.floor(S.blinkAway * 6) % 2)) text(awayStr, W - 3 - textW(awayStr), 4, 0);
+  ctext(`Q${quarterOf(Math.min(S.trip, TRIPS - 1))}`, 4, 1);
+
+  rect(0, 132, W, 12, 3);
+  const wet = wetUnits(S.puddles);
+  if (S.phase === "mop") {
+    const c = Math.max(0, S.clock).toFixed(1);
+    text(`BACK IN ${c}`, 3, 136, S.clock < 3 && Math.floor(S.clock * 4) % 2 ? 1 : 0);
+    const r = `WET ${wet}`;
+    text(r, W - 3 - textW(r), 136, 0);
+  } else if (S.phase === "return") {
+    const slipped = slippedUnits(S.puddles);
+    text(`SLIPS ${slipped}`, 3, 136, 0);
+    const r = wet + slipped === 0 ? "FOR 3!" : `SHOT ${Math.round(shotFor(slipped).chance * 100)}%`;
+    text(r, W - 3 - textW(r), 136, 0);
+  } else {
+    text(`TRIP ${Math.min(S.trip + 1, TRIPS)}/${TRIPS}`, 3, 136, 0);
+    const r = S.phase === "scrum" ? "SCRUM!" : S.phase === "leave" ? "GET READY" : "";
+    if (r) text(r, W - 3 - textW(r), 136, 0);
+  }
+  // Hustle gas: a little meter in the middle of the bottom bar.
+  if (["scrum", "leave", "mop", "return"].includes(S.phase)) {
+    rect(70, 136, 20, 5, 2);
+    rect(71, 137, Math.round((S.boy.gas / 1.5) * 18), 3, S.boy.gas < 0.3 ? 1 : 0);
+  }
+}
+
+function drawTitle() {
+  drawCourt();
+  rect(0, 0, W, 12, 3);
+  ctext(league ? "WOMEN'S PRO NIGHT" : "MEN'S PRO NIGHT", 4, 0);
+  banner(["SWEAT BOY"], 20, 2);
+  // A mopper scrubbing a puddle, on loop.
+  const t = performance.now() / 1000;
+  const k = (t % 1.4) / 1.4;
+  const units = 3 - Math.floor(k * 3);
+  const { rx, ry } = puddleShape(Math.max(1, units));
+  ellipse(92, 76, rx * 2, ry * 2, 0, 2);
+  const sway = Math.round(Math.sin(t * 18) * 6);
+  for (let i = 0; i <= 14; i++) px(Math.round(68 + (90 + sway - 68) * (i / 14)), Math.round(64 + 12 * (i / 14)), 3);
+  ellipse(90 + sway, 76, 6, 3, 2, 3);
+  sprite(BOY, 64, 82, false, null, 2);
+  if (Math.floor(t * 2) % 2) ctext("PRESS START", 98, 0);
+  ctext(`< SELECT: ${league ? "WOMEN'S" : "MEN'S"} >`, 108, 3);
+  rect(0, 116, W, 28, 3);
+  ctext("D-PAD MOVE  A MOP  B HUSTLE", 120, 0);
+  ctext("MOP IT ALL BEFORE THEY'RE BACK", 128, 1);
+  if (record.w + record.l) ctext(`RECORD ${record.w}-${record.l}`, 136, 0);
+}
+
+function drawFinal() {
+  drawCourt();
+  const won = S.home > S.away;
+  const tie = S.home === S.away;
+  banner(["FINAL"], 16, 2);
+  banner([
+    `HOME ${S.home}  -  AWAY ${S.away}`,
+    tie ? "OVERTIME? NAH. A TIE." : won ? "YOU WIN! GREAT MOPPING" : "TOUGH LOSS",
+    "",
+    `SWIPES ${S.stats.mopped}`,
+    `SLIPS ${S.stats.slips}`,
+    `SPOTLESS TRIPS ${S.stats.spotless}/${TRIPS}`,
+    `RECORD ${record.w}-${record.l}`,
+  ], 40);
+  if (Math.floor(S.t * 2) % 2) ctext("PRESS START", 124, 0);
+}
+
+function draw() {
+  if (S.phase === "title") return drawTitle();
+  if (S.phase === "final") return drawFinal();
+  drawCourt();
+  drawPuddles();
+  const frame = Math.floor(performance.now() / 120) % 2;
+  const running = ["arrive", "leave", "return"].includes(S.phase);
+  // Draw back to front so lower bodies overlap higher ones.
+  const bodies = [...S.lanes.map((l) => ({ y: l.y, draw: () => drawPlayer(l, running && frame) })),
+                  { y: S.boy.y, draw: drawBoy }];
+  bodies.sort((a, b) => a.y - b.y).forEach((o) => o.draw());
+  drawBall();
+  drawFx();
+  drawHud();
+  if (S.toast) banner(S.toast.lines, 54, S.toast.s);
+  if (S.paused) banner(["PAUSED", "START TO PLAY"], 56);
+}
+
+/* ---------- loop ---------- */
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  pressed.clear();
+  draw();
+  requestAnimationFrame(frame);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && !["title", "final"].includes(S.phase)) S.paused = true;
+});
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
