@@ -115,6 +115,12 @@ jobs:
         working-directory: apps/portfolio
         run: node test/sweat-boy.test.mjs
 
+      # Boulder Smash on the Camboy: button combos, who gets hurt by what,
+      # and the city layouts. Plain modules, no install needed.
+      - name: Test Boulder Smash cartridge
+        working-directory: apps/portfolio
+        run: node test/boulder.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
           for app in playball canitwo recipebox psx solra disney-trivia tophat-spears; do

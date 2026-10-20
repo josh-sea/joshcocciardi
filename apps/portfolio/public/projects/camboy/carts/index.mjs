@@ -6,6 +6,7 @@
  */
 export const CARTS = [
   { id: "sweat-boy", title: "SWEAT BOY", label: "#e8a23b", load: () => import("./sweat-boy/game.mjs") },
+  { id: "boulder", title: "BOULDER SMASH", label: "#6fae6a", load: () => import("./boulder/game.mjs") },
 ];
 
 /** Four pockets to a page. */
