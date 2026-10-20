@@ -11,6 +11,7 @@ import {
   COURT, TRIPS, makeRng, tripSpec, puddleRadius, puddleShape, spawnPuddles, wetUnits,
   mopTime, puddleUnder, swipe, sweep, slippedUnits, shotFor, awayPoints, quarterOf,
 } from '../public/projects/sweat-boy/rules.mjs';
+import { SONGS, CHORDS, compile, midi, voicing, parseLead } from '../public/projects/sweat-boy/sound.mjs';
 
 let failures = 0;
 const ok = (name, cond, extra = '') => {
@@ -102,6 +103,25 @@ console.log('\nthe shot');
   const avg = pts.reduce((a, b) => a + b, 0) / pts.length;
   ok('a clean floor out-scores the away team on average', shotFor(0).chance * 3 > avg + 0.5, `away ${avg.toFixed(2)}`);
   ok('a sloppy floor does not', shotFor(3).chance * 2 < avg, `away ${avg.toFixed(2)}`);
+}
+
+console.log('\nmusic');
+{
+  ok('notes are named the usual way', midi('A4') === 69 && midi('C4') === 60 && midi('G#5') === 80);
+  ok('chords stack upward from the root', Object.keys(CHORDS).every((c) => { const v = voicing(c, 4); return v[0] < v[1] && v[1] < v[2] && v[2] - v[0] < 12; }));
+  const held = parseLead(['C5 . . - E5 . G5 . . . . . . . - -']);
+  ok('a held note lasts until the next note or rest', held.events[0].len === 3 && held.events[1].len === 2 && held.events[2].len === 8);
+  for (const [name, song] of Object.entries(SONGS)) {
+    const badBar = song.lead.findIndex((b) => b.trim().split(/\s+/).length !== 16);
+    ok(`${name}: every lead bar is sixteen steps`, badBar === -1, `bar ${badBar + 1}`);
+    ok(`${name}: one lead bar per chord`, song.lead.length === song.chords.length);
+    ok(`${name}: drum bars are sixteen steps`, !song.drums || song.drums.every((d) => d.length === 16 && /^[ksh.]+$/.test(d)));
+    const c = compile(song);
+    const all = [...c.lead, ...c.bass, ...c.arp];
+    ok(`${name}: everything lands inside the song`, all.every((e) => e.step >= 0 && e.step + e.len <= c.steps) && c.leadSteps === c.steps);
+    ok(`${name}: bass sits low and the lead sits high`, c.bass.every((e) => e.note >= midi('E2') && e.note <= midi('C4')) && c.lead.every((e) => e.note >= midi('E4') && e.note <= midi('E6')));
+  }
+  ok('the game song and title loop, the jingles do not', SONGS.game.loop && SONGS.title.loop && !SONGS.win.loop && !SONGS.lose.loop);
 }
 
 console.log(failures ? `\n${failures} failing\n` : '\nall passing\n');

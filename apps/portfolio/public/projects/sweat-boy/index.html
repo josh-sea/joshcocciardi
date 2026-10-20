@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Sweat Boy</title>
 <meta name="description" content="An 8-bit handheld game: you're the court mopper at a pro basketball game. Scrub the sweat puddles off the floor before the players come back up the court, or watch them slip and brick the shot.">
 <meta name="theme-color" content="#2a2833">
@@ -32,6 +32,9 @@
     --pixel: "Press Start 2P", ui-monospace, monospace;
   }
   html, body { height: 100%; }
+  html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  * { -webkit-tap-highlight-color: transparent; }
+  .shell { touch-action: none; }
   body {
     margin: 0;
     background: var(--page);
@@ -325,6 +328,7 @@ import {
   wetUnits, mopTime, puddleUnder, swipe, sweep, slippedUnits, shotFor,
   awayPoints, quarterOf,
 } from "./rules.mjs";
+import { createSound } from "./sound.mjs";
 
 /* ---------- screen ---------- */
 
@@ -456,41 +460,10 @@ const AWAY = { J: 3, S: 3 };
 
 /* ---------- sound ---------- */
 
-let ac = null;
-let muted = false;
-function audio() {
-  if (!ac) {
-    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { ac = null; }
-  }
-  if (ac && ac.state === "suspended") ac.resume();
-  return ac;
-}
-function beep(freq, dur, { type = "square", vol = 0.07, to = null, at = 0 } = {}) {
-  if (muted || !ac) return;
-  const t = ac.currentTime + at;
-  const o = ac.createOscillator();
-  const v = ac.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, t);
-  if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
-  v.gain.setValueAtTime(vol, t);
-  v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(v).connect(ac.destination);
-  o.start(t);
-  o.stop(t + dur + 0.02);
-}
-const sfx = {
-  squeak: () => { beep(1100, 0.05, { to: 1500, vol: 0.03 }); beep(1500, 0.05, { to: 1000, vol: 0.03, at: 0.14 }); },
-  dry: () => { beep(1320, 0.08, { type: "triangle", vol: 0.12 }); beep(1760, 0.12, { type: "triangle", vol: 0.12, at: 0.07 }); },
-  plop: () => beep(380, 0.12, { type: "sine", to: 110, vol: 0.18 }),
-  slip: () => beep(700, 0.25, { to: 150, vol: 0.08 }),
-  whistle: () => { for (let i = 0; i < 4; i++) beep(2300 + (i % 2) * 160, 0.06, { type: "sine", vol: 0.06, at: i * 0.06 }); },
-  swish: () => { beep(900, 0.25, { type: "triangle", to: 400, vol: 0.12 }); beep(523, 0.1, { at: 0.3 }); beep(659, 0.1, { at: 0.4 }); beep(784, 0.18, { at: 0.5 }); },
-  clank: () => { beep(190, 0.18, { vol: 0.1 }); beep(140, 0.2, { vol: 0.08, at: 0.12 }); },
-  buzzer: () => beep(98, 0.7, { type: "sawtooth", vol: 0.08 }),
-  tick: () => beep(1800, 0.03, { vol: 0.03 }),
-  blip: () => beep(880, 0.05, { vol: 0.05 }),
-};
+const snd = createSound();
+const { sfx, crowd } = snd;
+const audio = () => snd.unlock();
+snd.play("title"); // waits for the first tap or key, which is when browsers allow sound
 
 /* ---------- input ---------- */
 
@@ -556,6 +529,23 @@ dpad.addEventListener("pointercancel", releasePad);
 dpad.addEventListener("lostpointercapture", releasePad);
 dpad.addEventListener("contextmenu", (e) => e.preventDefault());
 
+// iOS Safari ignores user-scalable=no, so quick double taps on the buttons
+// would zoom the page. Swallow the touch defaults on the controls (the
+// pointer handlers above still fire), and stop double-tap and pinch zoom
+// anywhere else on the page except links.
+document.querySelectorAll("[data-key], #dpad, #lcd").forEach((el) => {
+  el.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
+});
+let lastTouchEnd = 0;
+document.addEventListener("touchend", (e) => {
+  audio(); // iOS unlocks sound on touchend, not pointerdown
+  if (e.timeStamp - lastTouchEnd < 400 && !e.target.closest("a")) e.preventDefault();
+  lastTouchEnd = e.timeStamp;
+}, { passive: false });
+document.addEventListener("touchmove", (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener("dblclick", (e) => e.preventDefault());
+for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, (e) => e.preventDefault());
+
 /* ---------- saved record ---------- */
 
 function loadRecord() {
@@ -599,6 +589,19 @@ const S = {
 function toast(lines, dur = 1.1, s = 1) { S.toast = { lines: [].concat(lines), t: dur, s }; }
 function setPhase(p) { S.phase = p; S.t = 0; }
 
+/** Pausing quiets the arena and holds the song's place. */
+function setPaused(p) {
+  if (p === S.paused) return;
+  S.paused = p;
+  if (p) {
+    S.song = snd.pause();
+    crowd.murmur(false);
+  } else {
+    if (S.song?.name) snd.play(S.song.name, S.song.at);
+    crowd.murmur(true);
+  }
+}
+
 function newGame() {
   rng = makeRng(Date.now());
   Object.assign(S, { trip: 0, home: 0, away: 0, puddles: [], fx: [], toast: null, shot: null, paused: false,
@@ -606,6 +609,10 @@ function newGame() {
   S.boy = { x: BENCH.x, y: BENCH.y, fx: 1, fy: -1, swipe: 0, step: 0, gas: 1.5, moving: false };
   S.lanes = LANES.map((y, i) => ({ y, x: -10 - (i % 3) * 6, home: i % 2 === 0, slip: 0, jx: 0, jy: 0 }));
   sfx.whistle();
+  snd.play("game");
+  snd.setTempo(1);
+  crowd.murmur(true);
+  crowd.cheer(0.25, 1.6);
   setPhase("arrive");
 }
 
@@ -636,6 +643,7 @@ function updateBoy(dt) {
         for (let k = 0; k < 4; k++) S.fx.push({ kind: "drop", x: head.x, y: head.y, vx: (rng() - 0.5) * 40, vy: -20 - rng() * 30, t: 0.4 });
         if (dry) {
           sfx.dry();
+          if (p.max >= 3) crowd.cheer(0.12, 0.7);
           S.fx.push({ kind: "ring", x: p.x, y: p.y, t: 0.35 });
         }
       }
@@ -675,14 +683,14 @@ function runLanes(targetX, dt, speed) {
 function update(dt) {
   if (pressed.has("select")) {
     if (S.phase === "title") { league = 1 - league; sfx.blip(); }
-    else { muted = !muted; toast(muted ? "SOUND OFF" : "SOUND ON", 0.8); }
+    else toast(["SOUND ON", "MUSIC OFF", "SOUND OFF"][snd.cycleMode()], 0.8);
   }
   if (S.phase === "title" || S.phase === "final") {
     S.t += dt;
     if (pressed.has("start") || (S.t > 0.6 && pressed.has("a"))) newGame();
     return;
   }
-  if (pressed.has("start")) { S.paused = !S.paused; sfx.blip(); }
+  if (pressed.has("start")) { setPaused(!S.paused); sfx.blip(); }
   if (S.paused) return;
 
   S.t += dt;
@@ -753,6 +761,8 @@ function update(dt) {
         S.lanes.forEach((l, i) => { l.x = S.waveX - (i % 2) * 4; });
         toast(wetUnits(S.puddles) ? "HERE THEY COME!" : "ALL DRY!", 1.0);
         sfx.whistle();
+        if (!wetUnits(S.puddles)) crowd.cheer(0.3, 1.6);
+        snd.setTempo(1.12); // the players are coming, so is the beat
         setPhase("return");
       }
       break;
@@ -766,6 +776,7 @@ function update(dt) {
         const lane = S.lanes.reduce((a, l) => (Math.abs(l.y - 2 - p.y) < Math.abs(a.y - 2 - p.y) ? l : a));
         lane.slip = 0.7;
         sfx.slip();
+        crowd.groan(0.22, 0.9);
         S.fx.push({ kind: "word", x: p.x, y: p.y - 14, vy: -14, t: 0.9, word: "SLIP!" });
       }
       if (S.waveX >= WAVE_END) startShot();
@@ -778,9 +789,11 @@ function update(dt) {
         if (sh.make) {
           S.home += sh.points;
           sfx.swish();
+          crowd.cheer(sh.points === 3 ? 0.5 : 0.32, 2.2);
           toast([sh.points === 3 ? "SPLASH! +3" : "BUCKET! +2"], 1.2);
         } else {
           sfx.clank();
+          crowd.groan(0.3, 1.2);
           toast("CLANK!", 1.0);
         }
       }
@@ -804,6 +817,7 @@ function startScrum() {
   });
   // The mopper waits on the sideline between trips.
   Object.assign(S.boy, { x: BENCH.x, y: BENCH.y, fx: 1, fy: -1, swipe: 0 });
+  snd.setTempo(1);
   if (S.trip % 2 === 0 && S.trip > 0) toast(`QUARTER ${quarterOf(S.trip)}`, 1.2);
   setPhase("scrum");
 }
@@ -825,6 +839,10 @@ function startShot() {
 function finish() {
   sfx.buzzer();
   const won = S.home > S.away;
+  crowd.murmur(false);
+  snd.play(won ? "win" : "lose");
+  if (won) crowd.cheer(0.6, 3.5);
+  else crowd.groan(0.35, 1.6);
   if (S.home !== S.away) record = { w: record.w + (won ? 1 : 0), l: record.l + (won ? 0 : 1) };
   saveRecord(record);
   setPhase("final");
@@ -1048,7 +1066,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden && !["title", "final"].includes(S.phase)) S.paused = true;
+  if (document.hidden && !["title", "final"].includes(S.phase)) setPaused(true);
 });
 requestAnimationFrame(frame);
 </script>
