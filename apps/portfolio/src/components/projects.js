@@ -157,7 +157,7 @@ const playthings = [
   {
     title: "💦 Sweat Boy",
     description:
-      "A Game Boy style 8-bit game where you're the court mopper at a pro basketball game. The players scrum under the hoop, drip sweat everywhere and run to the other end. You get a few seconds to scrub every puddle before they come back up the floor. Big puddles take several swipes of the mop, and the players reach the drips near midcourt first, so you have to pick your order. Every puddle they hit while it's still wet is a slip that costs your team the shot. A spotless floor means they go for three. Pick a men's or women's game, and play with the on-screen D-pad on a phone.",
+      "A Game Boy style 8-bit game where you're the court mopper at a pro basketball game. The players scrum under the hoop, drip sweat everywhere and run to the other end. You get a few seconds to scrub every puddle before they come back up the floor. Big puddles take several swipes of the mop, and the players reach the drips near midcourt first, so you have to pick your order. Every puddle they hit while it's still wet is a slip that costs your team the shot. A spotless floor means they go for three. The crowd cheers your buckets and groans at every slip over a four-channel chiptune soundtrack, all synthesized live. Pick a men's or women's game, and play with the on-screen D-pad on a phone.",
     tech: ["JavaScript", "Canvas API", "Web Audio"],
     link: "/projects/sweat-boy",
   },
