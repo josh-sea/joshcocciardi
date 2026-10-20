@@ -108,6 +108,12 @@ jobs:
       - name: Test Tophat & Spears
         run: node apps/portfolio/test/tophat-spears.test.mjs
 
+      # Sweat Boy: puddle layout, mop swipes, and the returning players'
+      # slip check are a plain rules module. No install needed.
+      - name: Test Sweat Boy
+        working-directory: apps/portfolio
+        run: node test/sweat-boy.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
           for app in playball canitwo recipebox psx solra disney-trivia tophat-spears; do
