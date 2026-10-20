@@ -41,7 +41,7 @@
 
 <!-- The Camboy itself. The back shows while a cartridge goes in, then it turns around. -->
 <div class="stage" id="stage">
-  <div class="device" id="device">
+  <div class="device" id="device" data-side="front">
     <div class="face back" aria-hidden="true">
       <div class="slot"><div class="drop" id="drop"></div></div>
       <div class="sticker">
@@ -159,9 +159,21 @@ $("pages").addEventListener("pointerup", (e) => {
 const device = $("device");
 let busy = false;
 
+// Safari on iPhone ignores backface-visibility here and lets the front
+// show through the back, so the hidden face is switched off by hand halfway
+// through each turn, when the device is edge-on.
+let sideTimer = null;
+function showSide(side, ms) {
+  clearTimeout(sideTimer);
+  if (!ms) device.dataset.side = side;
+  else sideTimer = setTimeout(() => { device.dataset.side = side; }, ms / 2);
+}
+
 function pose(s, ty, ry, ms) {
   device.style.transition = ms ? `transform ${ms}ms cubic-bezier(.35,.1,.25,1)` : "none";
   device.style.transform = `translateY(${ty}%) scale(${s}) rotateY(${ry}deg)`;
+  const side = Math.abs(ry) >= 90 ? "back" : "front";
+  if (device.dataset.side !== side) showSide(side, ms);
   if (!ms) void device.offsetWidth;
   return sleep(ms);
 }
