@@ -6,6 +6,10 @@
 <title>Sweat Boy</title>
 <meta name="description" content="An 8-bit handheld game: you're the court mopper at a pro basketball game. Scrub the sweat puddles off the floor before the players come back up the court, or watch them slip and brick the shot.">
 <meta name="theme-color" content="#2a2833">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sweat Boy">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%A6%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -195,6 +199,92 @@
   }
   .help kbd { font-family: var(--pixel); font-size: 9px; background: #3a3746; border-radius: 4px; padding: 2px 5px; color: #e6e2f3; }
   @media (hover: none) { .help .keys { display: none; } }
+
+  /* Phones held upright: drop the toy shell and go edge to edge like an
+     emulator. The screen takes the top of the phone, as wide as the height
+     leaves room for, and the controls grow to fill the bottom. */
+  @media (max-width: 600px) and (orientation: portrait) {
+    html, body { overflow: hidden; }
+    body { padding: 0; height: 100dvh; }
+    .shell {
+      --w: 100vw;
+      width: 100vw;
+      height: 100dvh;
+      border-radius: 0;
+      padding: 0;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+    }
+    .bezel {
+      border-radius: 0 0 26px 26px;
+      padding: calc(env(safe-area-inset-top, 0px) + 34px) 10px 12px;
+    }
+    .bezel-top, .power, .grille, .help { display: none; }
+    .back {
+      position: fixed;
+      z-index: 2;
+      top: calc(env(safe-area-inset-top, 0px) + 9px);
+      left: 14px;
+      margin: 0;
+    }
+    canvas { width: min(100%, calc((100dvh - min(340px, 50dvh)) * 160 / 144)); margin: 0 auto; }
+    .brand { font-size: 15px; margin: 10px 0 0 18px; }
+    .brand small { font-size: 10px; }
+    .controls {
+      flex: 1;
+      margin: 0;
+      padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 14px);
+      align-content: space-evenly;
+    }
+    .dpad { --d: min(46vw, 210px, 28dvh); }
+    .ab { width: min(46vw, 210px, 28dvh); height: min(38vw, 170px, 23dvh); }
+    .btn { width: min(21vw, 92px, 13dvh); height: min(21vw, 92px, 13dvh); }
+    .btn span { font-size: 12px; }
+    .pills { margin-top: 0; }
+    .pill { width: 64px; height: 16px; }
+    .pill span { font-size: 9px; }
+  }
+
+  /* Phones on their side: screen in the middle at full height, D-pad on
+     the left, A/B on the right, Select/Start under them. */
+  @media (max-height: 500px) and (orientation: landscape) {
+    html, body { overflow: hidden; }
+    body { padding: 0; height: 100dvh; }
+    .shell {
+      --w: 100dvh;
+      width: 100vw;
+      height: 100dvh;
+      border-radius: 0;
+      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+      box-shadow: none;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      grid-template-rows: 1fr auto;
+      align-items: center;
+      justify-items: center;
+    }
+    .bezel {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      height: 100dvh;
+      display: flex;
+      align-items: center;
+      border-radius: 0;
+      padding: 8px 10px;
+    }
+    canvas { width: min(calc((100dvh - 16px) * 160 / 144), 56vw); }
+    .controls { display: contents; }
+    .bezel-top, .power, .grille, .help, .brand { display: none; }
+    .back { position: fixed; z-index: 2; top: 10px; left: calc(env(safe-area-inset-left, 0px) + 14px); margin: 0; color: #6d6975; }
+    .dpad { grid-column: 1; grid-row: 1 / span 2; --d: min(44dvh, 20vw); }
+    .ab { grid-column: 3; grid-row: 1; width: min(46dvh, 21vw); height: min(38dvh, 18vw); }
+    .btn { width: min(21dvh, 10vw); height: min(21dvh, 10vw); }
+    .btn span { font-size: 11px; }
+    .pills { grid-column: 3; grid-row: 2; margin: 0 0 calc(env(safe-area-inset-bottom, 0px) + 22px); gap: 18px; }
+    .pill { width: 56px; height: 14px; }
+    .pill span { font-size: 8px; }
+  }
 </style>
 </head>
 <body>
