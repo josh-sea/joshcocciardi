@@ -153,11 +153,11 @@ export function compile(song) {
 
 /* ---------- the audio graph ---------- */
 
-export function createSound() {
+export function createSound(hw) {
   let ac = null;
   let master, musicBus, sfxBus, noiseBuf, leadWave, arpWave;
   let mode = 0; // 0 everything, 1 music off, 2 silent
-  try { mode = +(localStorage.getItem("sweatboy.sound") || 0) % 3; } catch { /* keep default */ }
+  try { mode = +(hw.load("sweatboy.sound", 0)) % 3; } catch { /* keep default */ }
 
   function pulse(duty) {
     const n = 32;
@@ -177,37 +177,25 @@ export function createSound() {
     musicBus.gain.setTargetAtTime(mode === 0 ? 0.5 : 0, t, 0.03);
   }
 
-  /** Call from a tap or key press: browsers only start audio after a gesture. */
-  function unlock() {
-    if (!ac) {
-      try {
-        // Lets iPhones play sound with the ringer switch on silent.
-        if (navigator.audioSession) navigator.audioSession.type = "playback";
-        ac = new (window.AudioContext || window.webkitAudioContext)();
-      } catch { return null; }
-      // A limiter at the end, so a buzzer-beater cheer on top of the music never clips.
-      const limit = ac.createDynamicsCompressor();
-      limit.threshold.value = -10;
-      limit.ratio.value = 12;
-      limit.attack.value = 0.003;
-      limit.release.value = 0.25;
-      limit.connect(ac.destination);
-      master = ac.createGain();
-      master.connect(limit);
-      musicBus = ac.createGain();
-      musicBus.connect(master);
-      sfxBus = ac.createGain();
-      sfxBus.connect(master);
-      noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      leadWave = pulse(0.25);
-      arpWave = pulse(0.125);
-      applyMode();
-      if (pending) play(pending.name, pending.at);
-    }
-    if (ac.state === "suspended") ac.resume();
-    return ac;
+  /**
+   * The Camboy owns the audio context, the volume wheel and the limiter. It
+   * hands them over once the first tap allows sound.
+   */
+  function attach(context, out) {
+    ac = context;
+    master = ac.createGain();
+    master.connect(out);
+    musicBus = ac.createGain();
+    musicBus.connect(master);
+    sfxBus = ac.createGain();
+    sfxBus.connect(master);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    leadWave = pulse(0.25);
+    arpWave = pulse(0.125);
+    applyMode();
+    if (pending) play(pending.name, pending.at);
   }
 
   /* ---- one-off tones ---- */
@@ -238,6 +226,8 @@ export function createSound() {
     buzzer: () => beep(98, 0.7, { type: "sawtooth", vol: 0.08 }),
     tick: () => beep(1800, 0.03, { vol: 0.03 }),
     blip: () => beep(880, 0.05, { vol: 0.05 }),
+    power: () => [1047, 1319, 1568, 2093].forEach((f, i) => beep(f, 0.09, { vol: 0.06, at: i * 0.06 })),
+    powerDown: () => [1568, 1175, 880, 659].forEach((f, i) => beep(f, 0.09, { vol: 0.05, at: i * 0.07 })),
   };
 
   /* ---- noise and the crowd ---- */
@@ -460,13 +450,22 @@ export function createSound() {
     return where;
   }
 
+  hw.onAudio(attach);
+
   return {
-    unlock, sfx, crowd, play, stop, pause,
+    sfx, crowd, play, stop, pause,
+    /** Pulling the cartridge: silence everything this cartridge made. */
+    dispose() {
+      stop();
+      crowd.murmur(false);
+      if (master) master.gain.setTargetAtTime(0, ac.currentTime, 0.02);
+      setTimeout(() => master && master.disconnect(), 200);
+    },
     setTempo(x) { tempo = x; },
     get mode() { return mode; },
     cycleMode() {
       mode = (mode + 1) % 3;
-      try { localStorage.setItem("sweatboy.sound", String(mode)); } catch { /* fine */ }
+      hw.save("sweatboy.sound", mode);
       applyMode();
       return mode;
     },

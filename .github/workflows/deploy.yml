@@ -108,9 +108,10 @@ jobs:
       - name: Test Tophat & Spears
         run: node apps/portfolio/test/tophat-spears.test.mjs
 
-      # Sweat Boy: puddle layout, mop swipes, and the returning players'
-      # slip check are a plain rules module. No install needed.
-      - name: Test Sweat Boy
+      # Camboy and its Sweat Boy cartridge: puddle layout, venues, power-ups,
+      # the returning players' slip check and the joystick math are plain
+      # modules. No install needed.
+      - name: Test Camboy and Sweat Boy
         working-directory: apps/portfolio
         run: node test/sweat-boy.test.mjs
 

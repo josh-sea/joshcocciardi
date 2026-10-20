@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="0" fill="#2a2833"/>
+  <rect x="136" y="56" width="240" height="400" rx="22" ry="22" fill="#c9c5c0"/>
+  <path d="M376 330 v104 a22 22 0 0 1 -22 22 h-60 a96 96 0 0 0 82 -126z" fill="#a9a49e"/>
+  <rect x="160" y="84" width="192" height="164" rx="10" fill="#55536a"/>
+  <rect x="184" y="104" width="144" height="124" fill="#88c070"/>
+  <rect x="184" y="104" width="144" height="18" fill="#081820"/>
+  <ellipse cx="236" cy="190" rx="22" ry="9" fill="#e0f8d0" stroke="#346856" stroke-width="4"/>
+  <rect x="270" y="158" width="14" height="40" fill="#346856"/>
+  <rect x="266" y="150" width="22" height="14" fill="#081820"/>
+  <path d="M196 290 h20 v-20 h20 v20 h20 v20 h-20 v20 h-20 v-20 h-20z" fill="#2b2b30"/>
+  <circle cx="322" cy="296" r="16" fill="#9b2a5c"/>
+  <circle cx="290" cy="316" r="16" fill="#9b2a5c"/>
+  <text x="256" y="398" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-style="italic" font-weight="900" font-size="36" fill="#2f2c46">CAMBOY</text>
+</svg>

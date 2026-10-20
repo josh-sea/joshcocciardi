@@ -155,11 +155,11 @@ const playthings = [
     link: "/projects/boulder-smash",
   },
   {
-    title: "💦 Sweat Boy",
+    title: "🎮 Camboy",
     description:
-      "A Game Boy style 8-bit game where you're the court mopper at a pro basketball game. The players scrum under the hoop, drip sweat everywhere and run to the other end. You get a few seconds to scrub every puddle before they come back up the floor. Big puddles take several swipes of the mop, and the players reach the drips near midcourt first, so you have to pick your order. Every puddle they hit while it's still wet is a slip that costs your team the shot. A spotless floor means they go for three. The crowd cheers your buckets and groans at every slip over a four-channel chiptune soundtrack, all synthesized live. Pick a men's or women's game, and play with the on-screen D-pad on a phone.",
-    tech: ["JavaScript", "Canvas API", "Web Audio"],
-    link: "/projects/sweat-boy",
+      "A pocket game player from Cambo Industries, named for Cam and Bo. Flip through the cartridge book, tap a game, and watch it slide into the back of the Camboy before it turns around and boots up. It has a joystick under the D-pad so a sliding thumb never stalls, haptic taps, contrast and volume wheels, and it installs to a phone's home screen. Cartridge #1 is Sweat Boy: you're the court mopper at a pro basketball game, scrubbing every sweat puddle before the players come back up the floor. Every slip costs your team the shot, and a spotless floor means they go for three. Win to unlock the next of five venues, from the Rec Center to the Finals, and grab power-ups that come and go: a Jumbo Mop for one trip, Fast Kicks until someone slips, and a Timeout for three more seconds. A four-channel chiptune soundtrack and a live crowd are all synthesized in the browser.",
+    tech: ["JavaScript", "Canvas API", "Web Audio", "CSS 3D transforms", "PWA"],
+    link: "/projects/camboy",
   },
   {
     title: "🎩 Tophat & Spears",
