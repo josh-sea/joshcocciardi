@@ -25,7 +25,19 @@ apps/roy/
 
 ## Paid features
 
-Tiers are read from `/roy/users/{uid}/features` (`useFeatureFlags`). The rules make that node **server-only**, so a purchase flow has to write it from a Cloud Function (for example, a Stripe webhook). Clients can never grant it to themselves.
+Every unlockable is one flat switch: `/roy/users/{uid}/features/{id}: true` (read by `hooks/useFeatureFlags.js`). To grant one by hand, open the Realtime Database in the Firebase console, go to `roy → users → {uid}`, add a `features` child if there isn't one, and add the id with the value `true`. Delete it to take it back. The app updates live.
+
+| id | unlocks |
+|---|---|
+| `all` | everything below (for testers) |
+| `unlimitedGames` | no 3-active-game limit |
+| `deathmatch` | Deathmatch 5x5 games |
+| `strategist` | Strategist 15x15 games |
+| `midnight`, `neon_arcade`, `retro_green` | themes |
+| `savage_pack`, `galaxy_pack`, `pixel_pack` | emote packs |
+| `electricity`, `pixel_explosion`, `shockwave` | move effects |
+
+The ids come from `utils/themeData.js`, `utils/emoteData.js` and `utils/animationData.js` (anything not marked `free`), so a new pack added there is automatically a new switch. The rules make `features` **server-only**: the console or a Cloud Function (for example, a future Stripe webhook) can write it, a client never can.
 
 ## Local development
 
