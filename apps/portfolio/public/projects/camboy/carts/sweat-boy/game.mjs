@@ -20,6 +20,7 @@ export const meta = {
 };
 
 const LEAGUES = ["WOMEN'S", "MEN'S"];
+const PAUSE_ITEMS = ["RESUME", "RESTART VENUE", "QUIT TO TITLE"];
 const LANES = [28, 46, 64, 82, 100, 118];
 
 /* ---------- sprites ---------- */
@@ -147,6 +148,23 @@ export function boot(hw) {
       if (S.song?.name) snd.play(S.song.name, S.song.at);
       crowd.murmur(true);
     }
+  }
+
+  /** Back to the title without pulling the cartridge, e.g. to pick another venue. */
+  function quitToTitle() {
+    S.paused = false;
+    crowd.murmur(false);
+    snd.setTempo(1);
+    snd.play("title");
+    setPhase("title");
+  }
+
+  /** Up and down move the cursor, A (or START) picks. Returns the pick, or -1. */
+  function menuInput(n) {
+    if (pressed.has("up")) { S.sel = (S.sel + n - 1) % n; sfx.blip(); haptic(6); }
+    if (pressed.has("down")) { S.sel = (S.sel + 1) % n; sfx.blip(); haptic(6); }
+    if (pressed.has("a") || pressed.has("start")) { haptic(12); return S.sel; }
+    return -1;
   }
 
   function freshBoy() {
@@ -278,13 +296,28 @@ export function boot(hw) {
     }
     if (S.phase === "final") {
       S.t += dt;
-      if (S.t > 0.8 && (pressed.has("start") || pressed.has("a"))) newGame();
-      if (S.t > 0.8 && pressed.has("b")) { snd.play("title"); setPhase("title"); }
+      if (S.t < 0.8) return;
+      const pick = S.finalItems[menuInput(S.finalItems.length)];
+      if (pick === "TITLE" || pressed.has("b")) quitToTitle();
+      else if (pick === "NEXT VENUE") newGame();
+      else if (pick) {
+        // Replay the venue just played, even after a win moved the cursor on.
+        level = S.result.played;
+        newGame();
+      }
       return;
     }
     if (pressed.has("select")) toast(["SOUND ON", "MUSIC OFF", "SOUND OFF"][snd.cycleMode()], 0.8);
-    if (pressed.has("start")) { setPaused(!S.paused); sfx.blip(); }
-    if (S.paused) return;
+    if (S.paused) {
+      // The pause menu: keep going, start this venue over, or go back to the title.
+      if (pressed.has("b")) { setPaused(false); sfx.blip(); return; }
+      const pick = menuInput(PAUSE_ITEMS.length);
+      if (pick === 0) setPaused(false);
+      else if (pick === 1) newGame();
+      else if (pick === 2) quitToTitle();
+      return;
+    }
+    if (pressed.has("start")) { setPaused(true); S.sel = 0; sfx.blip(); return; }
 
     S.t += dt;
     if (S.toast && (S.toast.t -= dt) <= 0) S.toast = null;
@@ -460,6 +493,10 @@ export function boot(hw) {
     // A win lines up the next venue, so START goes straight there.
     if (won && level < LEVELS.length - 1) level++;
     hw.save("sweatboy.level", level);
+    S.finalItems = won && played < LEVELS.length - 1
+      ? ["NEXT VENUE", `REPLAY LV${played + 1}`, "TITLE"]
+      : ["PLAY AGAIN", "TITLE"];
+    S.sel = 0;
     S.result = { won, played, newVenue: unlocked > before ? LEVELS[unlocked - 1].name : null, champs: won && played === LEVELS.length - 1 };
     S.paused = false;
     setPhase("final");
@@ -688,8 +725,19 @@ export function boot(hw) {
     else if (r.champs) lines.push("", "YOU MOPPED THE FINALS!");
     else if (!r.won) lines.push("", "TRY AGAIN!");
     banner(lines, 36);
-    if (Math.floor(S.t * 2) % 2) ctext(r.won && !r.champs ? "START: NEXT VENUE" : "START: PLAY AGAIN", 118, 0);
-    ctext("B: TITLE", 128, 3);
+    drawMenu(S.finalItems, 132 - S.finalItems.length * 10);
+  }
+
+  /** A list with a cursor bar, on a dark box. */
+  function drawMenu(items, y) {
+    const w = 96, x = (W - w) / 2;
+    rect(x - 1, y - 4, w + 2, items.length * 10 + 6, 0);
+    rect(x, y - 3, w, items.length * 10 + 4, 3);
+    items.forEach((item, i) => {
+      const on = i === S.sel;
+      if (on) rect(x + 2, y - 1 + i * 10, w - 4, 8, 0);
+      ctext(on ? `> ${item} <` : item, y + 1 + i * 10, on ? 3 : 1);
+    });
   }
 
   function draw() {
@@ -708,7 +756,11 @@ export function boot(hw) {
     drawFx();
     drawHud();
     if (S.toast) banner(S.toast.lines, 54, S.toast.s);
-    if (S.paused) banner(["PAUSED", "START TO PLAY"], 56);
+    if (S.paused) {
+      banner(["PAUSED"], 34, 2);
+      drawMenu(PAUSE_ITEMS, 62);
+      ctext("A CHOOSE  B BACK", 100, 3);
+    }
   }
 
   return {
