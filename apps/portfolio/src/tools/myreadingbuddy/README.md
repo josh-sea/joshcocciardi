@@ -18,6 +18,12 @@ flip) and the next one starts.
    page, tap stop. The take uploads and the page turns to the next one that
    still needs a voice. Any page can be played back or redone.
 
+4. **Save as video** (top of the book's page): turns the book into a video
+   file: a cover card with the title and who's reading, each spread while
+   its recording plays, a page turn, the next spread, and The End. Save it
+   to a phone or send it to someone who doesn't use the app. Kids can be the
+   readers too: photograph their early readers and record them reading.
+
 **Kids** (Grown-ups off): just the covers. Tap one, press the big play
 button. Pause, the arrows, or a swipe turn pages by hand; if it was reading it
 carries on from the new page. The screen stays awake while it reads.
@@ -58,6 +64,23 @@ MP4/AAC is preferred wherever the browser can record it (Safari, current
 Chrome), because every device can play it back. Browsers that can only record
 WebM/Opus fall back to that; older iPads may not play those takes.
 
+## Video export
+
+All in the browser, nothing uploaded: each photo and recording is read
+into memory through the Storage SDK (keeping the canvas same-origin so it
+can be recorded), a 1280×720 canvas draws the book from a timeline
+(`buildTimeline` in `book.js`), and `MediaRecorder` captures the canvas plus
+the voices mixed through Web Audio. The audio clock drives the drawing, so
+pictures and voices can't drift apart. It records in real time: a three
+minute book takes three minutes, and the screen has to stay on.
+
+The page turn is drawn in thin vertical strips with a simple perspective
+(`leafStrips`), since a 2D canvas has no 3D transforms. Output is MP4
+(H.264 + AAC) where the browser can record it (Safari, current Chrome),
+which is what the iPhone Photos app saves; otherwise WebM, and the screen
+says so. On phones, **Save or share** opens the share sheet (Save Video
+puts it in Photos); **Download** works everywhere.
+
 ## Files
 
 | File | What |
@@ -69,6 +92,8 @@ WebM/Opus fall back to that; older iPads may not play those takes.
 | `Recorder.jsx` | Page-by-page recording |
 | `Reader.jsx` | Kids' playback |
 | `Spread.jsx` | Sizing a spread to the screen, and the page flip |
+| `Exporter.jsx` | The Save as video screen |
+| `video.js` | Reading a book into memory, drawing frames, recording the video |
 | `book.js` | Pure helpers (tested in `test/readingbuddy.test.mjs`) |
 | `media.js` | Photo shrinking, MediaRecorder, wake lock |
 | `store.js` | Firestore + Storage |

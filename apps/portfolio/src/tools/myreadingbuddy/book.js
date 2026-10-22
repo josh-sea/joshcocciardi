@@ -139,3 +139,136 @@ export const orderFiles = (files) => {
   }
   return list;
 };
+
+/* ------------------------------------------------------------------ */
+/*  Video export                                                       */
+/* ------------------------------------------------------------------ */
+
+// Video formats, best first. MP4 (H.264 + AAC) is what a phone's Photos app
+// saves and what any messaging app plays; Safari and current Chrome can
+// record it. WebM is the fallback for browsers that can't.
+export const VIDEO_TYPES = [
+  "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+  "video/mp4;codecs=avc1,mp4a.40.2",
+  "video/mp4",
+  "video/webm;codecs=vp9,opus",
+  "video/webm;codecs=vp8,opus",
+  "video/webm",
+];
+
+export const pickVideoType = (isSupported) => {
+  if (typeof isSupported !== "function") return "";
+  return (
+    VIDEO_TYPES.find((t) => {
+      try {
+        return isSupported(t);
+      } catch (e) {
+        return false;
+      }
+    }) || ""
+  );
+};
+
+export const videoExt = (type) => (baseType(type) === "video/mp4" ? "mp4" : "webm");
+
+// "Goodnight Moon - read by Bodhi.mp4", with characters phones and
+// Windows refuse in file names taken out.
+export const videoFileName = (book, type) => {
+  const clean = (s) =>
+    String(s || "")
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const title = clean(book?.title) || "My book";
+  const by = clean(book?.readBy);
+  return `${by ? `${title} - read by ${by}` : title}.${videoExt(type)}`;
+};
+
+// How long each part of the video lasts, in seconds.
+export const VIDEO_TIMING = {
+  title: 2.5, // the cover card
+  lead: 0.6, // a beat on each page before the voice starts
+  tail: 0.8, // and after it ends, before the page turns
+  silent: 3, // a page nobody recorded
+  flip: 1.1, // one page turn
+  end: 2.5, // "The End"
+};
+
+/* The whole video as a list of back-to-back segments:
+     title → page 0 → flip 0→1 → page 1 → … → page n-1 → end
+   `durations[i]` is page i's recording length in seconds, or 0/null for a
+   page with no voice. Each page segment carries `voiceAt`, when its
+   recording starts on the video clock. */
+export const buildTimeline = (durations, timing = VIDEO_TIMING) => {
+  const segs = [];
+  let t = 0;
+  const push = (seg) => {
+    segs.push({ ...seg, start: t });
+    t += seg.dur;
+  };
+  push({ kind: "title", dur: timing.title });
+  durations.forEach((d, i) => {
+    if (i > 0) push({ kind: "flip", from: i - 1, to: i, dur: timing.flip });
+    const voice = d > 0 ? d : 0;
+    const dur = voice ? timing.lead + voice + timing.tail : timing.silent;
+    push({ kind: "page", index: i, dur, voiceAt: voice ? t + timing.lead : null, voice });
+  });
+  push({ kind: "end", dur: timing.end });
+  return { segments: segs, total: t };
+};
+
+// The segment showing at time t, and how far through it (0..1).
+export const segmentAt = (timeline, t) => {
+  const { segments } = timeline;
+  if (!segments.length) return null;
+  let seg = segments[segments.length - 1];
+  for (let i = 0; i < segments.length; i += 1) {
+    const s = segments[i];
+    if (t < s.start + s.dur) {
+      seg = s;
+      break;
+    }
+  }
+  const p = seg.dur > 0 ? (t - seg.start) / seg.dur : 1;
+  return { seg, p: Math.min(1, Math.max(0, p)) };
+};
+
+// Slow in, slow out, like a hand turning a page.
+export const easeInOut = (p) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
+
+/* The turning page drawn as vertical strips, for a 2D canvas that can't do
+   3D transforms. The leaf is hinged at the spine (x = 0 here) and is `w`
+   wide. At angle 0 it lies flat to the right; at π it lies flat to the
+   left. Each strip at fraction u from the spine sits at x = u·w·cos θ and
+   rises toward the viewer by z = u·w·sin θ, so with a camera `dist` away
+   it is drawn scaled by dist / (dist − z): the lifted edge looks closer
+   and taller, which is what reads as a page turning.
+
+   Returns strips in source order with projected x (left edge), width and
+   scale, plus which face is showing (front until the leaf passes upright). */
+export const leafStrips = (theta, w, n = 40, dist = 3) => {
+  const D = dist * w;
+  const c = Math.cos(theta);
+  const sn = Math.sin(theta);
+  const project = (u) => {
+    const z = u * w * sn;
+    const s = D / (D - z);
+    return { x: u * w * c * s, s };
+  };
+  const strips = [];
+  for (let k = 0; k < n; k += 1) {
+    const a = project(k / n);
+    const b = project((k + 1) / n);
+    const left = Math.min(a.x, b.x);
+    const right = Math.max(a.x, b.x);
+    strips.push({ k, u0: k / n, u1: (k + 1) / n, x: left, width: right - left, scale: (a.s + b.s) / 2 });
+  }
+  return { strips, face: c >= 0 ? "front" : "back" };
+};
+
+// Largest rectangle of the given ratio centered in a W×H frame, leaving
+// `pad` around it.
+export const fitRect = (W, H, ratio, pad = 0) => {
+  const box = fitBox(W - 2 * pad, H - 2 * pad, ratio);
+  return { x: Math.round((W - box.width) / 2), y: Math.round((H - box.height) / 2), w: box.width, h: box.height };
+};

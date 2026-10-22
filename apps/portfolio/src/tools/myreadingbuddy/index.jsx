@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import CSS from "./styles";
 import Editor from "./Editor";
+import Exporter from "./Exporter";
 import Reader from "./Reader";
 import Recorder from "./Recorder";
 import { Library, ShelfSettings, ShelfSetup } from "./Shelf";
@@ -156,6 +157,9 @@ export default function MyReadingBuddy() {
         onClose={() => open({ name: "edit", bid: book.id })}
       />
     );
+  } else if (view.name === "video" && book && book.pages.length) {
+    bare = true;
+    body = <Exporter key={book.id} book={book} onClose={() => open({ name: "edit", bid: book.id })} />;
   } else if (view.name === "edit" && book) {
     body = (
       <Editor
@@ -164,6 +168,7 @@ export default function MyReadingBuddy() {
         onError={onError}
         onClose={toShelf}
         onRead={() => open({ name: "read", bid: book.id })}
+        onVideo={() => open({ name: "video", bid: book.id })}
         onRecord={(at) => open({ name: "record", bid: book.id, at })}
       />
     );
