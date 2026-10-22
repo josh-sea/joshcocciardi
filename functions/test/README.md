@@ -71,3 +71,27 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node functions/test/whereami-rules.test.m
 
 Needs `@firebase/rules-unit-testing` and `firebase` on the module path.
 Exits non-zero if any case fails.
+
+## `readingbuddy-file.test.mjs`
+
+Exercises `readingBuddyFile`, the function My Reading Buddy's video export
+reads page photos and recordings through (same-origin at
+`/api/readingbuddy/file`, because the bucket has no CORS policy): no token,
+a bad token, an unverified email account, a stranger, and a shelf that
+doesn't exist are all refused; a member gets the file byte for byte with its
+type, whatever the case of their email; paths outside
+`readingbuddy/{shelf}/{book}/{file}` are rejected; a missing file is 404 and
+a file that isn't a photo or recording is 415.
+
+The function has to see the same default bucket the app uploads to. Without
+credentials the functions emulator falls back to `<project>.appspot.com`, so
+set it explicitly:
+
+```sh
+# from the repo root, in one terminal
+STORAGE_BUCKET_URL=josh-cocciardi.firebasestorage.app \
+  firebase emulators:start --only auth,firestore,storage,functions --project josh-cocciardi
+
+# in another
+node functions/test/readingbuddy-file.test.mjs
+```

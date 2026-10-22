@@ -87,11 +87,7 @@ export default function Exporter({ book, onClose }) {
     } catch (e) {
       if (e?.name === "AbortError") return;
       console.error("[readingbuddy] video", e);
-      setError(
-        e?.code?.startsWith?.("storage/")
-          ? "Couldn't download the pages. Check the connection and try again."
-          : e?.message || "Something went wrong making the video."
-      );
+      setError(e?.message || "Something went wrong making the video.");
       setPhase("error");
     } finally {
       teardown();

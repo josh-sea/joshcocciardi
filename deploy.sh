@@ -15,7 +15,7 @@
 #   ./deploy.sh solra        - Run the Solra tests, copy (no build), deploy hosting
 #   ./deploy.sh disney       - Run the game tests, copy (no build), deploy hosting + rules
 #   ./deploy.sh gatekeeper   - Deploy Gatekeeper parent app + functions + firestore (igatekeeper.web.app)
-#   ./deploy.sh myreadingbuddy - Build portfolio, deploy hosting + firestore and storage rules
+#   ./deploy.sh myreadingbuddy - Build portfolio, deploy hosting, firestore + storage rules, file function
 #   ./deploy.sh mise         - Build portfolio, deploy hosting + firestore and storage rules
 #   ./deploy.sh seasonal-box - Build portfolio, deploy rules + the sbox* agent functions + hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
@@ -485,6 +485,9 @@ case "${1:-all}" in
         build_portfolio
         deploy_firestore
         deploy_storage
+        log "Deploying the readingBuddyFile function (video export downloads)..."
+        cd "$ROOT_DIR"
+        firebase deploy --only functions:readingBuddyFile || fail "readingBuddyFile deploy failed"
         deploy_hosting
         ;;
     seasonal-box)

@@ -10,6 +10,13 @@
       ],
       "rewrites": [
         {
+          "source": "/api/readingbuddy/file",
+          "function": {
+            "functionId": "readingBuddyFile",
+            "region": "us-central1"
+          }
+        },
+        {
           "source": "/projects/moments/**",
           "destination": "/projects/moments/index.html"
         },

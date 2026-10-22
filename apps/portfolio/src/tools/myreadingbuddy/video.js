@@ -41,6 +41,11 @@ export const newAudioContext = () => {
   return ctx;
 };
 
+// Nothing here may wait forever: a stuck step becomes an error the screen
+// can show, not a progress bar that never moves.
+const within = (ms, promise, message) =>
+  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))]);
+
 const loadImage = (blob) =>
   new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob);
@@ -75,11 +80,11 @@ export const prepareBook = async (ctx, book, onProgress, signal) => {
   for (let i = 0; i < total; i += 1) {
     if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
     const p = pages[i];
-    images.push(await loadImage(await readFile(p.image)));
+    images.push(await within(30000, loadImage(await readFile(p.image)), `Page ${i + 1}'s photo couldn't be read.`));
     let voice = null;
     if (hasAudio(p)) {
       try {
-        voice = await decode(ctx, await readFile(p.audio));
+        voice = await within(30000, decode(ctx, await readFile(p.audio)), "decode timed out");
       } catch (e) {
         console.warn("[readingbuddy] couldn't decode page", i + 1, e);
         skipped += 1;
