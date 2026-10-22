@@ -29,7 +29,7 @@ function SavedField({ label, saved, onSave, placeholder }) {
 
 /* Building a book: its name, the photographed spreads in order, and which
    of them have a voice yet. Recording itself happens in the Recorder. */
-export default function Editor({ sid, book, onClose, onRecord, onRead, onError }) {
+export default function Editor({ sid, book, onClose, onRecord, onRead, onVideo, onError }) {
   const fileRef = useRef(null);
   const [upload, setUpload] = useState(null); // { done, total } while adding pages
   const [playing, setPlaying] = useState(null); // page id being previewed
@@ -93,9 +93,14 @@ export default function Editor({ sid, book, onClose, onRecord, onRead, onError }
           ← Bookshelf
         </button>
         {pages.length > 0 && (
-          <button className="btn small sky" type="button" onClick={onRead}>
-            Read it
-          </button>
+          <div className="row gap">
+            <button className="btn small ghost" type="button" onClick={onVideo}>
+              Save as video
+            </button>
+            <button className="btn small sky" type="button" onClick={onRead}>
+              Read it
+            </button>
+          </div>
         )}
       </div>
 

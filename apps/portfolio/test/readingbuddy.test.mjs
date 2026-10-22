@@ -7,7 +7,16 @@
 //   node test/readingbuddy.test.mjs
 
 import {
+  VIDEO_TIMING,
   baseType,
+  buildTimeline,
+  easeInOut,
+  fitRect,
+  leafStrips,
+  pickVideoType,
+  segmentAt,
+  videoExt,
+  videoFileName,
   clampIndex,
   clock,
   coverOf,
@@ -115,6 +124,49 @@ console.log("\nids:");
 const ids = new Set(Array.from({ length: 500 }, newId));
 eq("ids are 12 url-safe characters", /^[a-z0-9]{12}$/.test(newId()), true);
 eq("and don't collide", ids.size, 500);
+
+console.log("\nvideo format:");
+const iphone = (t) => t.startsWith("video/mp4");
+const chromeNow = () => true;
+const chromeOld = (t) => t.startsWith("video/webm");
+eq("Safari makes H.264 + AAC in MP4", pickVideoType(iphone), "video/mp4;codecs=avc1.42E01E,mp4a.40.2");
+eq("MP4 wins whenever it's offered, so phones can save it", pickVideoType(chromeNow), "video/mp4;codecs=avc1.42E01E,mp4a.40.2");
+eq("a browser with only WebM gets VP9 + Opus", pickVideoType(chromeOld), "video/webm;codecs=vp9,opus");
+eq("nothing supported leaves it to the browser", pickVideoType(() => false), "");
+eq("extensions follow the container", [videoExt("video/mp4;codecs=avc1"), videoExt("video/webm;codecs=vp9"), videoExt("")], ["mp4", "webm", "webm"]);
+eq("file name carries the title and reader", videoFileName({ title: "Goodnight Moon", readBy: "Bodhi" }, "video/mp4"), "Goodnight Moon - read by Bodhi.mp4");
+eq("no reader, just the title", videoFileName({ title: "Hop on Pop", readBy: "" }, "video/webm"), "Hop on Pop.webm");
+eq("characters phones refuse are taken out", videoFileName({ title: 'Cat/Hat: "Two"?', readBy: "Mom" }, "video/mp4"), "Cat Hat Two - read by Mom.mp4");
+eq("an untitled book still gets a name", videoFileName({}, "video/mp4"), "My book.mp4");
+
+console.log("\nvideo timeline:");
+const T = VIDEO_TIMING;
+const tl = buildTimeline([4, 0, 2.5]);
+eq("title, page, turn, page, turn, page, end", tl.segments.map((s) => s.kind), ["title", "page", "flip", "page", "flip", "page", "end"]);
+eq("segments run back to back", tl.segments.every((s, i) => i === 0 || Math.abs(s.start - (tl.segments[i - 1].start + tl.segments[i - 1].dur)) < 1e-9), true);
+const close = (a, b) => Math.abs(a - b) < 1e-9;
+eq("total is every part added up", close(tl.total, T.title + (T.lead + 4 + T.tail) + T.flip + T.silent + T.flip + (T.lead + 2.5 + T.tail) + T.end), true);
+eq("a recorded page starts its voice after a short lead", close(tl.segments[1].voiceAt, T.title + T.lead), true);
+eq("a page with no voice holds for a few seconds, silently", [tl.segments[3].voiceAt, close(tl.segments[3].dur, T.silent)], [null, true]);
+eq("turns go page to page", tl.segments.filter((s) => s.kind === "flip").map((s) => `${s.from}->${s.to}`), ["0->1", "1->2"]);
+eq("a one-page book has no turns", buildTimeline([3]).segments.map((s) => s.kind), ["title", "page", "end"]);
+eq("at time 0, the title", segmentAt(tl, 0).seg.kind, "title");
+eq("halfway through the first turn", [segmentAt(tl, tl.segments[2].start + T.flip / 2).seg.kind, Math.round(segmentAt(tl, tl.segments[2].start + T.flip / 2).p * 100)], ["flip", 50]);
+eq("past the end holds on The End", [segmentAt(tl, tl.total + 5).seg.kind, segmentAt(tl, tl.total + 5).p], ["end", 1]);
+eq("easing starts and ends still and meets in the middle", [easeInOut(0), easeInOut(0.5), easeInOut(1)], [0, 0.5, 1]);
+
+console.log("\npage turn geometry:");
+const flat = leafStrips(0, 100, 10);
+eq("flat on the right: front face, strips tile 0..100", [flat.face, Math.round(flat.strips[0].x), Math.round(flat.strips.at(-1).x + flat.strips.at(-1).width)], ["front", 0, 100]);
+eq("flat on the right: no perspective", flat.strips.every((s) => close(s.scale, 1)), true);
+const lifted = leafStrips(Math.PI / 3, 100, 10);
+eq("lifting: the far edge looks taller than the spine edge", lifted.strips.at(-1).scale > lifted.strips[0].scale, true);
+eq("lifting: foreshortened, so narrower than flat", lifted.strips.at(-1).x + lifted.strips.at(-1).width < 100, true);
+const over = leafStrips((2 * Math.PI) / 3, 100, 10);
+eq("past upright the back shows, lying to the left", [over.face, over.strips.every((s) => s.x <= 0)], ["back", true]);
+const landed = leafStrips(Math.PI, 100, 10);
+eq("landed flat on the left", [Math.round(Math.min(...landed.strips.map((s) => s.x))), landed.strips.every((s) => Math.abs(s.scale - 1) < 1e-9)], [-100, true]);
+eq("a 16:9 frame fits a 3:2 spread by height, centered", fitRect(1280, 720, 1.5, 36), { x: 154, y: 36, w: 972, h: 648 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

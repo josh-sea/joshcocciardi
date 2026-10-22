@@ -36,7 +36,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getBlob, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "./firebase";
 import { baseType, extFor, newId } from "./book";
 
@@ -209,4 +209,17 @@ export const deletePage = async (sid, bid, pageId) => {
 export const deleteBook = async (sid, book) => {
   await deleteDoc(bookDoc(sid, book.id));
   await Promise.all(book.pages.flatMap((p) => [dropFile(p.image?.path), dropFile(p.audio?.path)]));
+};
+
+// A page's photo or recording as a local Blob, for drawing into the video.
+// Reading through the SDK (rather than drawing straight from the download
+// URL) keeps the canvas same-origin, which is what lets it be recorded.
+export const readFile = async (file) => {
+  try {
+    return await getBlob(ref(storage, file.path));
+  } catch (e) {
+    const res = await fetch(file.url);
+    if (!res.ok) throw e;
+    return res.blob();
+  }
 };
