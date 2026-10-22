@@ -66,9 +66,16 @@ WebM/Opus fall back to that; older iPads may not play those takes.
 
 ## Video export
 
-All in the browser, nothing uploaded: each photo and recording is read
-into memory through the Storage SDK (keeping the canvas same-origin so it
-can be recorded), a 1280×720 canvas draws the book from a timeline
+Made in the browser, nothing uploaded. Each photo and recording is read
+into memory through the `readingBuddyFile` function
+(`functions/readingbuddy.js`) at `/api/readingbuddy/file`, a Hosting rewrite
+on the site's own domain. Reading straight from Storage in the browser needs a
+CORS policy on the bucket, which it doesn't have (the Storage SDK then retries
+for two minutes, which looked like a hang). The function checks the caller's
+token, a verified email, and that the email is on the shelf, and only serves
+`readingbuddy/{shelf}/{book}/{file}`. Every download and decode has a time
+limit, so a failure shows an error instead of stalling. Local bytes also keep
+the canvas same-origin, which is what lets it be recorded. A 1280×720 canvas draws the book from a timeline
 (`buildTimeline` in `book.js`), and `MediaRecorder` captures the canvas plus
 the voices mixed through Web Audio. The audio clock drives the drawing, so
 pictures and voices can't drift apart. It records in real time: a three
@@ -100,8 +107,9 @@ puts it in Photos); **Download** works everywhere.
 
 ## Deploy
 
-`./deploy.sh myreadingbuddy` (portfolio build, Firestore + Storage rules,
-hosting). Merging to master does the same through CI.
+`./deploy.sh myreadingbuddy` (portfolio build, Firestore + Storage rules, the
+`readingBuddyFile` function, hosting). Merging to master does the same
+through CI.
 
 Local run against emulators (auth, Firestore, Storage):
 

@@ -36,8 +36,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { deleteObject, getBlob, getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { db, storage } from "./firebase";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import app, { auth, db, storage } from "./firebase";
 import { baseType, extFor, newId } from "./book";
 
 const COL = "readingbuddy_shelves";
@@ -211,15 +211,43 @@ export const deleteBook = async (sid, book) => {
   await Promise.all(book.pages.flatMap((p) => [dropFile(p.image?.path), dropFile(p.audio?.path)]));
 };
 
+// Where the video export reads a page's bytes: the readingBuddyFile
+// function (functions/readingbuddy.js), same-origin through a Hosting
+// rewrite. Reading straight from Storage in the browser needs a CORS policy
+// on the bucket, which it doesn't have; without one the Storage SDK retries
+// for two minutes before failing, which looked like a hang.
+const FILE_API =
+  process.env.REACT_APP_FIREBASE_EMULATORS === "1"
+    ? `http://127.0.0.1:5001/${app.options.projectId}/us-central1/readingBuddyFile`
+    : "/api/readingbuddy/file";
+
+const FILE_TIMEOUT_MS = 60000;
+
+const WHY = {
+  401: "Your sign-in expired. Sign out and back in, then try again.",
+  403: "This account isn't on the bookshelf, so it can't read these pages.",
+  404: "One of the pages is missing. Re-add or re-record it, then try again.",
+};
+
 // A page's photo or recording as a local Blob, for drawing into the video.
-// Reading through the SDK (rather than drawing straight from the download
-// URL) keeps the canvas same-origin, which is what lets it be recorded.
+// Local bytes keep the canvas same-origin, which is what lets it be recorded.
 export const readFile = async (file) => {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error(WHY[401]);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FILE_TIMEOUT_MS);
   try {
-    return await getBlob(ref(storage, file.path));
+    const res = await fetch(`${FILE_API}?path=${encodeURIComponent(file.path)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(WHY[res.status] || `Couldn't download a page (error ${res.status}). Try again.`);
+    return await res.blob();
   } catch (e) {
-    const res = await fetch(file.url);
-    if (!res.ok) throw e;
-    return res.blob();
+    if (e.name === "AbortError") throw new Error("A page took too long to download. Check the connection and try again.");
+    if (e instanceof TypeError) throw new Error("Couldn't reach the server to download the pages. Check the connection and try again.");
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
 };

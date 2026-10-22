@@ -29,6 +29,11 @@ exports.synthesizeWord = workbook.synthesizeWord;
 const espn = require('./espn');
 exports.espnFantasy = espn.espnFantasy;
 
+// My Reading Buddy: serves a book's photos and recordings to members of its
+// shelf, same-origin through a Hosting rewrite, for the video export.
+const readingbuddy = require('./readingbuddy');
+exports.readingBuddyFile = readingbuddy.readingBuddyFile;
+
 // Seasonal Box HQ: agent runtime, approval executors, and the season stage
 // machine for the private /tools/seasonal-box admin app.
 const sbox = require('./seasonalbox');
