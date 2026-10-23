@@ -344,3 +344,36 @@ export const checkout = async (hid, ids) => {
 };
 
 export const deleteItem = (hid, id) => deleteDoc(itemRef(hid, id));
+
+/* ------------------------------ import ------------------------------ */
+
+// Applies the writes planImport() (transfer.js) worked out. New documents
+// arrive with placeholder ids ("new:3"), which get real ids here; the same
+// placeholder inside another write (a recipe's inventory link, a plan item)
+// is swapped for that id too. Firestore caps a batch at 500 writes, so
+// large imports go in chunks, applied in order.
+export const applyImport = async (hid, ops) => {
+  const ids = {};
+  ops.forEach((o) => {
+    if (o.op === "set" && String(o.id).startsWith("new:")) ids[o.id] = doc(sub(hid, o.col)).id;
+  });
+  const swap = (v) => {
+    if (typeof v === "string") return ids[v] || v;
+    if (Array.isArray(v)) return v.map(swap);
+    if (v && typeof v === "object" && !(v instanceof Date)) {
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, swap(x)]));
+    }
+    return v;
+  };
+  for (let i = 0; i < ops.length; i += 400) {
+    const batch = writeBatch(db);
+    ops.slice(i, i + 400).forEach((o) => {
+      const ref = doc(sub(hid, o.col), ids[o.id] || o.id);
+      if (o.op === "delete") batch.delete(ref);
+      else if (o.op === "update") batch.update(ref, swap(o.data));
+      else batch.set(ref, swap(o.data));
+    });
+    await batch.commit();
+  }
+  return ops.length;
+};

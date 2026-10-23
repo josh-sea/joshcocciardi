@@ -277,6 +277,12 @@ textarea.input{resize:vertical;}
 .chatin{display:flex;gap:8px;align-items:flex-end;}
 .chatin textarea{flex:1;resize:none;}
 .chatcost{text-align:right;font-size:11.5px;}
+
+/* ---------------------------- import / export ---------------------------- */
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.4;margin-top:10px;}
+.preview{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--butter-soft);font-size:14px;}
+.preview .flabel{margin-bottom:4px;}
+.warnings{margin:8px 0 0;padding-left:18px;font-size:13px;color:#7A5A12;}
 `;
 
 export default CSS;

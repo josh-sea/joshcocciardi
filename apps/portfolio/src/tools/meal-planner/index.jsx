@@ -4,6 +4,7 @@ import Inventory from "./Inventory";
 import Recipes from "./Recipes";
 import Shopping from "./Shopping";
 import WeekPlan from "./WeekPlan";
+import DataPage from "./DataPage";
 import { HouseholdSetup, KitchenSettings } from "./Household";
 import { authMessage, redirectSettled, signInWithGoogle, signOutOfMealPlanner, watchAuth } from "./auth";
 import { inStock, kitchenConfig } from "./plan";
@@ -73,7 +74,10 @@ export default function MealPlanner() {
   const [recipes, setRecipes] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [tab, setTab] = useState(readTab);
-  const [showSettings, setShowSettings] = useState(false);
+  // A full-page panel over the tabs: kitchen settings or import/export.
+  const [panel, setPanel] = useState(null);
+  const showSettings = panel !== null;
+  const setShowSettings = (open) => setPanel(open ? "settings" : null);
   const [chatOpen, setChatOpen] = useState(false);
   const [error, setError] = useState(null);
 
@@ -201,6 +205,20 @@ export default function MealPlanner() {
     body = <div className="center">opening the kitchen…</div>;
   } else if (!household) {
     body = <HouseholdSetup user={user} onError={onError} />;
+  } else if (panel === "data") {
+    body = (
+      <DataPage
+        hid={hid}
+        user={user}
+        household={household}
+        config={config}
+        recipes={recipes}
+        inventory={inventory}
+        initialParts={[tab === "plan" ? "plan" : tab]}
+        onError={onError}
+        onClose={() => setPanel(null)}
+      />
+    );
   } else if (showSettings) {
     body = (
       <KitchenSettings
@@ -251,9 +269,14 @@ export default function MealPlanner() {
             <span className="brand">{household ? household.name : "Family Meal Planner"}</span>
             <span className="acct">
               {household && (
-                <button className="linkish" type="button" onClick={() => setShowSettings(!showSettings)}>
-                  settings
-                </button>
+                <>
+                  <button className="linkish" type="button" onClick={() => setPanel(panel === "data" ? null : "data")}>
+                    data
+                  </button>
+                  <button className="linkish" type="button" onClick={() => setPanel(panel === "settings" ? null : "settings")}>
+                    settings
+                  </button>
+                </>
               )}
               <button className="linkish" type="button" onClick={signOutOfMealPlanner}>
                 sign out

@@ -45,6 +45,7 @@ import {
   validateListItems,
   validateRecipe,
 } from "../src/tools/meal-planner/assistant.js";
+import { describeSummary, exportData, parseImport, planImport } from "../src/tools/meal-planner/transfer.js";
 
 let pass = 0;
 let fail = 0;
@@ -293,6 +294,103 @@ eq("context names the date, stock, used-up items, the list with amounts, and tod
   ctx.includes("Recipes ("),
 ], [true, true, true, true, true, false]);
 eq("the system prompt names the household and the purchase-amount rule", [systemPrompt("K", ctxConfig.active).includes("Josh, Ashley, Cam, Bodhi"), /1 lemon rather than 1 tsp lemon juice/.test(systemPrompt("K", []))], [true, true]);
+
+console.log("\nimport/export:");
+{
+  const cfg = kitchenConfig({});
+  const inv2 = [
+    { id: "pasta", name: "pasta", addedAt: d(20), usedAt: null, onList: false, inCart: false, amount: "" },
+    { id: "eggs", name: "eggs", addedAt: d(18), usedAt: d(22), onList: true, inCart: false, amount: "1 dozen" },
+    { id: "fish", name: "goldfish", addedAt: d(19), usedAt: null, onList: false, inCart: false, amount: "" },
+    { id: "cof", name: "coffee", addedAt: null, usedAt: null, onList: true, inCart: true, amount: "" },
+  ];
+  const book2 = [
+    { id: "r1", name: "Pesto pasta", link: "", ingredients: "pasta, pesto", uses: [{ id: "pasta", name: "pasta" }], made: true, lastMade: "2026-09-20", ratings: { josh: "up", cam: "down" } },
+    { id: "r2", name: "Tacos", link: "https://example.com/tacos", ingredients: "", uses: [], made: false, lastMade: null, ratings: {} },
+  ];
+  const week = {
+    "2026-09-21": {
+      date: "2026-09-21",
+      breakfast: { josh: { none: true }, cam: { items: [{ kind: "text", id: null, name: "Toast" }] } },
+      snack: { bodhi: { items: [{ kind: "inventory", id: "fish", name: "goldfish" }], eaten: true } },
+      dinner: { all: { items: [{ kind: "recipe", id: "r1", name: "Pesto pasta" }, { kind: "text", id: null, name: "Tacos" }] } },
+      mods: { dinner: "Cam: plain" },
+    },
+  };
+  const ex = exportData({
+    parts: ["plan", "recipes", "inventory", "shopping"],
+    kitchenName: "K", config: cfg, recipes: book2, inventory: inv2, days: week, weekStart: "2026-09-21", today: "2026-09-23",
+  });
+  const mon = ex.plan.days[0];
+  eq("export is by name, with the format note", [ex.format, typeof ex.howTo, ex.people.length], ["meal-planner/v1", "string", 4]);
+  eq("export reads a plan day back in plain terms", [mon.breakfast, mon.snack, mon.dinner, mon.mods], [
+    { Josh: "skip", Cam: ["Toast"] },
+    { Bodhi: { items: ["goldfish"], eaten: true } },
+    { everyone: ["Pesto pasta", { text: "Tacos" }] },
+    { dinner: "Cam: plain" },
+  ]);
+  eq("export lists recipes with names for links and ratings", ex.recipes[0], {
+    name: "Pesto pasta", source: "", ingredients: "pasta, pesto", usesInventory: ["pasta"], made: true, lastMade: "2026-09-20", ratings: { Josh: "up", Cam: "down" },
+  });
+  eq("inventory leaves out list-only items; shopping keeps amounts", [ex.inventory.map((i) => i.name), ex.shopping], [
+    ["eggs", "goldfish", "pasta"],
+    [{ name: "coffee", amount: "", inCart: true }, { name: "eggs", amount: "1 dozen", inCart: false }],
+  ]);
+  const opts = { config: cfg, recipes: book2, inventory: inv2, uid: "u", today: "2026-09-23", now: d(23) };
+  const round = planImport(JSON.parse(JSON.stringify(ex)), { ...opts, mode: "merge" });
+  eq("importing an untouched export only rewrites the plan days, with no other changes", [round.ops.filter((o) => o.col !== "days").length, round.warnings], [0, []]);
+  const quiet = planImport(JSON.parse(JSON.stringify(ex)), { ...opts, mode: "replace", currentDays: week, currentWeek: "2026-09-21" });
+  eq("…and with the week loaded, an untouched export changes nothing at all, even under replace", [quiet.ops.length, describeSummary(quiet.summary)[0]], [0, "Plan: no changes"]);
+  const day = round.ops.find((o) => o.col === "days" && o.id === "2026-09-21").data;
+  eq("…and those days come back identical", [day.breakfast, day.snack, day.dinner, day.mods], [week["2026-09-21"].breakfast, week["2026-09-21"].snack, week["2026-09-21"].dinner, week["2026-09-21"].mods]);
+
+  const edit = planImport(
+    {
+      recipes: [
+        { name: "pesto PASTA", ratings: { Ashley: "up", Grandpa: "up" } },
+        { name: "Lemon chicken", ingredients: ["2 lb chicken", "1 lemon"], usesInventory: ["chicken thighs", "nope"], source: "example.com/lemon" },
+      ],
+      inventory: [{ name: "chicken thighs", added: "2026-09-22" }, { name: "Pasta", used: true }],
+      shopping: [{ name: "lemons", amount: "2" }, "eggs"],
+      plan: { days: [{ date: "2026-09-24", dinner: ["Lemon chicken", "salad"], Lunch: { Cam: "pasta", Zed: "x" } }] },
+    },
+    { ...opts, mode: "merge" }
+  );
+  const byCol = (c, op) => edit.ops.filter((o) => o.col === c && o.op === op);
+  eq("merge: summary", describeSummary(edit.summary), [
+    "Plan: 1 day changed",
+    "Recipes: 1 new, 1 updated",
+    "Inventory: 1 new, 1 updated",
+    "Shopping list: 1 new",
+  ]);
+  eq("merge: ratings land by person key, unknown names warn", byCol("recipes", "update")[0].data["ratings.ashley"], "up");
+  const lemon = byCol("recipes", "set")[0].data;
+  const chickenId = byCol("inventory", "set").find((o) => o.data.name === "chicken thighs").id;
+  eq("merge: a new recipe links a new inventory item by placeholder", [lemon.link, lemon.ingredients, lemon.uses], ["https://example.com/lemon", "2 lb chicken\n1 lemon", [{ id: chickenId, name: "chicken thighs" }]]);
+  eq("merge: pasta marked used today; eggs already listed so unchanged", byCol("inventory", "update").map((o) => [o.id, Object.keys(o.data)]), [["pasta", ["usedAt"]]]);
+  const lemons = byCol("inventory", "set").find((o) => o.data.name === "lemons").data;
+  eq("merge: a new list item is list-only with its amount", [lemons.onList, lemons.addedAt, lemons.amount], [true, null, "2"]);
+  const plan24 = edit.ops.find((o) => o.id === "2026-09-24").data;
+  eq("merge: plan names resolve to a new recipe, typed text, and inventory", [plan24.dinner, plan24.lunch], [
+    { all: { items: [{ kind: "recipe", id: lemon && byCol("recipes", "set")[0].id, name: "Lemon chicken" }, { kind: "text", id: null, name: "salad" }] } },
+    { cam: { items: [{ kind: "inventory", id: "pasta", name: "pasta" }] } },
+  ]);
+  eq("merge: warnings name each problem", edit.warnings.length, 3);
+  eq("merge never deletes", edit.ops.filter((o) => o.op === "delete").length, 0);
+
+  const rep = planImport(
+    { recipes: [{ name: "Tacos" }], inventory: [{ name: "goldfish" }], shopping: [], plan: { days: [{ date: "2026-09-23", dinner: "skip" }] } },
+    { ...opts, mode: "replace" }
+  );
+  const dels = rep.ops.filter((o) => o.op === "delete").map((o) => `${o.col}/${o.id}`).sort();
+  eq("replace: removes what's left out, and clears the rest of that week", dels, [
+    "days/2026-09-21", "days/2026-09-22", "days/2026-09-24", "days/2026-09-25", "days/2026-09-26", "days/2026-09-27",
+    "inventory/cof", "inventory/eggs", "inventory/pasta", "recipes/r1",
+  ]);
+}
+eq("parse: a fenced reply with chat around it", parseImport("Here you go:\n```json\n{\"shopping\": [\"milk\"]}\n```\nEnjoy").parts, ["shopping"]);
+eq("parse: bare JSON with a sentence before it", parseImport("Updated: {\"recipes\": []}").ok, true);
+eq("parse: rejects junk and empty sections", [parseImport("nope").ok, parseImport("{}").ok, parseImport('{"recipes": {}}').ok], [false, false, false]);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
