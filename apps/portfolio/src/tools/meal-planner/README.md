@@ -136,6 +136,55 @@ amount, shown in grey under its name ("2", "1 dozen", "1 lb"). Tap it (or
 *+ amount*) to type one. Amounts the assistant adds land in the same place,
 and they clear when the item is bought.
 
+## Import and export (JSON)
+
+The **data** link (top right) opens Import and export. It starts with
+whichever page you were on ticked.
+
+**Export** any mix of Plan (one week, picked with ‹ ›), Recipes, Inventory,
+and Shopping list as JSON, then Copy or Download. The format is written to
+be handed to Claude and back: everything is by name, never by id; dates
+are `YYYY-MM-DD`; and the export opens with a `howTo` paragraph explaining
+the format to whoever (or whatever) edits it.
+
+```json
+{
+  "format": "meal-planner/v1",
+  "plan": { "weekStart": "2026-10-19", "days": [
+    { "date": "2026-10-23", "day": "Friday",
+      "breakfast": { "Josh": ["Oatmeal"], "Cam": "skip" },
+      "dinner": { "everyone": ["Pesto pasta", "salad"] },
+      "mods": { "dinner": "Cam: butter noodles" } } ] },
+  "recipes": [{ "name": "Pesto pasta", "source": "", "ingredients": "...",
+    "usesInventory": ["pasta"], "made": true, "lastMade": "2026-10-20",
+    "ratings": { "Josh": "up" } }],
+  "inventory": [{ "name": "pasta", "added": "2026-10-19", "used": null }],
+  "shopping": [{ "name": "lemons", "amount": "2", "inCart": false }]
+}
+```
+
+A plan item is a name: one matching a recipe links to it, then one matching
+inventory, and anything else is typed in (`{ "recipe": ... }`,
+`{ "inventory": ... }`, or `{ "text": ... }` say which explicitly). A slot is
+a list, `"skip"` for not needed, or `{ "items": [...], "eaten": true }`;
+left out means undecided.
+
+**Import** takes pasted JSON, including a whole chat reply with the JSON in
+a code fence, and previews what will change before anything is written,
+with a note for anything it couldn't use (an unknown person, a link to an
+inventory item that doesn't exist). Only the sections present are touched.
+
+- **Merge** (default) adds and updates; nothing is removed.
+- **Replace** makes each pasted section match exactly: recipes and
+  inventory left out are deleted (an inventory row still on the shopping
+  list stays as a list-only item), list items left out come off the list,
+  and days of an imported week that aren't in the JSON are cleared.
+
+Days in the week on screen that come out the same are skipped, so pasting
+back an untouched export changes nothing. `transfer.js` holds export,
+parsing, and the import planner (pure, unit tested); `applyImport` in
+`store.js` writes the plan in batches.
+
 ## Kitchen settings
 
 The **settings** link (top right) holds everything about the kitchen:
@@ -216,8 +265,8 @@ range), so no composite indexes are needed. Rules are in the repo root
 - `apps/portfolio/test/meal-planner.test.mjs`: week math, the inventory
   splitter, kitchen config (people, section modes, defaults), slots in both
   modes and the old shapes they read from, the inventory lifecycle, sorting,
-  what the after-eating follow-up covers, and the Ask AI tools, validation,
-  and context. No dependencies; CI and `deploy.sh` run it.
+  what the after-eating follow-up covers, the Ask AI tools, validation,
+  and context, and JSON export and import (including a full round trip). No dependencies; CI and `deploy.sh` run it.
 - `apps/portfolio/test/mealplan-rules.test.mjs`: security rules against
   the Firestore emulator. See `apps/portfolio/test/README.md`.
 
