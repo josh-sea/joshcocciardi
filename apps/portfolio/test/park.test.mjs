@@ -12,7 +12,7 @@ import {
   blendWait, forecastAt, urgency,
   holdsFor, collidesWithLL,
   scoreCandidate, candidates, planAhead, explain,
-  MUST_DO_BOOST,
+  MUST_DO_BOOST, mustDoPressure, mustDoCost, PRESSURE_MAX,
 } from '../../disney-trivia/js/park.js';
 
 let failures = 0;
@@ -156,6 +156,41 @@ console.log('\nscoring one option');
     near(scoreCandidate({ ...base, walkMin: 15, waitMin: 5 }), s, 0.0001));
 }
 
+/* ── must-dos as a deadline ──────────────────────────────────────────────── */
+console.log('\nmust-dos get more urgent as the day runs out');
+{
+  ok('loads of slack, no hurry', mustDoPressure(600, 100) === 1);
+  ok('exactly three times the time needed is still no hurry', mustDoPressure(300, 100) === 1);
+  ok('only just enough time is maximum pressure', mustDoPressure(100, 100) === PRESSURE_MAX);
+  ok('not enough time is maximum pressure', mustDoPressure(40, 100) === PRESSURE_MAX);
+  ok('the park already shut is maximum pressure', mustDoPressure(-10, 100) === PRESSURE_MAX);
+  ok('nothing left to do means no pressure', mustDoPressure(60, 0) === 1);
+  ok('an unknown closing time means no opinion', mustDoPressure(Infinity, 100) === 1);
+
+  const mid = mustDoPressure(200, 100);   // slack 2, halfway
+  ok('it rises in between', mid > 1 && mid < PRESSURE_MAX, mid);
+  ok('and it is eased, so it stays out of the way until late',
+    mid < 1 + (PRESSURE_MAX - 1) / 2, mid);
+  ok('pressure only ever rises as time runs out',
+    [600, 400, 300, 250, 200, 150, 120, 100, 60].map((t) => mustDoPressure(t, 100))
+      .every((v, i, a) => i === 0 || a[i - 1] <= v));
+}
+{
+  const rides = [
+    { id: 'a', name: 'A', lat: 0, lng: 0, queued: true, minutes: 4 },
+    { id: 'b', name: 'B', lat: 0, lng: 0, queued: true, minutes: 6 },
+  ];
+  const live = { a: { waitMin: 50 }, b: { waitMin: 20 } };
+  ok('cost adds queue, ride and a walk for each must-do',
+    mustDoCost(rides, live, ['a', 'b']) === (50 + 4 + 8) + (20 + 6 + 8),
+    mustDoCost(rides, live, ['a', 'b']));
+  ok('one already ridden stops counting',
+    mustDoCost(rides, live, ['a', 'b'], ['a']) === 20 + 6 + 8);
+  ok('a must-do with no posted wait is assumed to be a real queue',
+    mustDoCost(rides, {}, ['b']) === 30 + 6 + 8);
+  ok('no must-dos cost nothing', mustDoCost(rides, live, []) === 0);
+}
+
 /* ── the candidate list ──────────────────────────────────────────────────── */
 console.log('\nchoosing what to do next');
 
@@ -217,6 +252,54 @@ const baseState = { from: castle, now: T(10), pace: DEFAULT_PACE };
   ok('nothing open means an empty list, not a crash',
     candidates(RIDES, {}, baseState).length === 0);
   ok('an empty park is an empty list', candidates([], LIVE, baseState).length === 0);
+}
+
+/* The case a fixed multiplier could not handle.
+ *
+ * An 80-minute headliner against a 5-minute walk-on next door. At nine in
+ * the morning the walk-on is genuinely the right call: you get it in ten
+ * minutes and the headliner will still be there. At eight in the evening it
+ * is not, because there is no "still be there" left.
+ *
+ * This is what made me replace the multiplier. At 5x the headliner lost to
+ * the walk-on at every hour of the day, which is how you go home without
+ * riding the thing you came for.
+ */
+console.log('\nthe headliner you came for');
+{
+  const pair = [
+    { id: 'tron',  name: 'TRON',  lat: 28.4215, lng: -81.5790, queued: true, minutes: 2 },
+    { id: 'dumbo', name: 'Dumbo', lat: 28.4203, lng: -81.5796, queued: true, minutes: 2 },
+  ];
+  const liveNow = {
+    tron:  { status: 'OPERATING', waitMin: 80, forecast: null },
+    dumbo: { status: 'OPERATING', waitMin: 5,  forecast: null },
+  };
+  const where = { from: castle, mustDo: ['tron'], closing: T(22) };
+
+  const morning = candidates(pair, liveNow, { ...where, now: T(9) });
+  ok('in the morning, throughput wins and the walk-on goes first',
+    morning[0].id === 'dumbo', morning.map((c) => [c.id, +c.score.toFixed(4)]));
+
+  const evening = candidates(pair, liveNow, { ...where, now: T(20, 30) });
+  ok('in the evening, the must-do you have not ridden wins',
+    evening[0].id === 'tron', evening.map((c) => [c.id, +c.score.toFixed(4), +c.pressure.toFixed(2)]));
+
+  ok('pressure is what changed, not the ride',
+    morning.find((c) => c.id === 'tron').pressure < evening.find((c) => c.id === 'tron').pressure);
+
+  ok('a ride that is not a must-do never feels pressure',
+    evening.find((c) => c.id === 'dumbo').pressure === 1);
+
+  // And once it is ridden, the pressure comes off everything else.
+  const after = candidates(pair, liveNow, { ...where, now: T(20, 30), done: ['tron'] });
+  ok('riding it releases the pressure', after.every((c) => c.pressure === 1));
+
+  // Without a closing time there is no deadline to be late for.
+  const noClose = candidates(pair, liveNow, { ...where, now: T(20, 30), closing: null });
+  ok('with no closing time it falls back to throughput', noClose[0].id === 'dumbo');
+
+  ok('and the card says why', /day is running out/.test(explain(evening[0])), explain(evening[0]));
 }
 
 /* ── looking ahead ───────────────────────────────────────────────────────── */

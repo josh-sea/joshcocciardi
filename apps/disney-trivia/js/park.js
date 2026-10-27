@@ -201,8 +201,60 @@ export const MUST_DO_BOOST = 5;
 export function scoreCandidate(c) {
   const minutes = (c.walkMin || 0) + (c.waitMin || 0) + (c.rideMin || 0);
   if (!(minutes > 0)) return 0;
-  const value = (c.mustDo ? MUST_DO_BOOST : 1) * (c.value || 1) * (c.urgency || 1);
+  const must = c.mustDo ? MUST_DO_BOOST * (c.pressure || 1) : 1;
+  const value = must * (c.value || 1) * (c.urgency || 1);
   return value / minutes;
+}
+
+/* How hard to push an unridden must-do, given how much day is left.
+ *
+ * A fixed multiplier cannot do this job. The objective is most rides in the
+ * day, so at 9am a 10-minute walk-on genuinely does beat an 80-minute
+ * headliner: you get the walk-on and the headliner is still there. But run
+ * that argument all day and you go home at 10pm without riding the thing you
+ * came for, because there is always something shorter nearby.
+ *
+ * A must-do is a deadline, not a weight. So: work out how much time the
+ * remaining must-dos actually need, compare it with how much day is left,
+ * and let the pressure rise as that slack runs out. Early on this is close
+ * to 1 and changes nothing. Late on it dominates, which is exactly when it
+ * should.
+ *
+ * Eased rather than linear so it stays out of the way until it matters and
+ * then bites hard.
+ */
+export const PRESSURE_MAX = 6;
+export const PRESSURE_EASY_SLACK = 3;   // this much slack and there is no hurry
+
+export function mustDoPressure(timeLeftMin, neededMin) {
+  if (!(neededMin > 0)) return 1;
+  if (!Number.isFinite(timeLeftMin)) return 1;    // closing time unknown: no opinion
+  if (timeLeftMin <= 0) return PRESSURE_MAX;
+  const slack = timeLeftMin / neededMin;
+  if (slack >= PRESSURE_EASY_SLACK) return 1;
+  if (slack <= 1) return PRESSURE_MAX;            // only just enough time, or not enough
+  const t = (PRESSURE_EASY_SLACK - slack) / (PRESSURE_EASY_SLACK - 1);
+  return 1 + t * t * (PRESSURE_MAX - 1);
+}
+
+/* What the must-dos you have not done yet will cost, roughly: their queue,
+ * their ride, and a nominal walk between them. Rough is fine; this feeds a
+ * ratio, not a schedule.
+ */
+export const NOMINAL_WALK_MIN = 8;
+
+export function mustDoCost(rides, live, mustDo, done = []) {
+  const doneSet = new Set(done);
+  let total = 0;
+  for (const id of mustDo || []) {
+    if (doneSet.has(id)) continue;
+    const ride = rides.find((r) => r.id === id);
+    if (!ride) continue;
+    const l = (live && live[id]) || {};
+    const wait = typeof l.waitMin === 'number' ? l.waitMin : 30;
+    total += wait + (ride.minutes || 6) + NOMINAL_WALK_MIN;
+  }
+  return total;
 }
 
 /* ── the plan ────────────────────────────────────────────────────────────── */
@@ -220,13 +272,18 @@ export function candidates(rides, live, state) {
   const {
     from, now = new Date(), pace = DEFAULT_PACE,
     done = [], mustDo = [], llWindows = [], skipHeld = true,
-    maxWaitMin = null, values = {},
+    maxWaitMin = null, values = {}, closing = null,
   } = state || {};
 
   const doneSet = new Set(done);
   const mustSet = new Set(mustDo);
   const byId = (id) => rides.find((r) => r.id === id) || null;
   const nowMs = new Date(now).getTime();
+
+  // How hard the remaining must-dos are pushing, worked out once for the
+  // whole list rather than per candidate.
+  const timeLeft = closing ? (new Date(closing).getTime() - nowMs) / 60000 : Infinity;
+  const pressure = mustDoPressure(timeLeft, mustDoCost(rides, live, mustDo, done));
 
   const out = [];
   for (const ride of rides) {
@@ -276,6 +333,7 @@ export function candidates(rides, live, state) {
       mustDo: mustSet.has(ride.id),
       value: values[ride.id] || 1,
       urgency: urgency(l.forecast, now, l.waitMin),
+      pressure: mustSet.has(ride.id) ? pressure : 1,
     };
     cand.score = scoreCandidate(cand);
     out.push(cand);
@@ -335,7 +393,11 @@ export function explain(c) {
       ? `climbing to ${Math.round(c.forecastAtArrivalMin)}`
       : `easing to ${Math.round(c.forecastAtArrivalMin)}`);
   }
-  if (c.mustDo) bits.push('on your must-do list');
+  if (c.mustDo) {
+    bits.push((c.pressure || 1) >= 2.5
+      ? 'must-do, and the day is running out'
+      : 'on your must-do list');
+  }
   if (c.urgency >= 1.25) bits.push('much worse later');
   else if (c.urgency <= 0.9) bits.push('fine later too');
   return bits.join(' · ');
