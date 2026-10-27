@@ -1,0 +1,826 @@
+{
+ "builtAt": "2026-10-27T01:25:40.400Z",
+ "source": "themeparks.wiki",
+ "parks": {
+  "mk": {
+   "id": "75ea578a-adc8-4116-a54d-dccb60765ef9",
+   "name": "Magic Kingdom",
+   "short": "Magic Kingdom",
+   "rides": [
+    {
+     "id": "f5aad2d4-a419-4384-bd9a-42f86385c750",
+     "name": "\"it's a small world\"",
+     "lat": 28.420482,
+     "lng": -81.582039,
+     "queued": true,
+     "minutes": 11
+    },
+    {
+     "id": "de737ffc-306b-4f32-8bbb-34e5d370ec8f",
+     "name": "A Pirate's Adventure ~ Treasures of the Seven Seas",
+     "lat": 28.418373,
+     "lng": -81.584669,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "d9d12438-d999-4482-894b-8955fdb20ccf",
+     "name": "Astro Orbiter",
+     "lat": 28.418493,
+     "lng": -81.578989,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "de3309ca-97d5-4211-bffe-739fed47e92f",
+     "name": "Big Thunder Mountain Railroad",
+     "lat": 28.419964,
+     "lng": -81.584642,
+     "queued": true,
+     "minutes": 4
+    },
+    {
+     "id": "72c7343a-f7fb-4f66-95df-c91016de7338",
+     "name": "Buzz Lightyear’s Space Ranger Spin",
+     "lat": 28.418287,
+     "lng": -81.579409,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "f010bc01-b450-4476-a5f3-a5f2813104b2",
+     "name": "Casey Jr. Splash 'N' Soak Station",
+     "lat": 28.420922,
+     "lng": -81.578676,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "90d79335-c907-4069-a021-d0fe1ec73ae2",
+     "name": "Cinderella Castle",
+     "lat": 28.419455,
+     "lng": -81.581181,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "0f57cecf-5502-4503-8bc3-ba84d3708ace",
+     "name": "Country Bear Musical Jamboree",
+     "lat": 28.418786,
+     "lng": -81.583722,
+     "queued": true,
+     "minutes": 12
+    },
+    {
+     "id": "890fa430-89c0-4a3f-96c9-11597888005e",
+     "name": "Dumbo the Flying Elephant",
+     "lat": 28.420509,
+     "lng": -81.578947,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "e76c93df-31af-49a5-8e2f-752c76c937c9",
+     "name": "Enchanted Tales with Belle",
+     "lat": 28.420991,
+     "lng": -81.58093,
+     "queued": true,
+     "minutes": 20
+    },
+    {
+     "id": "2551a77d-023f-4ab1-9a19-8afec0190f39",
+     "name": "Haunted Mansion",
+     "lat": 28.4202,
+     "lng": -81.58288,
+     "queued": true,
+     "minutes": 9
+    },
+    {
+     "id": "796b0a25-c51e-456e-9bb8-50a324e301b3",
+     "name": "Jungle Cruise",
+     "lat": 28.417978,
+     "lng": -81.583439,
+     "queued": true,
+     "minutes": 10
+    },
+    {
+     "id": "0aae716c-af13-4439-b638-d75fb1649df3",
+     "name": "Mad Tea Party",
+     "lat": 28.420023,
+     "lng": -81.579825,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "888fb4a4-7adf-47a1-8ba2-c258cc64fd75",
+     "name": "Main Street Vehicles",
+     "lat": 28.41687,
+     "lng": -81.581508,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "7c5e1e02-3a44-4151-9005-44066d5ba1da",
+     "name": "Mickey's PhilharMagic",
+     "lat": 28.42003,
+     "lng": -81.581484,
+     "queued": true,
+     "minutes": 12
+    },
+    {
+     "id": "e8f0b426-7645-4ea3-8b41-b94ae7091a41",
+     "name": "Monsters, Inc. Laugh Floor",
+     "lat": 28.418398,
+     "lng": -81.579736,
+     "queued": true,
+     "minutes": 15
+    },
+    {
+     "id": "86a41273-5f15-4b54-93b6-829f140e5161",
+     "name": "Peter Pan's Flight",
+     "lat": 28.420264,
+     "lng": -81.581892,
+     "queued": true,
+     "minutes": 3
+    },
+    {
+     "id": "352feb94-e52e-45eb-9c92-e4b44c6b1a9d",
+     "name": "Pirates of the Caribbean",
+     "lat": 28.41797,
+     "lng": -81.584225,
+     "queued": true,
+     "minutes": 9
+    },
+    {
+     "id": "273ddb8d-e7b5-4e34-8657-1113f49262a5",
+     "name": "Prince Charming Regal Carrousel",
+     "lat": 28.420169,
+     "lng": -81.581255,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "9d4d5229-7142-44b6-b4fb-528920969a2c",
+     "name": "Seven Dwarfs Mine Train",
+     "lat": 28.42037,
+     "lng": -81.58031,
+     "queued": true,
+     "minutes": 3
+    },
+    {
+     "id": "b2260923-9315-40fd-9c6b-44dd811dbe64",
+     "name": "Space Mountain",
+     "lat": 28.418834,
+     "lng": -81.578196,
+     "queued": true,
+     "minutes": 3
+    },
+    {
+     "id": "30fe3c64-af71-4c66-a54b-aa61fd7af177",
+     "name": "Swiss Family Treehouse",
+     "lat": 28.418433,
+     "lng": -81.582798,
+     "queued": true,
+     "minutes": 10
+    },
+    {
+     "id": "924a3b2c-6b4b-49e5-99d3-e9dc3f2e8a48",
+     "name": "The Barnstormer",
+     "lat": 28.420766,
+     "lng": -81.578391,
+     "queued": true,
+     "minutes": 1
+    },
+    {
+     "id": "2ebfb38c-5cb5-4de1-86c0-f7af14188022",
+     "name": "The Hall of Presidents",
+     "lat": 28.419448,
+     "lng": -81.582325,
+     "queued": true,
+     "minutes": 25
+    },
+    {
+     "id": "96455de6-f4f1-403c-9391-bf8396979149",
+     "name": "The Magic Carpets of Aladdin",
+     "lat": 28.41843,
+     "lng": -81.583472,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "0d94ad60-72f0-4551-83a6-ebaecdd89737",
+     "name": "The Many Adventures of Winnie the Pooh",
+     "lat": 28.420212,
+     "lng": -81.580266,
+     "queued": true,
+     "minutes": 4
+    },
+    {
+     "id": "73cb9445-0695-47a3-87ce-d08ae36b5f3c",
+     "name": "Tiana's Bayou Adventure",
+     "lat": 28.419418,
+     "lng": -81.58498,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "f163ddcd-43e1-488d-8276-2381c1db0a39",
+     "name": "Tomorrowland Speedway",
+     "lat": 28.419368,
+     "lng": -81.579302,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "ffcfeaa2-1416-4920-a1ed-543c1a1695c4",
+     "name": "Tomorrowland Transit Authority PeopleMover",
+     "lat": 28.418155,
+     "lng": -81.579033,
+     "queued": true,
+     "minutes": 10
+    },
+    {
+     "id": "5a43d1a7-ad53-4d25-abfe-25625f0da304",
+     "name": "TRON Lightcycle / Run",
+     "lat": 28.419625,
+     "lng": -81.577985,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "3cba0cb4-e2a6-402c-93ee-c11ffcb127ef",
+     "name": "Under the Sea - Journey of The Little Mermaid",
+     "lat": 28.42112,
+     "lng": -81.579975,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "e40ac396-cbac-43f4-8752-764ed60ccceb",
+     "name": "Walt Disney World Railroad - Fantasyland",
+     "lat": 28.420934,
+     "lng": -81.578368,
+     "queued": true,
+     "minutes": 20
+    },
+    {
+     "id": "e39b831b-7731-49bb-815b-289b4f49a9fd",
+     "name": "Walt Disney World Railroad - Main Street, U.S.A.",
+     "lat": 28.416543,
+     "lng": -81.581204,
+     "queued": true,
+     "minutes": 20
+    },
+    {
+     "id": "8183f3f2-1b59-4b9c-b634-6a863bdf8d84",
+     "name": "Walt Disney's Carousel of Progress",
+     "lat": 28.418031,
+     "lng": -81.579008,
+     "queued": true,
+     "minutes": 21
+    },
+    {
+     "id": "6fd1e225-53a0-4a80-a577-4bbc9a471075",
+     "name": "Walt Disney's Enchanted Tiki Room",
+     "lat": 28.418226,
+     "lng": -81.583738,
+     "queued": true,
+     "minutes": 10
+    }
+   ]
+  },
+  "ep": {
+   "id": "47f90d2c-e191-4239-a466-5892ef59a88b",
+   "name": "EPCOT",
+   "short": "EPCOT",
+   "rides": [
+    {
+     "id": "3d8f8f8f-f984-4d2e-8dea-5a79432bdf05",
+     "name": "Advanced Training Lab",
+     "lat": 28.374185,
+     "lng": -81.547072,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "4f0df9e7-d4c1-45b5-93e2-4a7bc92547b0",
+     "name": "American Heritage Gallery",
+     "lat": 28.367517,
+     "lng": -81.549469,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "482169b9-2889-4747-8aef-f9d13a37d940",
+     "name": "Awesome Planet",
+     "lat": 28.374301,
+     "lng": -81.552138,
+     "queued": true,
+     "minutes": 10
+    },
+    {
+     "id": "8c8cd77d-97f6-4309-b285-42aad90e9f15",
+     "name": "Beauty and the Beast Sing-Along",
+     "lat": 28.368864,
+     "lng": -81.552978,
+     "queued": true,
+     "minutes": 16
+    },
+    {
+     "id": "6f1d3b25-42c9-4e99-9dce-6c20d7a5deea",
+     "name": "Bijutsu-kan Gallery",
+     "lat": 28.367309,
+     "lng": -81.550525,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "2ecc4fff-2994-476f-9926-24a4af173838",
+     "name": "Bruce's Shark World",
+     "lat": 28.375099,
+     "lng": -81.551245,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "61fb49f8-e62f-4e1c-ae0e-8ab9929037bc",
+     "name": "Canada Far and Wide in Circle-Vision 360",
+     "lat": 28.371694,
+     "lng": -81.55196,
+     "queued": true,
+     "minutes": 14
+    },
+    {
+     "id": "35ed719b-f7f0-488f-8346-4fbf8055d373",
+     "name": "Disney and Pixar Short Film Festival",
+     "lat": 28.37263,
+     "lng": -81.55115,
+     "queued": true,
+     "minutes": 18
+    },
+    {
+     "id": "8d7ccdb1-a22b-4e26-8dc8-65b1938ed5f0",
+     "name": "Frozen Ever After",
+     "lat": 28.370745,
+     "lng": -81.54653,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "07dbeaea-85fa-45f2-872f-02f9e7510419",
+     "name": "Gallery of Arts and History",
+     "lat": 28.368236,
+     "lng": -81.551612,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "22f48b73-01df-460e-8969-9eb2b4ae836c",
+     "name": "Gran Fiesta Tour Starring The Three Caballeros",
+     "lat": 28.371649,
+     "lng": -81.547368,
+     "queued": true,
+     "minutes": 8
+    },
+    {
+     "id": "e3549451-b284-453d-9c31-e3b1207abd79",
+     "name": "Guardians of the Galaxy: Cosmic Rewind",
+     "lat": 28.374902,
+     "lng": -81.54784,
+     "queued": true,
+     "minutes": 3
+    },
+    {
+     "id": "0f40274d-420a-425a-9377-29fd6e49484f",
+     "name": "House of the Whispering Willows",
+     "lat": 28.36999,
+     "lng": -81.546334,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "3e5f26ee-c02d-47fd-891e-5e4479073444",
+     "name": "ImageWorks - The \"What If\" Labs",
+     "lat": 28.372774,
+     "lng": -81.551121,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "00666fe9-7774-4b53-9fb7-3d333f8aa503",
+     "name": "Impressions de France",
+     "lat": 28.368864,
+     "lng": -81.552978,
+     "queued": true,
+     "minutes": 18
+    },
+    {
+     "id": "75449e85-c410-4cef-a368-9d2ea5d52b58",
+     "name": "Journey Into Imagination With Figment",
+     "lat": 28.372994,
+     "lng": -81.551401,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "dae68dee-dfba-4128-b594-6aa12add1070",
+     "name": "Journey of Water, Inspired by Moana",
+     "lat": 28.374691,
+     "lng": -81.550378,
+     "queued": true,
+     "minutes": 15
+    },
+    {
+     "id": "3ace01d1-15fc-4fbb-99e4-81a696cb2d05",
+     "name": "Kidcot Fun Stops",
+     "lat": 28.36806,
+     "lng": -81.547068,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "8f353879-d6ac-4211-9352-4029efb47c18",
+     "name": "Living with the Land",
+     "lat": 28.374245,
+     "lng": -81.552301,
+     "queued": true,
+     "minutes": 14
+    },
+    {
+     "id": "f3bb21e6-e843-4c31-834f-b87f60c2ab3e",
+     "name": "Living with the Land – Glimmering Greenhouses",
+     "lat": 28.374245,
+     "lng": -81.552301,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "8f8746cb-c714-4c60-848d-e2dc4e6f586b",
+     "name": "Mexico Folk Art Gallery",
+     "lat": 28.371511,
+     "lng": -81.54746,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "5b6475ad-4e9a-4793-b841-501aa382c9c0",
+     "name": "Mission: SPACE",
+     "lat": 28.373927,
+     "lng": -81.547156,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "18c533d6-a395-4ae4-9488-80fce9c497fe",
+     "name": "Palais du Cinéma",
+     "lat": 28.368864,
+     "lng": -81.552978,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "9053240b-7f7f-44fe-970b-bd7956cd5d4f",
+     "name": "Project Tomorrow: Inventing the Wonders of the Future",
+     "lat": 28.37476,
+     "lng": -81.549401,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "ee070d46-6a64-41c0-9f12-69dcfcca10a0",
+     "name": "Reflections of China",
+     "lat": 28.369791,
+     "lng": -81.546381,
+     "queued": true,
+     "minutes": 13
+    },
+    {
+     "id": "1e735ffb-4868-47f1-b2cd-2ac1156cd5f0",
+     "name": "Remy's Ratatouille Adventure",
+     "lat": 28.36825,
+     "lng": -81.553097,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "7969166f-feef-4350-b26e-6a6c745528f4",
+     "name": "SeaBase Aquarium",
+     "lat": 28.375098,
+     "lng": -81.551211,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "81b15dfd-cf6a-466f-be59-3dd65d2a2807",
+     "name": "Soarin' Across America",
+     "lat": 28.373592,
+     "lng": -81.552248,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "480fde8f-fe58-4bfb-b3ab-052a39d4db7c",
+     "name": "Spaceship Earth",
+     "lat": 28.375583,
+     "lng": -81.549401,
+     "queued": true,
+     "minutes": 16
+    },
+    {
+     "id": "66ff36de-9cb3-4d9a-b891-1665d19ffb3e",
+     "name": "Stave Church Gallery",
+     "lat": 28.370621,
+     "lng": -81.546971,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "37ae57c5-feaf-4e47-8f27-4b385be200f0",
+     "name": "Test Track",
+     "lat": 28.373228,
+     "lng": -81.547489,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "1f542745-cda1-4786-a536-5fff373e5964",
+     "name": "The American Adventure",
+     "lat": 28.367517,
+     "lng": -81.549446,
+     "queued": false,
+     "minutes": 29
+    },
+    {
+     "id": "fb076275-0570-4d62-b2a9-4d6515130fa3",
+     "name": "The Seas with Nemo & Friends",
+     "lat": 28.374904,
+     "lng": -81.550852,
+     "queued": true,
+     "minutes": 4
+    },
+    {
+     "id": "57acb522-a6fc-4aa4-a80e-21f21f317250",
+     "name": "Turtle Talk With Crush",
+     "lat": 28.375255,
+     "lng": -81.551047,
+     "queued": true,
+     "minutes": 6
+    }
+   ]
+  },
+  "hs": {
+   "id": "288747d1-8b4f-4a64-867e-ea7c9b27bad8",
+   "name": "Hollywood Studios",
+   "short": "Hollywood",
+   "rides": [
+    {
+     "id": "d56506e2-6ad3-443a-8065-fea37987248d",
+     "name": "Alien Swirling Saucers",
+     "lat": 28.355385,
+     "lng": -81.562379,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "6e118e37-5002-408d-9d88-0b5d9cdb5d14",
+     "name": "Mickey & Minnie's Runaway Railway",
+     "lat": 28.356678,
+     "lng": -81.560567,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "34c4916b-989b-4ff1-a7e3-a6a846a3484f",
+     "name": "Millennium Falcon: Smugglers Run",
+     "lat": 28.353889,
+     "lng": -81.561689,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "d33c3a9f-c631-474b-9a9d-565f429e41d5",
+     "name": "Off the Page!",
+     "lat": 28.357934,
+     "lng": -81.561054,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "add7208f-98a9-4f9d-b1d2-c6f8624e3221",
+     "name": "Olaf Draws!",
+     "lat": 28.357934,
+     "lng": -81.561054,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "632af5e9-b40c-419a-af93-2ea3c9e21107",
+     "name": "Once Upon a Studio Theater",
+     "lat": 28.357934,
+     "lng": -81.561054,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "e516f303-e82d-4fd3-8fbf-8e6ab624cf89",
+     "name": "Rock ’n’ Roller Coaster Starring The Muppets",
+     "lat": 28.359712,
+     "lng": -81.56059,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "399aa0a1-98e2-4d2b-b297-2b451e9665e1",
+     "name": "Slinky Dog Dash",
+     "lat": 28.356245,
+     "lng": -81.562786,
+     "queued": true,
+     "minutes": 2
+    },
+    {
+     "id": "3b290419-8ca2-44bc-a710-a6c83fca76ec",
+     "name": "Star Tours – The Adventures Continue",
+     "lat": 28.355695,
+     "lng": -81.558891,
+     "queued": true,
+     "minutes": 7
+    },
+    {
+     "id": "1a2e70d9-50d5-4140-b69e-799e950f7d18",
+     "name": "Star Wars: Rise of the Resistance",
+     "lat": 28.354884,
+     "lng": -81.560457,
+     "queued": true,
+     "minutes": 18
+    },
+    {
+     "id": "6f6998e8-a629-412c-b964-2cb06af8e26b",
+     "name": "The Twilight Zone™ Tower of Terror",
+     "lat": 28.359553,
+     "lng": -81.559772,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "20b5daa8-e1ea-436f-830c-2d7d18d929b5",
+     "name": "Toy Story Mania!",
+     "lat": 28.356404,
+     "lng": -81.561894,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "9211adc9-b296-4667-8e97-b40cf76108e4",
+     "name": "Vacation Fun - An Original Animated Short with Mickey & Minnie",
+     "lat": 28.356316,
+     "lng": -81.559031,
+     "queued": true,
+     "minutes": 6
+    },
+    {
+     "id": "d7669edc-eaa1-4af2-bbb5-6e98df564166",
+     "name": "Walt Disney Presents",
+     "lat": 28.35686,
+     "lng": -81.560982,
+     "queued": true,
+     "minutes": 15
+    }
+   ]
+  },
+  "ak": {
+   "id": "1c84a229-8862-4648-9c71-378ddd2c7693",
+   "name": "Animal Kingdom",
+   "short": "Animal Kingdom",
+   "rides": [
+    {
+     "id": "6fbe6d02-4057-43bb-80a3-047b1e8a50ca",
+     "name": "Animal Care at Conservation Station",
+     "lat": 28.36533,
+     "lng": -81.58872,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "24cf863c-b6ba-4826-a056-0b698989cbf7",
+     "name": "Avatar Flight of Passage",
+     "lat": 28.355554,
+     "lng": -81.592147,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "d5dfc051-f951-40ac-8774-3e9961331ab9",
+     "name": "Bluey's Wild World at Conservation Station",
+     "lat": 28.36533,
+     "lng": -81.58872,
+     "queued": true,
+     "minutes": 12
+    },
+    {
+     "id": "4d27b0d7-2b0a-4569-90fa-e79f117ec7ef",
+     "name": "Discovery Island Trails",
+     "lat": 28.358103,
+     "lng": -81.591115,
+     "queued": false,
+     "minutes": 15
+    },
+    {
+     "id": "64a6915f-a835-4226-ba5c-8389fc4cade3",
+     "name": "Expedition Everest - Legend of the Forbidden Mountain",
+     "lat": 28.358477,
+     "lng": -81.587378,
+     "queued": true,
+     "minutes": 3
+    },
+    {
+     "id": "e7976e25-4322-4587-8ded-fb1d9dcbb83c",
+     "name": "Gorilla Falls Exploration Trail",
+     "lat": 28.359954,
+     "lng": -81.592149,
+     "queued": true,
+     "minutes": 20
+    },
+    {
+     "id": "91237556-7557-4b18-88a8-581254de96c6",
+     "name": "Jumping Junction",
+     "lat": 28.365346,
+     "lng": -81.588852,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "d58d9262-ec95-4161-80a0-07ca43b2f5f3",
+     "name": "Kali River Rapids",
+     "lat": 28.358783,
+     "lng": -81.588941,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "32e01181-9a5f-4936-8a77-0dace1de836c",
+     "name": "Kilimanjaro Safaris",
+     "lat": 28.359331,
+     "lng": -81.59228,
+     "queued": true,
+     "minutes": 22
+    },
+    {
+     "id": "1a8ea967-229a-42a0-8290-59b036c84e14",
+     "name": "Maharajah Jungle Trek",
+     "lat": 28.359379,
+     "lng": -81.589019,
+     "queued": true,
+     "minutes": 20
+    },
+    {
+     "id": "7a5af3b7-9bc1-4962-92d0-3ea9c9ce35f0",
+     "name": "Na'vi River Journey",
+     "lat": 28.355257,
+     "lng": -81.591641,
+     "queued": true,
+     "minutes": 5
+    },
+    {
+     "id": "bc997600-fcc0-4f6f-b908-a1419b26cfd8",
+     "name": "The Oasis Exhibits",
+     "lat": 28.355965,
+     "lng": -81.59014,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "bc1ffa86-9b1a-4ce9-84a5-b479dfa3cb53",
+     "name": "Tree of Life",
+     "lat": 28.357994,
+     "lng": -81.590597,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "6ef1b126-5b0b-46a1-8608-4fcf98ab92c8",
+     "name": "Wilderness Explorers",
+     "lat": 28.356682,
+     "lng": -81.590292,
+     "queued": false,
+     "minutes": 6
+    },
+    {
+     "id": "4f391f0e-52be-4f9d-99d6-b3ae0373b43c",
+     "name": "Wildlife Express Train",
+     "lat": 28.35981,
+     "lng": -81.591418,
+     "queued": true,
+     "minutes": 7
+    },
+    {
+     "id": "1b15c77b-0311-4171-8e59-7f38e6d60754",
+     "name": "Zootopia: Better Zoogether!",
+     "lat": 28.357488,
+     "lng": -81.590118,
+     "queued": true,
+     "minutes": 15
+    }
+   ]
+  }
+ }
+}

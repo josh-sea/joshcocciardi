@@ -1,0 +1,340 @@
+/* The Park Planner tab.
+ *
+ * Read one-handed, in sunlight, while walking. That is the whole brief: big
+ * numbers, few words, and the next thing to do at the top where a thumb
+ * already is. Everything is scoped under #pl so it cannot reach the ticket
+ * book's inline styles.
+ */
+
+/* The hidden attribute is only a user-agent default, so any author display
+ * rule beats it. Say it explicitly, as the photo game has to. */
+#pl[hidden], #pl [hidden] { display: none !important; }
+
+/* ── which park ──────────────────────────────────────────────────────────── */
+.pl-parks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin: 14px 0 0;
+}
+.pl-parks button {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #CFC3E8;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 9px 4px;
+  cursor: pointer;
+}
+.pl-parks button[aria-checked="true"] {
+  color: #2B2140;
+  background: var(--stock);
+  border-color: var(--stock-edge);
+}
+
+/* ── the status strip ────────────────────────────────────────────────────── */
+.pl-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+.pl-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  color: #9D90BD;
+}
+.pl-refresh {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  padding: 0;
+  color: #CFC3E8;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.pl-refresh svg { width: 15px; height: 15px; display: block; }
+.pl-refresh[disabled] { opacity: 0.4; }
+
+.pl-wherebtn {
+  width: 100%;
+  margin: 8px 0 0;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: #9D90BD;
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.16);
+  border-radius: 10px;
+  padding: 8px 11px;
+  cursor: pointer;
+}
+.pl-wherebtn[data-state="on"] {
+  color: var(--good);
+  border-style: solid;
+  border-color: rgba(127,214,162,0.3);
+  cursor: default;
+}
+
+.pl-error { margin: 8px 0 0; font-size: 12.5px; color: var(--bad); }
+.pl-error:empty { display: none; }
+
+/* ── the suggestion cards ────────────────────────────────────────────────── */
+.pl-cards { display: grid; gap: 10px; margin: 14px 0 0; }
+
+.pl-card {
+  padding: 14px 15px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+}
+/* The next thing to do earns the gold. Everything else is an alternative. */
+.pl-card.top {
+  background: linear-gradient(180deg, rgba(232,179,60,0.14) 0%, rgba(232,179,60,0.05) 100%);
+  border-color: rgba(232,179,60,0.4);
+}
+.pl-rank {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #9D90BD;
+}
+.pl-card.top .pl-rank { color: var(--gold); }
+.pl-card h3 {
+  margin: 4px 0 0;
+  font-family: var(--display);
+  font-size: 20px;
+  line-height: 1.12;
+  color: #EDE7F7;
+}
+.pl-card.top h3 { font-size: 24px; }
+
+.pl-nums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: #9D90BD;
+}
+.pl-nums b {
+  font-size: 17px;
+  font-weight: 800;
+  color: #EDE7F7;
+  margin-right: 2px;
+}
+.pl-card.top .pl-nums b { color: var(--gold); }
+.pl-total { margin-left: auto; }
+.pl-total b { color: #CFC3E8 !important; }
+
+.pl-why {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #B6A9D4;
+}
+.pl-then {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: #8E80AE;
+  font-style: italic;
+}
+
+.pl-actions { display: flex; gap: 8px; margin: 12px 0 0; }
+.pl-actions button {
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  color: #CFC3E8;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  padding: 11px 8px;
+  cursor: pointer;
+}
+.pl-actions .pl-did {
+  color: #2B2140;
+  background: var(--stock);
+  border-color: var(--stock-edge);
+}
+
+.pl-empty {
+  margin: 0;
+  padding: 20px 14px;
+  text-align: center;
+  font-size: 13px;
+  color: #9D90BD;
+  background: rgba(255,255,255,0.04);
+  border: 1px dashed rgba(255,255,255,0.14);
+  border-radius: 14px;
+}
+
+/* ── the folds ───────────────────────────────────────────────────────────── */
+.pl-fold {
+  margin: 10px 0 0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+}
+.pl-fold > summary {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #CFC3E8;
+  cursor: pointer;
+  list-style: none;
+}
+.pl-fold > summary::-webkit-details-marker { display: none; }
+.pl-fold > summary::after { content: ' ▾'; color: #8E80AE; }
+.pl-fold[open] > summary::after { content: ' ▴'; }
+.pl-fold > :not(summary) { margin-left: 14px; margin-right: 14px; }
+.pl-fold > :last-child { margin-bottom: 14px; }
+.pl-dim { font-weight: 400; color: #8E80AE; }
+
+.pl-hint { margin: 0 0 10px; font-size: 11.5px; line-height: 1.45; color: #8E80AE; }
+
+/* ── Lightning Lane rows ─────────────────────────────────────────────────── */
+.pl-llrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  font-size: 12.5px;
+  color: #B6A9D4;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.pl-llrow b { flex: 1 1 auto; min-width: 0; color: #EDE7F7; font-size: 13px; }
+.pl-llrow button {
+  flex: 0 0 auto;
+  width: 28px; height: 28px;
+  font: inherit; font-size: 17px; line-height: 1;
+  color: #9D90BD;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.pl-ll-add { display: grid; gap: 8px; margin-top: 10px; }
+.pl-times { display: flex; gap: 8px; }
+.pl-times label {
+  flex: 1;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: #9D90BD;
+}
+#pl select, #pl input[type="time"], #pl input[type="number"] {
+  font: inherit;
+  font-size: 14px;
+  width: 100%;
+  min-width: 0;
+  color: #EDE7F7;
+  background: rgba(0,0,0,0.26);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 9px;
+  padding: 9px 10px;
+}
+#pl select option { background: #2B2140; }
+.pl-ll-add > button {
+  font: inherit; font-size: 13px; font-weight: 800;
+  color: #2B2140; background: var(--stock);
+  border: 1px solid var(--stock-edge); border-radius: 10px;
+  padding: 11px; cursor: pointer;
+}
+
+.pl-check, .pl-slider, .pl-max {
+  display: flex; align-items: center; gap: 9px;
+  margin-top: 12px;
+  font-size: 12.5px; color: #B6A9D4;
+}
+.pl-check input { accent-color: var(--gold); width: 17px; height: 17px; }
+.pl-slider input { flex: 1; min-width: 0; accent-color: var(--gold); }
+.pl-slider span { flex: 0 0 auto; font-size: 11.5px; color: #9D90BD; }
+.pl-max input { width: 90px; flex: 0 0 auto; }
+
+/* ── the full board ──────────────────────────────────────────────────────── */
+.pl-list { display: grid; }
+.pl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.pl-row.done { opacity: 0.4; }
+.pl-wait {
+  flex: 0 0 auto;
+  width: 34px;
+  font-size: 17px;
+  font-weight: 800;
+  text-align: right;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.pl-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: #EDE7F7;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pl-row.must .pl-name { color: var(--gold); }
+.pl-meta { flex: 0 0 auto; font-size: 11px; color: #8E80AE; }
+.pl-star {
+  flex: 0 0 auto;
+  width: 30px; height: 30px;
+  font: inherit; font-size: 15px; line-height: 1;
+  color: #4C4169;
+  background: transparent; border: 0;
+  cursor: pointer;
+}
+.pl-star[aria-pressed="true"] { color: var(--gold); }
+
+.pl-donelist { display: flex; flex-wrap: wrap; gap: 6px; }
+.pl-donelist:empty::after {
+  content: 'Nothing yet. Tap "Rode it" on a card.';
+  font-size: 12px; color: #8E80AE;
+}
+.pl-donelist button {
+  font: inherit; font-size: 12px; font-weight: 600;
+  color: #CFC3E8;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 9px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.pl-reset {
+  margin-top: 12px;
+  font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--bad);
+  background: transparent;
+  border: 1px solid rgba(240,134,127,0.3);
+  border-radius: 10px;
+  padding: 9px 13px;
+  cursor: pointer;
+}
+
+.pl-credit {
+  margin: 16px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #776A95;
+}
+.pl-credit a { color: #9D90BD; }
+
+/* ── narrow phones ───────────────────────────────────────────────────────── */
+@media (max-width: 360px) {
+  .pl-parks { grid-template-columns: repeat(2, 1fr); }
+  .pl-card.top h3 { font-size: 21px; }
+  .pl-total { margin-left: 0; }
+}

@@ -71,6 +71,13 @@ jobs:
       - name: Test Where Am I
         run: node apps/portfolio/test/whereami.test.mjs
 
+      # The planner routes a family round a park on a day that cannot be
+      # repeated: a suggestion that makes you late for a Lightning Lane, or
+      # a wait read off the wrong hour of the forecast, costs real time.
+      # Pure maths on fixtures, no network.
+      - name: Test Park Planner
+        run: node apps/portfolio/test/park.test.mjs
+
       # Swing Coach's geometry engine is inlined in its static page; the suite
       # lifts it out of the shipped HTML and runs synthetic swings through it.
       # No install needed.

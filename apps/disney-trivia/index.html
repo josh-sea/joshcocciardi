@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Karla:ital,wght@0,400;0,600;0,800;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/whereami.css">
 <link rel="stylesheet" href="css/music.css">
+<link rel="stylesheet" href="css/planner.css">
 <link rel="manifest" href="manifest.json">
 
 <style>
@@ -472,6 +473,7 @@
   <div class="games" role="tablist" aria-label="Which game">
     <button id="game-trivia" role="tab" aria-selected="true">Trivia</button>
     <button id="game-wa" role="tab" aria-selected="false">Where am I?</button>
+    <button id="game-pl" role="tab" aria-selected="false">Planner</button>
   </div>
 
 <section id="tv">
@@ -597,6 +599,67 @@
   <p class="fine" style="margin-top:24px">
     Photos are shrunk in your browser before upload, which also strips their GPS and camera data.
   </p>
+</section>
+
+<section id="pl" hidden>
+  <div class="pl-parks" id="pl-parks" role="radiogroup" aria-label="Which park"></div>
+
+  <div class="pl-bar">
+    <p class="pl-status" id="pl-status">Loading…</p>
+    <button class="pl-refresh" id="pl-refresh" type="button" aria-label="Refresh wait times">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+    </button>
+  </div>
+
+  <button class="pl-wherebtn" id="pl-where" type="button" data-state="off"></button>
+  <p class="pl-error" id="pl-error"></p>
+
+  <div class="pl-cards" id="pl-cards"></div>
+
+  <details class="pl-fold">
+    <summary>Lightning Lanes you hold</summary>
+    <p class="pl-hint">Typed in by hand. Nothing here touches your Disney account; it just stops the planner sending you somewhere you cannot get back from.</p>
+    <div class="pl-ll-list" id="pl-ll-list"></div>
+    <div class="pl-ll-add">
+      <select id="pl-ll-ride" aria-label="Which ride"><option value="">Which ride?</option></select>
+      <div class="pl-times">
+        <label>From <input type="time" id="pl-ll-start"></label>
+        <label>To <input type="time" id="pl-ll-end"></label>
+      </div>
+      <button id="pl-ll-add" type="button">Add</button>
+    </div>
+    <p class="pl-error" id="pl-ll-error"></p>
+    <label class="pl-check">
+      <input type="checkbox" id="pl-skipheld">
+      <span>Skip rides I hold a Lightning Lane for</span>
+    </label>
+  </details>
+
+  <details class="pl-fold">
+    <summary>How you walk</summary>
+    <label class="pl-slider">
+      <input type="range" id="pl-pace" min="45" max="100" step="5">
+      <span id="pl-pace-out"></span>
+    </label>
+    <label class="pl-max">
+      <span>Skip anything over</span>
+      <input type="number" id="pl-maxwait" min="5" max="240" step="5" placeholder="no limit">
+      <span>min</span>
+    </label>
+  </details>
+
+  <details class="pl-fold">
+    <summary>Every wait <span class="pl-dim" id="pl-done-count"></span></summary>
+    <div class="pl-list" id="pl-list"></div>
+  </details>
+
+  <details class="pl-fold">
+    <summary>Ridden today</summary>
+    <div class="pl-donelist" id="pl-done"></div>
+    <button class="pl-reset" id="pl-reset" type="button">Clear the day</button>
+  </details>
+
+  <p class="pl-credit">Wait times from <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a>. Walk times are straight-line distance with a detour factor, so treat them as a guide.</p>
 </section>
 
   <a class="backlink" href="/projects">← Back to all projects</a>
@@ -1236,41 +1299,65 @@ startBook("all");
  * Where Am I needs Firebase, so it is imported the first time somebody asks
  * for it and never before. Switching back and forth after that is free.
  */
-const tv = document.getElementById('tv');
-const wa = document.getElementById('wa');
-const btnTrivia = document.getElementById('game-trivia');
-const btnWa = document.getElementById('game-wa');
 const blurb = document.getElementById('blurb');
 const TRIVIA_BLURB = blurb.textContent;
 
-let mod = null;          // the Where Am I module, once it has been fetched
-let loading = false;
+/* Each tab: its panel, its button, the line under the title, and how to load
+ * it. Trivia has no module because it is the page itself.
+ *
+ * `mod` is filled in on first use and kept, so switching back and forth after
+ * that costs nothing.
+ */
+const TABS = {
+  trivia: {
+    panel: document.getElementById('tv'),
+    button: document.getElementById('game-trivia'),
+    blurb: TRIVIA_BLURB,
+    load: null,
+  },
+  wa: {
+    panel: document.getElementById('wa'),
+    button: document.getElementById('game-wa'),
+    blurb: 'Open a deck with its name and password. Nobody can see a deck without both.',
+    load: () => import('./js/whereami.js'),
+    failInto: 'wa-boot',
+    failWith: 'Could not load the photo game: ',
+  },
+  pl: {
+    panel: document.getElementById('pl'),
+    button: document.getElementById('game-pl'),
+    blurb: 'Where to go next, from where you are standing, on what the queues are doing right now.',
+    load: () => import('./js/planner.js'),
+    failInto: 'pl-error',
+    failWith: 'Could not load the planner: ',
+  },
+};
 
 async function pick(which) {
-  const onWa = which === 'wa';
-  btnTrivia.setAttribute('aria-selected', String(!onWa));
-  btnWa.setAttribute('aria-selected', String(onWa));
-  tv.hidden = onWa;
-  wa.hidden = !onWa;
+  const tab = TABS[which] || TABS.trivia;
 
-  if (!onWa) { blurb.textContent = TRIVIA_BLURB; return; }
+  for (const [name, t] of Object.entries(TABS)) {
+    const on = t === tab;
+    t.button.setAttribute('aria-selected', String(on));
+    t.panel.hidden = !on;
+  }
+  blurb.textContent = tab.blurb;
 
-  blurb.textContent = 'Open a deck with its name and password. Nobody can see a deck without both.';
-  if (mod) { mod.onShow(); return; }
-  if (loading) return;
-  loading = true;
+  if (!tab.load) return;
+  if (tab.mod) { if (tab.mod.onShow) tab.mod.onShow(); return; }
+  if (tab.loading) return;
+  tab.loading = true;
   try {
-    const m = await import('./js/whereami.js');
+    const m = await tab.load();
     await m.init();
-    mod = m;
+    tab.mod = m;
   } catch (err) {
-    document.getElementById('wa-boot').textContent =
-      'Could not load the photo game: ' + err.message;
-  } finally { loading = false; }
+    const into = document.getElementById(tab.failInto);
+    if (into) into.textContent = tab.failWith + (err.message || err);
+  } finally { tab.loading = false; }
 }
 
-btnTrivia.onclick = () => pick('trivia');
-btnWa.onclick = () => pick('wa');
+for (const [name, t] of Object.entries(TABS)) t.button.onclick = () => pick(name);
 
 /* A deep link straight to the photo game, so it can be shared on its own.
  *
@@ -1280,9 +1367,10 @@ btnWa.onclick = () => pick('wa');
  * which is a same-document navigation: no script re-runs, so without this a
  * link to #whereami from the page itself would do nothing at all.
  */
+const HASHES = { '#whereami': 'wa', '#trivia': 'trivia', '#planner': 'pl' };
 const fromHash = () => {
-  if (location.hash === '#whereami') pick('wa');
-  else if (location.hash === '#trivia') pick('trivia');
+  const which = HASHES[location.hash];
+  if (which) pick(which);
 };
 window.addEventListener('hashchange', fromHash);
 fromHash();

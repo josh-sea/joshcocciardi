@@ -929,6 +929,38 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /ezpayze_stripeCustomers/{customerId} {
+    // ── Park Planner ──────────────────────────────────────────────────────
+    //
+    // Wait times are not private: they are posted on a board in the park. But
+    // only the collector function writes them, so a client that could write
+    // here could poison the history that every forecast is built from.
+    // Admin SDK writes bypass rules entirely, so denying every client write
+    // costs the collector nothing.
+    //
+    // park_secrets holds the collector's bearer token and is readable by
+    // nobody: the function reads it through the Admin SDK.
+    match /park_live/{parkId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /park_snaps/{snapId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /park_days/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /park_forecasts/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    // A day plan belongs to the person who made it: must-dos, Lightning Lane
+    // windows, what they have ridden and where they walked.
+    match /park_plans/{uid}/days/{date} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /park_secrets/{docId} {
       allow read, write: if false;
     }
 
@@ -957,6 +989,7 @@ service cloud.firestore {
         && !collection.matches('sbox_.*')
         && !collection.matches('whereami_.*')
         && !collection.matches('ezpayze_.*')
+        && !collection.matches('park_.*')
         && collection != 'work_private';
     }
   }
