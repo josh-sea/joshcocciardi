@@ -9,7 +9,7 @@
  * reload does not lose what you have ridden.
  */
 
-import { planAhead, explain, DEFAULT_PACE } from './park.js';
+import { planAhead, explain, parkRatio, DEFAULT_PACE } from './park.js';
 import { liveFor, hoursFor, parkDate, parkClock, ageWords } from './parkdata.js';
 
 const $ = (id) => document.getElementById(id);
@@ -126,6 +126,30 @@ function statusLine() {
   return bits.join(' · ');
 }
 
+/* How today is running against the forecast, in one line.
+ *
+ * Worth showing rather than hiding inside the maths: it is the planner's
+ * single biggest assumption about today, and if it says the park is 40%
+ * quieter than usual while you are stood in a crowd, you know to stop
+ * trusting the forecast-based numbers and read the posted ones instead.
+ */
+function todayLine() {
+  const { ratio, sample } = parkRatio(ridesHere(), live.rides, new Date());
+  const el = $('pl-today');
+  if (!el) return;
+  if (sample < 4 || Math.abs(ratio - 1) < 0.12) {
+    el.textContent = '';
+    el.removeAttribute('data-mood');
+    return;
+  }
+  const pct = Math.round(Math.abs(ratio - 1) * 100);
+  const hot = ratio > 1;
+  el.textContent = hot
+    ? `Running about ${pct}% busier than a normal day. Forecasts below are adjusted up to match.`
+    : `Running about ${pct}% quieter than a normal day. Forecasts below are adjusted down to match.`;
+  el.dataset.mood = hot ? 'hot' : 'cold';
+}
+
 function card(c, rank) {
   const el = document.createElement('article');
   el.className = 'pl-card';
@@ -184,6 +208,7 @@ const skipped = new Set();
 function render() {
   if (!catalogue) return;
   $('pl-status').textContent = statusLine();
+  todayLine();
 
   const from = here || parkCentre();
   const state = {
@@ -273,11 +298,12 @@ function renderList(candidates) {
     if (day.done.includes(ride.id)) row.classList.add('done');
     if (day.mustDo.includes(ride.id)) row.classList.add('must');
 
-    const wait = typeof l.waitMin === 'number' ? `${l.waitMin}` : (l.status === 'OPERATING' ? '–' : '');
+    const hasWait = typeof l.waitMin === 'number';
+    const wait = hasWait ? `${l.waitMin}` : '–';
     const note = l.status && l.status !== 'OPERATING' ? l.status.toLowerCase() : '';
 
     row.innerHTML = `
-      <span class="pl-wait">${wait}</span>
+      <span class="pl-wait" data-empty="${hasWait ? 'no' : 'yes'}">${wait}</span>
       <span class="pl-name">${escapeHtml(ride.name)}</span>
       <span class="pl-meta">${note || (c ? `${Math.round(c.walkMin)} min away` : '')}</span>
     `;

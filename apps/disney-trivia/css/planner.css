@@ -225,10 +225,15 @@
   cursor: pointer;
 }
 
-.pl-ll-add { display: grid; gap: 8px; margin-top: 10px; }
-.pl-times { display: flex; gap: 8px; }
+/* min-width: 0 on every one of these for the same reason as .pl-row: a grid
+ * or flex item will not shrink below its content unless told to, so the two
+ * time fields pushed the whole Lightning Lane form wider than its panel.
+ */
+.pl-ll-add { display: grid; gap: 8px; margin-top: 10px; min-width: 0; }
+.pl-times { display: flex; gap: 8px; min-width: 0; }
 .pl-times label {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex; align-items: center; gap: 6px;
   font-size: 11.5px; color: #9D90BD;
 }
@@ -259,7 +264,11 @@
 .pl-check input { accent-color: var(--gold); width: 17px; height: 17px; }
 .pl-slider input { flex: 1; min-width: 0; accent-color: var(--gold); }
 .pl-slider span { flex: 0 0 auto; font-size: 11.5px; color: #9D90BD; }
-.pl-max input { width: 90px; flex: 0 0 auto; }
+/* Needs the #pl prefix to outrank `#pl input[type="number"] { width: 100% }`
+ * above: an id in the selector beats a class, so the plain `.pl-max input`
+ * this used to be lost silently and the field grew to the full row, shoving
+ * the "min" label off the screen. */
+#pl .pl-max input { width: 90px; flex: 0 0 auto; }
 
 /* ── the full board ──────────────────────────────────────────────────────── */
 .pl-list { display: grid; }
@@ -269,17 +278,25 @@
   gap: 10px;
   padding: 9px 0;
   border-top: 1px solid rgba(255,255,255,0.07);
+  /* A grid item defaults to min-width:auto, which refuses to shrink below
+   * its content. With a long ride name and a word like "refurbishment" in
+   * the meta column the row simply grew past the panel and pushed the star
+   * off the screen. Both this and .pl-meta need an explicit zero. */
+  min-width: 0;
 }
 .pl-row.done { opacity: 0.4; }
 .pl-wait {
   flex: 0 0 auto;
   width: 34px;
+  /* Dimmed when it holds a dash rather than a number, so a closed park reads
+   * as "no wait to report" instead of a column that failed to render. */
   font-size: 17px;
   font-weight: 800;
   text-align: right;
   color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
+.pl-wait[data-empty="yes"] { color: #4C4169; }
 .pl-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -288,7 +305,15 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .pl-row.must .pl-name { color: var(--gold); }
-.pl-meta { flex: 0 0 auto; font-size: 11px; color: #8E80AE; }
+.pl-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: #8E80AE;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pl-star {
   flex: 0 0 auto;
   width: 30px; height: 30px;
@@ -337,4 +362,30 @@
   .pl-parks { grid-template-columns: repeat(2, 1fr); }
   .pl-card.top h3 { font-size: 21px; }
   .pl-total { margin-left: 0; }
+}
+
+/* How today is running against the forecast.
+ *
+ * The planner's single biggest assumption about today, so it is on screen
+ * rather than buried in the maths: if it claims the park is quiet while you
+ * are stood in a crowd, you know to read the posted numbers instead.
+ */
+.pl-today {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.45;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+.pl-today:empty { display: none; }
+.pl-today[data-mood="hot"] {
+  color: #F3B9B4;
+  background: rgba(240,134,127,0.1);
+  border-color: rgba(240,134,127,0.26);
+}
+.pl-today[data-mood="cold"] {
+  color: #A8E3C3;
+  background: rgba(127,214,162,0.1);
+  border-color: rgba(127,214,162,0.26);
 }
