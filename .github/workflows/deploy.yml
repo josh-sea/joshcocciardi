@@ -78,6 +78,12 @@ jobs:
       - name: Test Park Planner
         run: node apps/portfolio/test/park.test.mjs
 
+      # The topic builder composes the line you read out loud, which is
+      # exactly the sort of thing that rots into "Desserts in in any park"
+      # unless something checks every subject against every place.
+      - name: Test 1 to 10
+        run: node apps/portfolio/test/scale.test.mjs
+
       # Swing Coach's geometry engine is inlined in its static page; the suite
       # lifts it out of the shipped HTML and runs synthetic swings through it.
       # No install needed.

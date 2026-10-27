@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="css/whereami.css">
 <link rel="stylesheet" href="css/music.css">
 <link rel="stylesheet" href="css/planner.css">
+<link rel="stylesheet" href="css/scale.css">
 <link rel="manifest" href="manifest.json">
 
 <style>
@@ -474,6 +475,7 @@
     <button id="game-trivia" role="tab" aria-selected="true">Trivia</button>
     <button id="game-wa" role="tab" aria-selected="false">Where am I?</button>
     <button id="game-pl" role="tab" aria-selected="false">Planner</button>
+    <button id="game-sc" role="tab" aria-selected="false">1 to 10</button>
   </div>
 
 <section id="tv">
@@ -661,6 +663,85 @@
   </details>
 
   <p class="pl-credit">Wait times from <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a>. Walk times are straight-line distance with a detour factor, so treat them as a guide.</p>
+</section>
+
+<section id="sc" hidden>
+
+  <!-- Setup: build the category, then start -->
+  <div id="sc-setup">
+    <p class="sc-how">One of you picks a secret number from 1 to 10. That is how much you like things. The other names a category, and you answer with something you would rate exactly that. A few answers in, they guess the number.</p>
+
+    <div class="sc-build">
+      <h3>What are you rating?</h3>
+      <div class="sc-subjects" id="sc-subjects"></div>
+
+      <h3>Where?</h3>
+      <div class="sc-chips" id="sc-places"></div>
+      <p class="sc-note" id="sc-places-note"></p>
+
+      <label class="sc-own">
+        <span>Or write your own</span>
+        <input type="text" id="sc-custom" placeholder="Churros in any park" autocomplete="off">
+      </label>
+
+      <div class="sc-previewrow">
+        <p class="sc-preview" id="sc-preview">—</p>
+        <button class="sc-shuffle" id="sc-shuffle" type="button" aria-label="Surprise me">🎲</button>
+      </div>
+
+      <label class="sc-qcount">
+        <span>Questions per round</span>
+        <select id="sc-questions">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
+      </label>
+
+      <button class="sc-go" id="sc-start" type="button">Start a round</button>
+      <p class="sc-tally" id="sc-tally"></p>
+      <button class="sc-clear" id="sc-clear" type="button">Reset the score</button>
+    </div>
+  </div>
+
+  <!-- Asking -->
+  <div id="sc-asking" hidden>
+    <p class="sc-count" id="sc-count"></p>
+    <p class="sc-current" id="sc-current"></p>
+    <p class="sc-note">Say an answer out loud that matches your secret number.</p>
+
+    <button class="sc-peek" id="sc-peek" type="button" aria-label="Press and hold to see the secret number">
+      <span class="sc-peek-label">Hold to see your number</span>
+      <span class="sc-peek-out" id="sc-peek-out" data-shown="no" aria-live="off"></span>
+    </button>
+
+    <ul class="sc-asked" id="sc-asked"></ul>
+
+    <button class="sc-go" id="sc-ask-next" type="button">Next question</button>
+    <button class="sc-go" id="sc-to-guess" type="button" hidden>Ready to guess</button>
+  </div>
+
+  <!-- Guessing -->
+  <div id="sc-guessing" hidden>
+    <p class="sc-note">What was the number?</p>
+    <input type="number" id="sc-guess" min="1" max="10" step="1" inputmode="numeric" placeholder="1 to 10">
+    <p class="sc-error" id="sc-guess-error"></p>
+    <button class="sc-go" id="sc-lock" type="button">Lock it in</button>
+  </div>
+
+  <!-- Reveal -->
+  <div id="sc-done" hidden>
+    <div class="sc-reveal">
+      <div><span class="sc-big" id="sc-reveal-guess"></span><small>you guessed</small></div>
+      <div><span class="sc-big gold" id="sc-reveal-secret"></span><small>it was</small></div>
+    </div>
+    <p class="sc-verdict" id="sc-verdict"></p>
+    <p class="sc-points" id="sc-points" data-good="no"></p>
+    <ul class="sc-asked" id="sc-recap"></ul>
+    <button class="sc-go" id="sc-again" type="button">Another round</button>
+  </div>
+
 </section>
 
   <a class="backlink" href="/projects">← Back to all projects</a>
@@ -1332,6 +1413,14 @@ const TABS = {
     failInto: 'pl-error',
     failWith: 'Could not load the planner: ',
   },
+  sc: {
+    panel: document.getElementById('sc'),
+    button: document.getElementById('game-sc'),
+    blurb: 'One of you picks a secret number. The other works out what it is from your answers.',
+    load: () => import('./js/scaleui.js'),
+    failInto: 'sc-guess-error',
+    failWith: 'Could not load the game: ',
+  },
 };
 
 async function pick(which) {
@@ -1368,7 +1457,7 @@ for (const [name, t] of Object.entries(TABS)) t.button.onclick = () => pick(name
  * which is a same-document navigation: no script re-runs, so without this a
  * link to #whereami from the page itself would do nothing at all.
  */
-const HASHES = { '#whereami': 'wa', '#trivia': 'trivia', '#planner': 'pl' };
+const HASHES = { '#whereami': 'wa', '#trivia': 'trivia', '#planner': 'pl', '#1to10': 'sc' };
 const fromHash = () => {
   const which = HASHES[location.hash];
   if (which) pick(which);

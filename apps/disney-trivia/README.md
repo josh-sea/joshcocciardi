@@ -13,14 +13,42 @@ published copy. There is no build step.
 | `index.html` | the ticket book, its inline styles and script, plus the tab switcher at the bottom |
 | `js/whereami.js` | the photo game (Firebase, lazy) |
 | `js/planner.js` | the Park Planner screen (lazy) |
+| `js/scaleui.js` | the "1 to 10" guessing game screen (lazy) |
+| `js/scale.js` | its topic builder and scoring. Pure, tested in node |
 | `js/park.js` | planner rules: walking, waits, scoring. Pure, tested in node |
 | `js/parkdata.js` | ThemeParks.wiki client with a cache-first fallback |
 | `js/music.js` / `js/musicui.js` | background music |
 | `parks/attractions.json` | the committed ride catalogue |
 | `scripts/seed-attractions.mjs` | rebuilds that catalogue |
 
-Tests: `node apps/portfolio/test/park.test.mjs` and
-`node apps/portfolio/test/whereami.test.mjs`. Both run in CI.
+Tests: `park.test.mjs`, `scale.test.mjs` and `whereami.test.mjs` under
+`apps/portfolio/test/`. All three run in CI.
+
+## 1 to 10
+
+One person picks a secret number from 1 to 10, which is how much they like
+things. The other names a category, and the picker answers with something
+they would rate exactly that: ask for an EPCOT ride on an 8 and you get
+Frozen Ever After, not Guardians and not Imagination. A few answers in,
+you guess the number.
+
+The app builds categories and keeps score. It stores nothing about actual
+desserts, because the players already know what the desserts are, so the
+whole thing is string composition: a subject (`desserts`, `queues`,
+`single rider lines`) crossed with a place (`in Magic Kingdom`, `in any
+park`, `at Disney Springs`) to make the line you read out.
+
+Two details worth keeping:
+
+- A subject declares which kinds of place it accepts, so the builder never
+  offers "Disney films in EPCOT". Picking all four parks reads as "any
+  park" rather than listing them.
+- The secret number sits behind a press-and-hold that falls closed after
+  four seconds. Two people are looking at the same screen and only one is
+  allowed to know, so a tap would fire while the phone is being passed and
+  a toggle would leave it on display. Only the running tally is persisted:
+  a half-played round is deliberately dropped on reload, or whoever
+  reloads could just read the answer.
 
 ## Park Planner
 
