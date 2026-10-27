@@ -13,6 +13,8 @@ import {
   holdsFor, collidesWithLL,
   scoreCandidate, candidates, planAhead, explain,
   MUST_DO_BOOST, mustDoPressure, mustDoCost, PRESSURE_MAX,
+  clampRatio, ratioFor, median, parkRatio, blendRatio, correctedForecastAt,
+  RATIO_MIN, RATIO_MAX, RATIO_MIN_SAMPLE,
 } from '../../disney-trivia/js/park.js';
 
 let failures = 0;
@@ -97,6 +99,102 @@ console.log('\nhow much worse it gets later');
   ok('a flat ride is exactly neutral', near(urgency(flat, T(9), 30), 1, 0.001), urgency(flat, T(9), 30));
   ok('urgency is clamped so one ride cannot swamp the day', urgency(climbing, T(9), 1) <= 1.6);
   ok('no forecast means no opinion', urgency(null, T(9), 30) === 1);
+}
+
+/* ── today versus the forecast ───────────────────────────────────────────── */
+console.log('\ncorrecting the forecast for how today is actually going');
+{
+  ok('a ratio of one is a day going to plan', clampRatio(1) === 1);
+  ok('a hot day is clamped at the top', clampRatio(9) === RATIO_MAX);
+  ok('a cold day is clamped at the bottom', clampRatio(0.05) === RATIO_MIN);
+  /* Zero is a walk-on, not a missing reading, so it clamps up rather than
+   * being thrown away. My first version rejected it and the test agreed
+   * with the rejection, which is the test confirming the bug. */
+  ok('a walk-on clamps up rather than vanishing', clampRatio(0) === RATIO_MIN);
+  ok('negative is not a ratio', clampRatio(-2) === null);
+  ok('NaN is not a ratio', clampRatio(NaN) === null);
+}
+{
+  ok('posted matches forecast, ratio one', ratioFor(30, 30) === 1);
+  ok('posted double the forecast', ratioFor(60, 30) === 2);
+  ok('posted half the forecast', ratioFor(15, 30) === 0.5);
+  ok('no posted number, no ratio', ratioFor(null, 30) === null);
+  ok('no forecast, no ratio', ratioFor(30, null) === null);
+  // A forecast of zero would divide by zero and a ratio off it means nothing.
+  ok('a zero forecast gives no ratio rather than infinity', ratioFor(30, 0) === null);
+  ok('a posted zero is a real observation', ratioFor(0, 30) === RATIO_MIN, ratioFor(0, 30));
+}
+{
+  ok('median of odd', median([1, 5, 3]) === 3);
+  ok('median of even', median([1, 2, 3, 4]) === 2.5);
+  ok('median of nothing is null', median([]) === null);
+  ok('rubbish is ignored', median([1, NaN, 3, undefined]) === 2);
+  // Why the median and not the mean: one broken ride must not move the park.
+  ok('one outlier does not move the median', median([1, 1, 1, 1, 2]) === 1);
+  ok('but it does move the mean', [1,1,1,1,2].reduce((a,b)=>a+b)/5 > 1);
+}
+{
+  const t = T(10);
+  const flatCurve = [{ time: T(9), waitTime: 20 }, { time: T(12), waitTime: 20 }];
+  const mk = (id, waitMin, status = 'OPERATING') =>
+    [id, { status, waitMin, forecast: flatCurve }];
+
+  // A park running 50% hot across five rides.
+  const hot = Object.fromEntries(['a','b','c','d','e'].map((id) => mk(id, 30)));
+  const hotRides = ['a','b','c','d','e'].map((id) => ({ id, lat: 0, lng: 0, queued: true }));
+  ok('a hot park reads hot', parkRatio(hotRides, hot, t).ratio === 1.5, parkRatio(hotRides, hot, t));
+  ok('and says how many rides it heard from', parkRatio(hotRides, hot, t).sample === 5);
+
+  // Too few rides reporting: say nothing rather than guess.
+  const thin = Object.fromEntries(['a','b'].map((id) => mk(id, 30)));
+  const thinRides = ['a','b'].map((id) => ({ id, lat: 0, lng: 0, queued: true }));
+  ok(`fewer than ${RATIO_MIN_SAMPLE} rides is not a reading`, parkRatio(thinRides, thin, t).ratio === 1);
+
+  // A closed ride has no queue to learn from.
+  const withClosed = { ...hot, f: { status: 'CLOSED', waitMin: 200, forecast: flatCurve } };
+  const closedRides = [...hotRides, { id: 'f', lat: 0, lng: 0, queued: true }];
+  ok('closed rides are not counted', parkRatio(closedRides, withClosed, t).ratio === 1.5);
+
+  // One ride stuck at 120 must not drag the park.
+  const oneBad = { ...hot, e: { status: 'OPERATING', waitMin: 120, forecast: flatCurve } };
+  ok('one broken ride does not drag the park', parkRatio(hotRides, oneBad, t).ratio === 1.5,
+    parkRatio(hotRides, oneBad, t));
+
+  ok('an empty park reads neutral', parkRatio([], {}, t).ratio === 1);
+}
+{
+  /* How much a ride's own ratio is worth depends on the size of the number
+   * it came from. This is the guard against a 5-minute forecast and a
+   * 40-minute queue rewriting the afternoon. */
+  const big = blendRatio(2, 1, 90);     // a 90-minute base: its own evidence
+  const small = blendRatio(2, 1, 2);    // a 2-minute base: nearly all park
+  ok('a big forecast trusts the ride itself', big > 1.8, big);
+  ok('a small forecast leans on the park', small < 1.2, small);
+  ok('a mid forecast sits between', blendRatio(2, 1, 10) > small && blendRatio(2, 1, 10) < big);
+  ok('no ride ratio falls back to the park', blendRatio(null, 1.4, 50) === 1.4);
+  ok('neither one is neutral', blendRatio(null, null, 50) === 1);
+  ok('the result is still clamped', blendRatio(99, 99, 999) === RATIO_MAX);
+}
+{
+  const curve2 = [{ time: T(9), waitTime: 10 }, { time: T(12), waitTime: 40 }];
+  ok('a neutral ratio leaves the forecast alone',
+    correctedForecastAt(curve2, T(12), 1) === 40);
+  ok('a hot day lifts it', correctedForecastAt(curve2, T(12), 1.5) === 60);
+  ok('a cold day drops it', correctedForecastAt(curve2, T(12), 0.5) === 20);
+  ok('no forecast stays null', correctedForecastAt(null, T(12), 1.5) === null);
+  ok('a silly ratio is clamped before it is applied',
+    correctedForecastAt(curve2, T(12), 50) === 40 * RATIO_MAX);
+}
+{
+  /* The property that makes this safe to apply at all: correcting by a
+   * ride's own ratio reproduces the posted wait at this instant. The curve
+   * is lifted, not bent, so nothing near to hand gets worse. */
+  const curve3 = [{ time: T(9), waitTime: 20 }, { time: T(12), waitTime: 50 }];
+  const live = 40, fcNow = forecastAt(curve3, T(10));
+  const r = ratioFor(live, fcNow);
+  ok('correcting by a ride own ratio reproduces what is posted',
+    near(correctedForecastAt(curve3, T(10), r), live, 0.001),
+    { live, fcNow, r, corrected: correctedForecastAt(curve3, T(10), r) });
 }
 
 /* ── Lightning Lane ──────────────────────────────────────────────────────── */
@@ -300,6 +398,69 @@ console.log('\nthe headliner you came for');
   ok('with no closing time it falls back to throughput', noClose[0].id === 'dumbo');
 
   ok('and the card says why', /day is running out/.test(explain(evening[0])), explain(evening[0]));
+}
+
+/* What the correction is actually for: changing a decision. */
+console.log('\na hot day changes where you go');
+{
+  /* Two rides. The forecast says both climb the same way. Right now one is
+   * running to plan and the other is running hot. Walk ten minutes and the
+   * hot one will be much worse than the curve admits.
+   */
+  const pair = [
+    { id: 'calm', name: 'Calm', lat: 28.4189, lng: -81.5802, queued: true, minutes: 4 },
+    { id: 'hot',  name: 'Hot',  lat: 28.4189, lng: -81.5802, queued: true, minutes: 4 },
+  ];
+  /* The curve runs 20 at nine to 60 at one, so it reads exactly 40 at
+   * eleven. My first draft had the calm ride posting 30 and called that
+   * "to plan", which it is not: 30 against a 40 forecast is a ride running
+   * cold, and the code said so. The fixture was wrong, not the maths. */
+  const curveUp = [{ time: T(9), waitTime: 20 }, { time: T(13), waitTime: 60 }];
+  const live = {
+    calm: { status: 'OPERATING', waitMin: 40, forecast: curveUp },   // exactly the curve
+    hot:  { status: 'OPERATING', waitMin: 60, forecast: curveUp },   // half again over it
+  };
+  const where = { from: castle, now: T(11), pace: DEFAULT_PACE };
+  const c = candidates(pair, live, where);
+  const byId = Object.fromEntries(c.map((x) => [x.id, x]));
+
+  ok('the ride running to plan is not corrected',
+    near(byId.calm.todayRatio, 1, 0.15), byId.calm.todayRatio);
+  ok('the hot ride is corrected upward', byId.hot.todayRatio > 1.3, byId.hot.todayRatio);
+  ok('its corrected forecast is above the raw one',
+    byId.hot.forecastAtArrivalMin > byId.hot.rawForecastAtArrivalMin,
+    { corrected: byId.hot.forecastAtArrivalMin, raw: byId.hot.rawForecastAtArrivalMin });
+  ok('the calm ride keeps roughly the raw forecast',
+    near(byId.calm.forecastAtArrivalMin, byId.calm.rawForecastAtArrivalMin, 3),
+    { corrected: byId.calm.forecastAtArrivalMin, raw: byId.calm.rawForecastAtArrivalMin });
+  ok('so the calm ride wins', c[0].id === 'calm', c.map((x) => [x.id, Math.round(x.waitMin)]));
+
+  /* And the correction must not quietly change urgency. Urgency is a ratio
+   * of later to now, so scaling both by the same number cancels. If it did
+   * not, a hot day would make everything look urgent at once. */
+  const u = urgency(curveUp, T(11), 60);
+  const u2 = urgency(curveUp.map((f) => ({ ...f, waitTime: f.waitTime * 1.5 })), T(11), 90);
+  ok('a hot day does not inflate urgency', near(u, u2, 0.001), { u, u2 });
+}
+{
+  /* A cold day should let you take on something you would otherwise skip. */
+  const one = [{ id: 'r', name: 'R', lat: 28.4189, lng: -81.5802, queued: true, minutes: 4 }];
+  const curve4 = [{ time: T(9), waitTime: 40 }, { time: T(13), waitTime: 80 }];
+  const quiet = { r: { status: 'OPERATING', waitMin: 20, forecast: curve4 } };
+  const c = candidates(one, quiet, { from: castle, now: T(11), pace: DEFAULT_PACE });
+  ok('a quiet day pulls the forecast down',
+    c[0].forecastAtArrivalMin < c[0].rawForecastAtArrivalMin,
+    { corrected: Math.round(c[0].forecastAtArrivalMin), raw: Math.round(c[0].rawForecastAtArrivalMin) });
+  ok('and the predicted wait with it', c[0].waitMin < c[0].rawForecastAtArrivalMin);
+}
+{
+  // No forecast at all: fall back to the posted number, uncorrected.
+  const one = [{ id: 'r', name: 'R', lat: 28.4189, lng: -81.5802, queued: true, minutes: 4 }];
+  const noFc = { r: { status: 'OPERATING', waitMin: 25, forecast: null } };
+  const c = candidates(one, noFc, { from: castle, now: T(11) });
+  ok('no forecast still produces a candidate', c.length === 1);
+  ok('and uses the posted wait', c[0].waitMin === 25, c[0].waitMin);
+  ok('with no correction claimed', c[0].rawForecastAtArrivalMin === null);
 }
 
 /* ── looking ahead ───────────────────────────────────────────────────────── */
