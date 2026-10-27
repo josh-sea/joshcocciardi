@@ -929,6 +929,9 @@ service cloud.firestore {
       allow read, write: if false;
     }
     match /ezpayze_stripeCustomers/{customerId} {
+      allow read, write: if false;
+    }
+
     // ── Park Planner ──────────────────────────────────────────────────────
     //
     // Wait times are not private: they are posted on a board in the park. But
