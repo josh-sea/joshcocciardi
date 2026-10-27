@@ -448,3 +448,18 @@
   line-height: 1.15;
   color: var(--gold);
 }
+
+/* Whether this phone is actually connected.
+ *
+ * Silent when live, because a permanent green dot is noise. It only speaks
+ * up when the room has been served from cache for several seconds, which
+ * is the state that previously looked identical to "it is not your turn
+ * yet" and sent people reloading the page.
+ */
+.sc-link {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--bad);
+}
+.sc-link:empty { display: none; }

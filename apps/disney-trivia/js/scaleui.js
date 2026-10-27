@@ -90,20 +90,58 @@ const busy = (on) => {
   $('sc-join').disabled = on;
 };
 
+/* How stale the room is allowed to look before we say so. A snapshot
+ * served from cache is normal for a moment after any write; one that is
+ * still cached seconds later means the connection has gone and the screen
+ * is quietly lying about whose turn it is.
+ */
+const STALE_AFTER_MS = 6000;
+let staleTimer = null;
+
+function markLive(meta) {
+  clearTimeout(staleTimer);
+  const el = $('sc-link');
+  if (!meta || !meta.fromCache) {
+    el.textContent = '';
+    el.dataset.state = 'live';
+    return;
+  }
+  staleTimer = setTimeout(() => {
+    el.textContent = 'Not connected. Reconnecting…';
+    el.dataset.state = 'stale';
+  }, STALE_AFTER_MS);
+}
+
 function enterRoom(theCode) {
   code = theCode;
   remember(LAST, theCode);
   $('sc-roomcode').textContent = theCode;
   screen('play');
   if (unwatch) unwatch();
-  unwatch = store.watch(theCode, (next) => {
-    if (!next) {
-      say('sc-play-error', 'The room has gone.');
-      return;
-    }
+  unwatch = store.watch(theCode, (next, meta) => {
+    markLive(meta);
+    if (!next) { say('sc-play-error', 'The room has gone.'); return; }
     room = next;
     render();
   }, (err) => say('sc-play-error', 'Lost the room: ' + err.message));
+}
+
+/* Coming back from a locked phone or another app.
+ *
+ * This is the other half of why the game felt dead: the socket dies while
+ * the page is backgrounded, and on return the listener can sit there
+ * serving the last thing it saw. Nothing on screen says so, which is why
+ * reloading and rejoining appeared to be the fix. Forcing one read past
+ * the cache settles it in a second without touching the room.
+ */
+async function wakeUp() {
+  if (!code || document.hidden) return;
+  try {
+    const fresh = await store.refetch(code);
+    if (fresh) { room = fresh; render(); markLive({ fromCache: false }); }
+  } catch {
+    // Offline for real. The listener will catch up on its own.
+  }
 }
 
 /* ── the builder, used by whoever is asking ──────────────────────────────── */
@@ -294,13 +332,13 @@ export async function init() {
   $('sc-send-topic').onclick = () => guard(async () => {
     const topic = currentTopic();
     if (!topic) return;
-    await store.askQuestion(code, room, topic);
+    await store.askQuestion(code, topic);
     custom = '';
     $('sc-custom').value = '';
   });
 
   $('sc-send-answer').onclick = () => guard(async () => {
-    await store.answerQuestion(code, room, $('sc-answer-text').value);
+    await store.answerQuestion(code, $('sc-answer-text').value);
     $('sc-answer-text').value = '';
   });
   $('sc-open-guessing').onclick = () => guard(() => store.openGuessing(code));
@@ -314,8 +352,8 @@ export async function init() {
     return b;
   }));
 
-  $('sc-do-reveal').onclick = () => guard(() => store.reveal(code, room));
-  $('sc-next-round').onclick = () => guard(() => store.startNextRound(code, room));
+  $('sc-do-reveal').onclick = () => guard(() => store.reveal(code));
+  $('sc-next-round').onclick = () => guard(() => store.startNextRound(code));
   $('sc-leave').onclick = () => guard(async () => {
     if (unwatch) { unwatch(); unwatch = null; }
     await store.leave(code);
@@ -324,13 +362,31 @@ export async function init() {
     screen('lobby');
   });
 
+  document.addEventListener('visibilitychange', wakeUp);
+  window.addEventListener('online', wakeUp);
+  window.addEventListener('pageshow', wakeUp);
+
   screen('lobby');
-  // Coming back to a room you were already in, after a reload or a locked
-  // phone. Rejoining is the same write as joining, so it is safe to repeat.
+
+  /* Walk straight back into the room you were in.
+   *
+   * It used to pre-fill the code and ask you to tap Join, which is a step
+   * nobody wants after their phone has locked mid-round. Rejoining is the
+   * same write as joining, so repeating it is safe.
+   */
   const was = recall(LAST);
-  if (was && recall(ME)) {
+  const me = recall(ME);
+  if (was && me) {
     $('sc-code').value = was;
-    say('sc-lobby-note', `You were in room ${was}. Tap Join to go back.`);
+    say('sc-lobby-note', `Going back to room ${was}…`);
+    try {
+      await store.joinRoom(was, me);
+      enterRoom(was);
+    } catch {
+      say('sc-lobby-note', '');
+      say('sc-lobby-error', `Room ${was} has closed. Start a new one or type another code.`);
+      remember(LAST, '');
+    }
   }
 }
 

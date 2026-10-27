@@ -17,7 +17,8 @@ import {
   getAuth, onAuthStateChanged, signInAnonymously,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, deleteField,
+  getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, onSnapshot,
+  deleteField, runTransaction,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 import { makeCode, isValidCode, cleanName, freshRound, nextPicker, guesserIds } from './room.js';
@@ -80,11 +81,34 @@ export async function createRoom(name) {
   throw new Error('Could not make a room. ' + (last ? last.message : 'Try again.'));
 }
 
+/* Join a room, or come back to one.
+ *
+ * These are the same write, which is convenient but was quietly destructive:
+ * it wrote { name, score: 0 } over whatever was there, so coming back after
+ * a reload reset your score to nothing. That was survivable while rejoining
+ * was a deliberate tap and became permanent once it happened automatically.
+ *
+ * Being able to read the room is itself the test of membership, since the
+ * rules only hand it to players. A successful read means keep the score and
+ * change nothing but the name; a refusal means this is a genuine newcomer
+ * who has to write blind.
+ */
 export async function joinRoom(code, name) {
   if (!isValidCode(code)) throw new Error('That is not a room code.');
   const who = cleanName(name);
+
   try {
-    // Join blind: you cannot read the room until you are in it.
+    const snap = await getDoc(roomRef(code));
+    if (snap.exists() && uid in (snap.data().players || {})) {
+      const mine = snap.data().players[uid] || {};
+      await updateDoc(roomRef(code), { [`players.${uid}`]: { ...mine, name: who } });
+      return (await getDoc(roomRef(code))).data();
+    }
+  } catch {
+    // Not a member, so the read was refused. Fall through and join properly.
+  }
+
+  try {
     await updateDoc(roomRef(code), { [`players.${uid}`]: { name: who, score: 0 } });
   } catch (err) {
     throw new Error('No room with that code, or it has been closed.');
@@ -94,12 +118,32 @@ export async function joinRoom(code, name) {
   return snap.data();
 }
 
+/* Watch a room.
+ *
+ * includeMetadataChanges is on so the caller can tell a live update from one
+ * served out of the local cache. That difference is the whole of "is it my
+ * turn yet": a phone that has been asleep shows cached state that looks
+ * perfectly normal and is simply old, and without this nothing on screen or
+ * in code can tell the difference.
+ */
 export function watch(code, onRoom, onError) {
   return onSnapshot(
     roomRef(code),
-    (snap) => onRoom(snap.exists() ? snap.data() : null),
+    { includeMetadataChanges: true },
+    (snap) => onRoom(snap.exists() ? snap.data() : null, {
+      fromCache: snap.metadata.fromCache,
+      pending: snap.metadata.hasPendingWrites,
+    }),
     (err) => { if (onError) onError(err); }
   );
+}
+
+/* Force a read past the cache, for when the page comes back from being
+ * backgrounded and the socket may have died without anyone noticing.
+ */
+export async function refetch(code) {
+  const snap = await getDocFromServer(roomRef(code));
+  return snap.exists() ? snap.data() : null;
 }
 
 export async function leave(code) {
@@ -119,15 +163,48 @@ export async function commitNumber(code, roundN, n) {
   await updateDoc(roomRef(code), { 'round.phase': 'asking' });
 }
 
-export async function askQuestion(code, room, topic) {
-  const questions = [...room.round.questions, { topic, askedBy: uid, answer: null }];
-  await updateDoc(roomRef(code), { 'round.questions': questions });
+/* ── writes that depend on what is already there ─────────────────────────
+ *
+ * Every one of these used to rebuild the whole questions array from the
+ * snapshot this phone happened to be holding, and write it back. Two people
+ * acting within a second of each other meant the later write replaced the
+ * earlier one wholesale, so a question or an answer simply disappeared.
+ * From the inside that is indistinguishable from the app not syncing at
+ * all, which is exactly how it felt to play.
+ *
+ * A transaction re-reads inside the write, so what goes back is built on
+ * what is actually in the room rather than on what this phone last saw.
+ * Firestore retries the whole thing if somebody else got there first.
+ *
+ * They also check the phase they are about to act on, so a double tap or a
+ * screen that has not caught up cannot shove the round somewhere silly.
+ */
+export async function askQuestion(code, topic) {
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(roomRef(code));
+    if (!snap.exists()) throw new Error('The room has gone.');
+    const r = snap.data().round;
+    if (r.phase !== 'asking') throw new Error('Too late, the round has moved on.');
+    const last = r.questions[r.questions.length - 1];
+    if (last && typeof last.answer !== 'string') throw new Error('There is already a question waiting.');
+    tx.update(roomRef(code), {
+      'round.questions': [...r.questions, { topic, askedBy: uid, answer: null }],
+    });
+  });
 }
 
-export async function answerQuestion(code, room, text) {
-  const last = room.round.questions.length - 1;
-  const questions = room.round.questions.map((q, i) => (i === last ? { ...q, answer: String(text) } : q));
-  await updateDoc(roomRef(code), { 'round.questions': questions });
+export async function answerQuestion(code, text) {
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(roomRef(code));
+    if (!snap.exists()) throw new Error('The room has gone.');
+    const r = snap.data().round;
+    if (r.phase !== 'asking' || !r.questions.length) throw new Error('Nothing to answer.');
+    const at = r.questions.length - 1;
+    if (typeof r.questions[at].answer === 'string') throw new Error('That one is already answered.');
+    tx.update(roomRef(code), {
+      'round.questions': r.questions.map((q, i) => (i === at ? { ...q, answer: String(text) } : q)),
+    });
+  });
 }
 
 export async function openGuessing(code) {
@@ -144,25 +221,37 @@ export async function submitGuess(code, n) {
  * anything held in memory, so a reloaded phone can still finish the round,
  * and so the value written is provably the one the rules check against.
  */
-export async function reveal(code, room) {
-  const snap = await getDoc(secretRef(code));
-  if (!snap.exists()) throw new Error('Your number is missing. Start the round again.');
-  const secret = snap.data().secret;
+/* The reveal writes the whole players map to add up the scores, so it has
+ * the same hazard and the same fix. The number still comes out of the
+ * private document rather than memory, so a reloaded phone can finish the
+ * round and the value written is provably the one the rules check against.
+ */
+export async function reveal(code) {
+  const mine = await getDoc(secretRef(code));
+  if (!mine.exists()) throw new Error('Your number is missing. Start the round again.');
+  const secret = mine.data().secret;
 
-  const players = { ...room.players };
-  for (const g of guesserIds(room)) {
-    const points = scoreGuess(room.round.guesses[g], secret);
-    if (players[g]) players[g] = { ...players[g], score: (players[g].score || 0) + points };
-  }
-
-  await updateDoc(roomRef(code), {
-    'round.secret': secret,
-    'round.phase': 'revealed',
-    players,
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(roomRef(code));
+    if (!snap.exists()) throw new Error('The room has gone.');
+    const room = snap.data();
+    if (room.round.phase === 'revealed') return;       // somebody already did
+    const players = { ...room.players };
+    for (const g of guesserIds(room)) {
+      const points = scoreGuess(room.round.guesses[g], secret);
+      if (players[g]) players[g] = { ...players[g], score: (players[g].score || 0) + points };
+    }
+    tx.update(roomRef(code), { 'round.secret': secret, 'round.phase': 'revealed', players });
   });
 }
 
-export async function startNextRound(code, room) {
-  const who = nextPicker(room);
-  await updateDoc(roomRef(code), { round: freshRound((room.round.n || 1) + 1, who) });
+export async function startNextRound(code) {
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(roomRef(code));
+    if (!snap.exists()) throw new Error('The room has gone.');
+    const room = snap.data();
+    // Two people tapping "next round" must not advance it twice.
+    if (room.round.phase !== 'revealed') return;
+    tx.update(roomRef(code), { round: freshRound((room.round.n || 1) + 1, nextPicker(room)) });
+  });
 }
