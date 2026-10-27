@@ -121,3 +121,22 @@ node functions/test/scale-rules.test.mjs
 Needs `@firebase/rules-unit-testing` and `firebase`, which are not in
 `functions/package.json` (they are test-only and the deploy does not want
 them): `npm --prefix functions install --no-save @firebase/rules-unit-testing firebase`.
+
+## `scale-race.test.mjs`
+
+Concurrent writes in a "1 to 10" room, against the Firestore emulator.
+
+Written after actually playing the game and finding it felt dead. The cause
+was not a slow database: ask and answer each rebuilt the whole `questions`
+array from whatever snapshot that phone happened to be holding and wrote it
+back, so two people acting within a second of each other meant the later
+write replaced the earlier one wholesale. A question would simply vanish,
+which from the inside is indistinguishable from the app not syncing at all.
+
+The first assertion reproduces the old behaviour deliberately, so the suite
+demonstrates the bug it exists to prevent. The rest exercise the shipped
+transaction logic: simultaneous questions, a full exchange staying in order,
+double-tapped answers landing once, writes into a round that has moved on,
+and that rejoining a room keeps your score instead of resetting it to zero.
+
+Same setup as `scale-rules.test.mjs`.

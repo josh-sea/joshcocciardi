@@ -71,3 +71,16 @@ suite fails.
 - Whose turn it is comes from one function, `whatNow()`, rather than being
   decided per screen. Four phones each working it out for themselves is the
   fastest way to break a turn-based game.
+- **Every write that depends on existing state is a transaction.** Ask and
+  answer used to rebuild the whole questions array from the snapshot that
+  phone was holding, so two people acting at once meant one message was
+  silently erased. That is what made the game feel like it was not syncing.
+  `functions/test/scale-race.test.mjs` reproduces the old behaviour and
+  proves the new one.
+- The room listener runs with `includeMetadataChanges`, so the app can tell
+  a live update from a cached one. A phone that has been asleep shows stale
+  state that looks perfectly normal, which is why reloading seemed to be the
+  fix; it now says "Not connected" and forces a read past the cache when the
+  page comes back.
+- Rejoining keeps your score. It used to write `{ name, score: 0 }` over
+  your entry, so coming back after a reload reset you to nothing.
