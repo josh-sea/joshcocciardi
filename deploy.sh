@@ -235,6 +235,17 @@ build_portfolio() {
 }
 
 deploy_hosting() {
+    # Rules are compiled server-side during the deploy, so a syntax error
+    # there fails hosting and functions with it. Catching it here costs a
+    # few seconds and saves a broken deploy. Skipped without Java, since
+    # the checker needs the emulator jar.
+    if command -v java >/dev/null 2>&1; then
+        log "Checking firestore.rules compiles..."
+        node "$ROOT_DIR/scripts/check-rules.mjs" || fail "firestore.rules does not compile"
+    else
+        warn "Java not found; skipping the firestore.rules compile check"
+    fi
+
     log "Deploying to Firebase Hosting..."
     cd "$ROOT_DIR"
     firebase deploy --only hosting:portfolio,hosting:gramandpops,hosting:igatekeeper || fail "Firebase hosting deploy failed"
