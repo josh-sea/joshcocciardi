@@ -271,3 +271,180 @@
   .sc-subjects { max-height: 200px; }
   .sc-preview { font-size: 15px; }
 }
+
+/* ── played across phones ────────────────────────────────────────────────── */
+
+.sc-field { display: block; margin: 14px 0 0; }
+.sc-field > span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  color: #9D90BD;
+}
+#sc input[type="text"] { text-transform: none; }
+#sc-code {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-family: var(--display);
+  font-size: 22px;
+  text-align: center;
+}
+.sc-or {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6F628E;
+}
+.sc-go.ghost {
+  color: #CFC3E8;
+  background: transparent;
+  border-color: rgba(255,255,255,0.18);
+}
+
+.sc-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+.sc-roundno {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #8E80AE;
+  margin-right: 10px;
+}
+.sc-code {
+  font-family: var(--display);
+  font-size: 18px;
+  letter-spacing: 0.22em;
+  color: var(--gold);
+}
+.sc-leave {
+  font: inherit;
+  font-size: 11.5px;
+  color: #776A95;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 9px;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+
+/* Everyone in the room, with the picker marked. Reading this is how you
+ * know whose turn it is without being told twice. */
+.sc-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+.sc-player {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: #CFC3E8;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 9px;
+  padding: 6px 10px;
+}
+.sc-player b { color: var(--gold); font-variant-numeric: tabular-nums; }
+.sc-player[data-picker="yes"] {
+  border-color: rgba(232,179,60,0.45);
+  background: rgba(232,179,60,0.1);
+}
+.sc-player[data-me="yes"] span { text-decoration: underline; text-underline-offset: 3px; }
+
+/* The one thing this phone should do right now. */
+.sc-instruction {
+  margin: 16px 0 0;
+  font-family: var(--display);
+  font-size: clamp(18px, 5.2vw, 23px);
+  line-height: 1.2;
+  color: #EDE7F7;
+}
+
+/* The number pad, for picking and for guessing. Ten big targets, because
+ * this is tapped one-handed while holding a churro. */
+.sc-pad {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin: 16px 0 0;
+}
+.sc-pad button {
+  font-family: var(--display);
+  font-size: 22px;
+  color: #EDE7F7;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 12px;
+  padding: 16px 0;
+  cursor: pointer;
+}
+.sc-pad button:active { background: var(--stock); color: #2B2140; }
+
+.sc-bignum {
+  margin: 10px 0 0;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 68px;
+  line-height: 1;
+  color: var(--gold);
+}
+
+.sc-guesslist, .sc-history {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.sc-guesslist li, .sc-history li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  font-size: 13px;
+  color: #CFC3E8;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.sc-guesslist li span, .sc-history li span { flex: 0 0 auto; }
+.sc-guesslist li em, .sc-history li i {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  font-style: italic;
+  color: #8E80AE;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-history li span {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: #9D90BD;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sc-guesslist li b, .sc-history li b {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #EDE7F7;
+  font-variant-numeric: tabular-nums;
+}
+.sc-guesslist li[data-good="yes"] b { color: var(--good); }
+.sc-history:empty { display: none; }
+
+#sc .sc-current {
+  margin: 14px 0 0;
+  font-family: var(--display);
+  font-size: clamp(20px, 6vw, 26px);
+  line-height: 1.15;
+  color: var(--gold);
+}

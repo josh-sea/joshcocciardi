@@ -667,79 +667,104 @@
 
 <section id="sc" hidden>
 
-  <!-- Setup: build the category, then start -->
-  <div id="sc-setup">
-    <p class="sc-how">One of you picks a secret number from 1 to 10. That is how much you like things. The other names a category, and you answer with something you would rate exactly that. A few answers in, they guess the number.</p>
+  <!-- Lobby: make a room or join one -->
+  <div id="sc-lobby">
+    <p class="sc-how">One of you picks a secret number from 1 to 10. That is how much you like things. The others ask about a category, and the picker answers with something they would rate exactly that. A few answers in, everyone guesses.</p>
+    <p class="sc-how">Everyone plays on their own phone. Only the picker can see the number, and that is enforced by the database, not just the screen.</p>
 
-    <div class="sc-build">
-      <h3>What are you rating?</h3>
+    <label class="sc-field">
+      <span>Your name</span>
+      <input type="text" id="sc-name" maxlength="16" autocomplete="nickname" placeholder="Cam">
+    </label>
+
+    <button class="sc-go" id="sc-create" type="button">Start a new room</button>
+
+    <p class="sc-or">or</p>
+
+    <label class="sc-field">
+      <span>Room code</span>
+      <input type="text" id="sc-code" maxlength="5" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABCDE">
+    </label>
+    <button class="sc-go ghost" id="sc-join" type="button">Join that room</button>
+
+    <p class="sc-note" id="sc-lobby-note"></p>
+    <p class="sc-error" id="sc-lobby-error"></p>
+  </div>
+
+  <!-- In a room -->
+  <div id="sc-play" hidden>
+    <div class="sc-topbar">
+      <div>
+        <span class="sc-roundno" id="sc-roundno"></span>
+        <span class="sc-code" id="sc-roomcode"></span>
+      </div>
+      <button class="sc-leave" id="sc-leave" type="button">Leave</button>
+    </div>
+
+    <div class="sc-players" id="sc-players"></div>
+    <p class="sc-instruction" id="sc-instruction"></p>
+    <p class="sc-error" id="sc-play-error"></p>
+
+    <!-- waiting on somebody else -->
+    <div id="sc-wait" hidden></div>
+
+    <!-- the picker chooses a number -->
+    <div id="sc-pick" hidden>
+      <div class="sc-pad" id="sc-pick-pad"></div>
+      <p class="sc-note">Nobody else can see this, including on their own screen.</p>
+    </div>
+
+    <!-- a guesser builds a category -->
+    <div id="sc-ask" hidden>
+      <h3>What are you asking about?</h3>
       <div class="sc-subjects" id="sc-subjects"></div>
-
       <h3>Where?</h3>
       <div class="sc-chips" id="sc-places"></div>
       <p class="sc-note" id="sc-places-note"></p>
-
-      <label class="sc-own">
+      <label class="sc-field">
         <span>Or write your own</span>
         <input type="text" id="sc-custom" placeholder="Churros in any park" autocomplete="off">
       </label>
-
       <div class="sc-previewrow">
         <p class="sc-preview" id="sc-preview">—</p>
         <button class="sc-shuffle" id="sc-shuffle" type="button" aria-label="Surprise me">🎲</button>
       </div>
+      <button class="sc-go" id="sc-send-topic" type="button">Ask this</button>
+    </div>
 
-      <label class="sc-qcount">
-        <span>Questions per round</span>
-        <select id="sc-questions">
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-        </select>
+    <!-- the picker answers -->
+    <div id="sc-answer" hidden>
+      <p class="sc-current" id="sc-answer-topic"></p>
+      <label class="sc-field">
+        <span>Your answer</span>
+        <input type="text" id="sc-answer-text" placeholder="Frozen Ever After" autocomplete="off">
       </label>
-
-      <button class="sc-go" id="sc-start" type="button">Start a round</button>
-      <p class="sc-tally" id="sc-tally"></p>
-      <button class="sc-clear" id="sc-clear" type="button">Reset the score</button>
+      <button class="sc-go" id="sc-send-answer" type="button">Send it</button>
     </div>
-  </div>
 
-  <!-- Asking -->
-  <div id="sc-asking" hidden>
-    <p class="sc-count" id="sc-count"></p>
-    <p class="sc-current" id="sc-current"></p>
-    <p class="sc-note">Say an answer out loud that matches your secret number.</p>
-
-    <button class="sc-peek" id="sc-peek" type="button" aria-label="Press and hold to see the secret number">
-      <span class="sc-peek-label">Hold to see your number</span>
-      <span class="sc-peek-out" id="sc-peek-out" data-shown="no" aria-live="off"></span>
-    </button>
-
-    <ul class="sc-asked" id="sc-asked"></ul>
-
-    <button class="sc-go" id="sc-ask-next" type="button">Next question</button>
-    <button class="sc-go" id="sc-to-guess" type="button" hidden>Ready to guess</button>
-  </div>
-
-  <!-- Guessing -->
-  <div id="sc-guessing" hidden>
-    <p class="sc-note">What was the number?</p>
-    <input type="number" id="sc-guess" min="1" max="10" step="1" inputmode="numeric" placeholder="1 to 10">
-    <p class="sc-error" id="sc-guess-error"></p>
-    <button class="sc-go" id="sc-lock" type="button">Lock it in</button>
-  </div>
-
-  <!-- Reveal -->
-  <div id="sc-done" hidden>
-    <div class="sc-reveal">
-      <div><span class="sc-big" id="sc-reveal-guess"></span><small>you guessed</small></div>
-      <div><span class="sc-big gold" id="sc-reveal-secret"></span><small>it was</small></div>
+    <!-- guessers guess -->
+    <div id="sc-guess" hidden>
+      <p class="sc-note">How much does <b id="sc-guess-of"></b> like things?</p>
+      <div class="sc-pad" id="sc-guess-pad"></div>
     </div>
-    <p class="sc-verdict" id="sc-verdict"></p>
-    <p class="sc-points" id="sc-points" data-good="no"></p>
-    <ul class="sc-asked" id="sc-recap"></ul>
-    <button class="sc-go" id="sc-again" type="button">Another round</button>
+
+    <!-- the reveal -->
+    <div id="sc-reveal" hidden>
+      <p class="sc-note"><b id="sc-reveal-who"></b> was on</p>
+      <p class="sc-bignum" id="sc-reveal-number">?</p>
+      <ul class="sc-guesslist" id="sc-reveal-list"></ul>
+      <button class="sc-go" id="sc-do-reveal" type="button" hidden>Reveal</button>
+      <button class="sc-go" id="sc-next-round" type="button" hidden>Next round</button>
+    </div>
+
+    <!-- The picker ends the questions. Deliberately outside the panels: the
+         picker spends most of the asking phase on the "waiting" panel, and
+         this button lived inside the answer panel, so it vanished the moment
+         they answered and they could never call time. -->
+    <button class="sc-go ghost" id="sc-open-guessing" type="button" hidden>That is enough, let them guess</button>
+
+    <h3>This round</h3>
+    <ul class="sc-history" id="sc-history"></ul>
   </div>
 
 </section>

@@ -1,60 +1,112 @@
-/* "1 to 10": the screen.
+/* "1 to 10": the screen, played across phones.
  *
- * Pass-and-play on one phone, which is how this actually gets played: one
- * person holds it, the other answers out loud. That makes hiding the secret
- * number the central UI problem rather than an afterthought, because the
- * person guessing is looking at the same screen as the person who knows.
+ * Everybody is holding their own device, so at any moment each phone shows
+ * exactly one thing to do and everything else is out of the way. What that
+ * one thing is comes from room.js's whatNow(), in one place, because the
+ * fastest way to break a turn-based game is to let four screens each decide
+ * for themselves whose turn it is.
  *
- * So the number lives behind a press-and-hold. It is never printed anywhere
- * the guesser can scroll back to, and the round only reveals it once a
- * guess is locked in.
+ * The secret number is never rendered on a screen that is not the picker's,
+ * and never arrives on one either: it is not in the room document until the
+ * reveal.
  */
 
 import {
   SUBJECTS, PLACES, placesFor, topicFor, randomTopic,
-  secretNumber, isValidGuess, scoreGuess, verdictFor,
-  SCALE_MIN, SCALE_MAX, DEFAULT_QUESTIONS,
+  isValidGuess, scoreGuess, verdictFor, SCALE_MIN, SCALE_MAX,
 } from './scale.js';
+import {
+  normaliseCode, codeProblem, cleanName, nameProblem,
+  whatNow, isPicker, playerIds, guesserIds, canOpenGuessing,
+} from './room.js';
+import * as store from './roomstore.js';
 
 const $ = (id) => document.getElementById(id);
+const ME = 'disneyTrivia.scaleName';
+const LAST = 'disneyTrivia.scaleRoom';
 
-const STORE = 'disneyTrivia.scale';
+let room = null;
+let code = null;
+let unwatch = null;
+let subject = 'ride';
+let places = [];
+let custom = '';
 
-let state = null;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const fresh = () => ({
-  phase: 'setup',          // setup → asking → guessing → done
-  secret: null,
-  questions: DEFAULT_QUESTIONS,
-  asked: [],               // topics read out so far
-  subject: 'ride',
-  places: [],
-  custom: '',
-  scores: { picker: 0, guesser: 0, rounds: 0 },
-});
+const remember = (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } };
+const recall = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 
-const load = () => {
+const screen = (name) => {
+  for (const id of ['sc-lobby', 'sc-play']) $(id).hidden = id !== `sc-${name}`;
+};
+
+const panel = (name) => {
+  for (const id of ['sc-wait', 'sc-pick', 'sc-ask', 'sc-answer', 'sc-guess', 'sc-reveal']) {
+    $(id).hidden = id !== `sc-${name}`;
+  }
+};
+
+const say = (el, msg) => { $(el).textContent = msg || ''; };
+
+/* ── the lobby ───────────────────────────────────────────────────────────── */
+
+async function doCreate() {
+  const name = $('sc-name').value;
+  const problem = nameProblem(name);
+  if (problem) { say('sc-lobby-error', problem); return; }
+  say('sc-lobby-error', '');
+  busy(true);
   try {
-    const raw = localStorage.getItem(STORE);
-    const saved = raw ? JSON.parse(raw) : null;
-    // Only the running tally survives a reload. A half-played round does
-    // not: the secret would outlive the moment and whoever reloads could
-    // simply read it.
-    state = fresh();
-    if (saved && saved.scores) state.scores = { ...state.scores, ...saved.scores };
-  } catch { state = fresh(); }
+    remember(ME, cleanName(name));
+    const made = await store.createRoom(name);
+    enterRoom(made);
+  } catch (err) {
+    say('sc-lobby-error', err.message);
+  } finally { busy(false); }
+}
+
+async function doJoin() {
+  const name = $('sc-name').value;
+  const typed = normaliseCode($('sc-code').value);
+  const np = nameProblem(name);
+  const cp = codeProblem(typed);
+  if (np) { say('sc-lobby-error', np); return; }
+  if (cp) { say('sc-lobby-error', cp); return; }
+  say('sc-lobby-error', '');
+  busy(true);
+  try {
+    remember(ME, cleanName(name));
+    await store.joinRoom(typed, name);
+    enterRoom(typed);
+  } catch (err) {
+    say('sc-lobby-error', err.message);
+  } finally { busy(false); }
+}
+
+const busy = (on) => {
+  $('sc-create').disabled = on;
+  $('sc-join').disabled = on;
 };
 
-const save = () => {
-  try { localStorage.setItem(STORE, JSON.stringify({ scores: state.scores })); }
-  catch { /* private mode */ }
-};
+function enterRoom(theCode) {
+  code = theCode;
+  remember(LAST, theCode);
+  $('sc-roomcode').textContent = theCode;
+  screen('play');
+  if (unwatch) unwatch();
+  unwatch = store.watch(theCode, (next) => {
+    if (!next) {
+      say('sc-play-error', 'The room has gone.');
+      return;
+    }
+    room = next;
+    render();
+  }, (err) => say('sc-play-error', 'Lost the room: ' + err.message));
+}
 
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-));
-
-/* ── the builder ─────────────────────────────────────────────────────────── */
+/* ── the builder, used by whoever is asking ──────────────────────────────── */
 
 function drawSubjects() {
   const box = $('sc-subjects');
@@ -68,16 +120,14 @@ function drawSubjects() {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = s.label;
-      b.setAttribute('aria-pressed', String(s.id === state.subject));
+      b.setAttribute('aria-pressed', String(s.id === subject));
       b.onclick = () => {
-        state.subject = s.id;
-        // Drop any place the new subject cannot take, rather than silently
-        // keeping it and composing something the builder then ignores.
+        subject = s.id;
         const allowed = new Set(placesFor(s.id));
-        state.places = state.places.filter((p) => allowed.has(p));
-        drawSubjects();
-        drawPlaces();
-        drawPreview();
+        places = places.filter((p) => allowed.has(p));
+        custom = '';
+        $('sc-custom').value = '';
+        drawSubjects(); drawPlaces(); drawPreview();
       };
       return b;
     }));
@@ -86,196 +136,202 @@ function drawSubjects() {
 }
 
 function drawPlaces() {
-  const allowed = placesFor(state.subject);
+  const allowed = placesFor(subject);
   const box = $('sc-places');
-  const note = $('sc-places-note');
-
   if (!allowed.length) {
     box.replaceChildren();
-    note.textContent = 'This one is not about anywhere in particular.';
+    say('sc-places-note', 'This one is not about anywhere in particular.');
     return;
   }
-  note.textContent = 'Leave them all off for "any park".';
+  say('sc-places-note', 'Leave them all off for "any park".');
   box.replaceChildren(...PLACES.filter((p) => allowed.includes(p.id)).map((p) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = p.label;
-    b.setAttribute('aria-pressed', String(state.places.includes(p.id)));
+    b.setAttribute('aria-pressed', String(places.includes(p.id)));
     b.onclick = () => {
-      state.places = state.places.includes(p.id)
-        ? state.places.filter((x) => x !== p.id)
-        : [...state.places, p.id];
-      drawPlaces();
-      drawPreview();
+      places = places.includes(p.id) ? places.filter((x) => x !== p.id) : [...places, p.id];
+      drawPlaces(); drawPreview();
     };
     return b;
   }));
 }
 
-const currentTopic = () => (state.custom.trim() ? state.custom.trim() : topicFor(state.subject, state.places));
+const currentTopic = () => (custom.trim() ? custom.trim() : topicFor(subject, places));
+const drawPreview = () => { $('sc-preview').textContent = currentTopic() || '—'; };
 
-function drawPreview() {
-  $('sc-preview').textContent = currentTopic() || '—';
-}
+/* ── rendering the room ──────────────────────────────────────────────────── */
 
-/* ── the round ───────────────────────────────────────────────────────────── */
+function render() {
+  if (!room) return;
+  const me = store.currentUid();
+  const next = whatNow(room, me);
 
-function show(phase) {
-  state.phase = phase;
-  for (const id of ['sc-setup', 'sc-asking', 'sc-guessing', 'sc-done']) {
-    $(id).hidden = id !== `sc-${phase}`;
+  drawPlayers();
+  drawHistory();
+  say('sc-instruction', next.say);
+  $('sc-roundno').textContent = room.round ? `Round ${room.round.n}` : '';
+
+  /* Shown on its own terms rather than as part of a panel. The picker is on
+   * the "waiting for a question" panel for most of the asking phase, which
+   * is exactly when they are most likely to want to call time. */
+  $('sc-open-guessing').hidden = !canOpenGuessing(room, me);
+
+  switch (next.do) {
+    case 'pick':   panel('pick'); break;
+    case 'ask':    panel('ask'); drawPreview(); break;
+    case 'answer': panel('answer'); drawToAnswer(); break;
+    case 'guess':  panel('guess'); drawToGuess(); break;
+    case 'reveal': panel('reveal'); drawReveal(false); break;
+    case 'next':   panel('reveal'); drawReveal(true); break;
+    default:       panel('wait');
   }
 }
 
-function startRound() {
-  state.secret = secretNumber();
-  state.asked = [];
-  $('sc-guess').value = '';
-  $('sc-peek-out').textContent = '';
-  $('sc-peek-out').dataset.shown = 'no';
-  show('asking');
-  nextTopic();
-  drawAsked();
-  drawTally();
+function drawPlayers() {
+  const box = $('sc-players');
+  const ids = playerIds(room).sort((a, b) =>
+    (room.players[b].score || 0) - (room.players[a].score || 0));
+  box.replaceChildren(...ids.map((id) => {
+    const el = document.createElement('div');
+    el.className = 'sc-player';
+    if (isPicker(room, id)) el.dataset.picker = 'yes';
+    if (id === store.currentUid()) el.dataset.me = 'yes';
+    el.innerHTML = `<span>${esc(room.players[id].name || '?')}</span><b>${room.players[id].score || 0}</b>`;
+    return el;
+  }));
 }
 
-/* The number, behind a press and hold.
- *
- * A tap would be too easy to do by accident while the phone is being passed
- * across, and a toggle would leave it on screen. Holding means the person
- * who knows has to be deliberately looking.
- */
-function wirePeek() {
-  const btn = $('sc-peek');
-  const out = $('sc-peek-out');
-  let timer = null;
-
-  const reveal = (e) => {
-    e.preventDefault();
-    if (state.secret === null) return;
-    out.textContent = String(state.secret);
-    out.dataset.shown = 'yes';
-    clearTimeout(timer);
-    // Falls closed on its own, so a phone put down mid-round does not sit
-    // there displaying the answer.
-    timer = setTimeout(hide, 4000);
-  };
-  const hide = () => {
-    clearTimeout(timer);
-    out.textContent = '';
-    out.dataset.shown = 'no';
-  };
-
-  btn.addEventListener('pointerdown', reveal);
-  btn.addEventListener('pointerup', hide);
-  btn.addEventListener('pointerleave', hide);
-  btn.addEventListener('pointercancel', hide);
-  // Keyboard: space or enter while held.
-  btn.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') reveal(e); });
-  btn.addEventListener('keyup', hide);
-  btn.addEventListener('blur', hide);
-  btn.addEventListener('contextmenu', (e) => e.preventDefault());
-}
-
-function nextTopic() {
-  const t = currentTopic();
-  if (!t) return;
-  state.asked.push(t);
-  $('sc-current').textContent = t;
-  $('sc-count').textContent = `Question ${state.asked.length} of ${state.questions}`;
-  $('sc-ask-next').hidden = state.asked.length >= state.questions;
-  $('sc-to-guess').hidden = state.asked.length < state.questions;
-  drawAsked();
-}
-
-function drawAsked() {
-  const box = $('sc-asked');
-  box.replaceChildren(...state.asked.slice(0, -1).map((t) => {
+function drawHistory() {
+  const box = $('sc-history');
+  const qs = (room.round && room.round.questions) || [];
+  box.replaceChildren(...qs.map((q) => {
     const li = document.createElement('li');
-    li.textContent = t;
+    li.innerHTML = `<span>${esc(q.topic)}</span>` +
+      (typeof q.answer === 'string' ? `<b>${esc(q.answer) || '(nothing)'}</b>` : '<i>waiting…</i>');
     return li;
   }));
 }
 
-function lockGuess() {
-  const n = Number($('sc-guess').value);
-  const err = $('sc-guess-error');
-  if (!isValidGuess(n)) {
-    err.textContent = `A whole number from ${SCALE_MIN} to ${SCALE_MAX}.`;
+function drawToAnswer() {
+  const qs = room.round.questions;
+  $('sc-answer-topic').textContent = qs.length ? qs[qs.length - 1].topic : '';
+}
+
+function drawToGuess() {
+  $('sc-guess-of').textContent = (room.players[room.round.pickerUid] || {}).name || '';
+}
+
+function drawReveal(done) {
+  const r = room.round;
+  const pickerName = (room.players[r.pickerUid] || {}).name || '';
+  $('sc-reveal-who').textContent = pickerName;
+
+  if (!done) {
+    // The picker, with everyone's guesses in but the number not yet shown
+    // to the room.
+    $('sc-reveal-number').textContent = '?';
+    $('sc-reveal-list').replaceChildren(...guesserIds(room).map((g) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${esc(room.players[g].name)}</span><b>${r.guesses[g]}</b>`;
+      return li;
+    }));
+    $('sc-do-reveal').hidden = false;
+    $('sc-next-round').hidden = true;
     return;
   }
-  err.textContent = '';
 
-  const points = scoreGuess(n, state.secret);
-  state.scores.guesser += points;
-  state.scores.rounds += 1;
-  save();
-
-  $('sc-reveal-secret').textContent = String(state.secret);
-  $('sc-reveal-guess').textContent = String(n);
-  $('sc-verdict').textContent = verdictFor(n, state.secret);
-  $('sc-points').textContent = points ? `+${points}` : 'no points';
-  $('sc-points').dataset.good = points >= 3 ? 'yes' : 'no';
-  $('sc-recap').replaceChildren(...state.asked.map((t) => {
+  $('sc-reveal-number').textContent = String(r.secret);
+  $('sc-reveal-list').replaceChildren(...guesserIds(room).map((g) => {
+    const points = scoreGuess(r.guesses[g], r.secret);
     const li = document.createElement('li');
-    li.textContent = t;
+    li.dataset.good = points >= 3 ? 'yes' : 'no';
+    li.innerHTML = `<span>${esc(room.players[g].name)}</span>` +
+      `<em>${esc(verdictFor(r.guesses[g], r.secret))}</em>` +
+      `<b>${r.guesses[g]}${points ? ` +${points}` : ''}</b>`;
     return li;
   }));
-  drawTally();
-  show('done');
+  $('sc-do-reveal').hidden = true;
+  $('sc-next-round').hidden = false;
 }
 
-function drawTally() {
-  const { guesser, rounds } = state.scores;
-  $('sc-tally').textContent = rounds
-    ? `${guesser} points over ${rounds} round${rounds === 1 ? '' : 's'}`
-    : '';
-}
+/* ── actions ─────────────────────────────────────────────────────────────── */
 
-/* ── wiring ──────────────────────────────────────────────────────────────── */
+const guard = async (fn) => {
+  try { say('sc-play-error', ''); await fn(); }
+  catch (err) { say('sc-play-error', err.message || String(err)); }
+};
 
-export function init() {
-  load();
+export async function init() {
+  await store.ready();
+
+  $('sc-name').value = recall(ME);
+  $('sc-create').onclick = doCreate;
+  $('sc-join').onclick = doJoin;
+  $('sc-code').oninput = (e) => { e.target.value = normaliseCode(e.target.value); };
+
   drawSubjects();
   drawPlaces();
   drawPreview();
-  drawTally();
-  wirePeek();
 
-  $('sc-custom').oninput = (e) => { state.custom = e.target.value; drawPreview(); };
+  $('sc-custom').oninput = (e) => { custom = e.target.value; drawPreview(); };
   $('sc-shuffle').onclick = () => {
-    state.custom = '';
+    custom = randomTopic();
+    $('sc-custom').value = custom;
+    drawPreview();
+  };
+
+  // Picking: the number goes to a document only this phone can read.
+  $('sc-pick-pad').replaceChildren(...Array.from({ length: SCALE_MAX - SCALE_MIN + 1 }, (_, i) => {
+    const n = SCALE_MIN + i;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = String(n);
+    b.onclick = () => guard(() => store.commitNumber(code, room.round.n, n));
+    return b;
+  }));
+
+  $('sc-send-topic').onclick = () => guard(async () => {
+    const topic = currentTopic();
+    if (!topic) return;
+    await store.askQuestion(code, room, topic);
+    custom = '';
     $('sc-custom').value = '';
-    $('sc-preview').textContent = randomTopic();
-    // A shuffled topic is a one-off: remember it so Next question does not
-    // immediately rebuild from the chips underneath.
-    state.custom = $('sc-preview').textContent;
-    $('sc-custom').value = state.custom;
-  };
+  });
 
-  $('sc-questions').value = String(state.questions);
-  $('sc-questions').onchange = (e) => {
-    const n = Number(e.target.value);
-    state.questions = Number.isFinite(n) && n >= 1 && n <= 9 ? n : DEFAULT_QUESTIONS;
-  };
+  $('sc-send-answer').onclick = () => guard(async () => {
+    await store.answerQuestion(code, room, $('sc-answer-text').value);
+    $('sc-answer-text').value = '';
+  });
+  $('sc-open-guessing').onclick = () => guard(() => store.openGuessing(code));
 
-  $('sc-start').onclick = startRound;
-  $('sc-ask-next').onclick = () => {
-    // A fresh topic each question, unless they typed one on purpose.
-    if (!$('sc-custom').value.trim()) state.custom = '';
-    nextTopic();
-  };
-  $('sc-to-guess').onclick = () => { show('guessing'); $('sc-guess').focus(); };
-  $('sc-lock').onclick = lockGuess;
-  $('sc-guess').addEventListener('keydown', (e) => { if (e.key === 'Enter') lockGuess(); });
-  $('sc-again').onclick = () => { show('setup'); drawPreview(); };
-  $('sc-clear').onclick = () => {
-    state.scores = { picker: 0, guesser: 0, rounds: 0 };
-    save();
-    drawTally();
-  };
+  $('sc-guess-pad').replaceChildren(...Array.from({ length: SCALE_MAX - SCALE_MIN + 1 }, (_, i) => {
+    const n = SCALE_MIN + i;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = String(n);
+    b.onclick = () => guard(() => store.submitGuess(code, n));
+    return b;
+  }));
 
-  show('setup');
+  $('sc-do-reveal').onclick = () => guard(() => store.reveal(code, room));
+  $('sc-next-round').onclick = () => guard(() => store.startNextRound(code, room));
+  $('sc-leave').onclick = () => guard(async () => {
+    if (unwatch) { unwatch(); unwatch = null; }
+    await store.leave(code);
+    room = null; code = null;
+    remember(LAST, '');
+    screen('lobby');
+  });
+
+  screen('lobby');
+  // Coming back to a room you were already in, after a reload or a locked
+  // phone. Rejoining is the same write as joining, so it is safe to repeat.
+  const was = recall(LAST);
+  if (was && recall(ME)) {
+    $('sc-code').value = was;
+    say('sc-lobby-note', `You were in room ${was}. Tap Join to go back.`);
+  }
 }
 
-export function onShow() { drawTally(); }
+export function onShow() { if (room) render(); }
