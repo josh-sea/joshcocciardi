@@ -20,10 +20,23 @@ name: Collect park waits
 
 on:
   schedule:
-    # Every five minutes. Disney World is America/New_York; the endpoint
+    # Every fifteen minutes. Disney World is America/New_York; the endpoint
     # decides for itself which parks are inside their hours, so this can run
     # round the clock and cost four skipped checks a cycle overnight.
-    - cron: '*/5 * * * *'
+    #
+    # This was */5, which is GitHub's documented minimum, and in four hours
+    # on master it fired exactly zero times while manual dispatch worked
+    # perfectly. Everything checkable was correct: workflow active, cron on
+    # the default branch, repo not archived. GitHub was simply declining to
+    # run it, which is consistent with how heavily it deprioritises the
+    # shortest schedules.
+    #
+    # Fifteen minutes is also a better fit than five on its own merits. The
+    # upstream API caches for 60 seconds and posted waits move on a ten to
+    # fifteen minute scale, so five-minute polling was oversampling: three
+    # times the Firestore writes and storage for very little extra signal.
+    # Fourteen operating hours still gives about 56 samples per park per day.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 concurrency:
