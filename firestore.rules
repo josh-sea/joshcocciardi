@@ -932,6 +932,62 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── "1 to 10": rooms ──────────────────────────────────────────────────
+    //
+    // Every player has to read the room: the questions, the answers and
+    // whose turn it is all live there. Firestore can hide a document but
+    // not a field inside one, so the secret number can never be in the room
+    // document while the round is running. It lives in a private document
+    // under the room that only its owner can read, and is copied into the
+    // room at the reveal.
+    //
+    // The copy is checked against the private document rather than trusted,
+    // so a picker cannot look at the guesses and then decide they meant a
+    // different number. That costs one document read per reveal and settles
+    // an argument that would otherwise have no answer.
+    function scaleIn() { return request.auth != null; }
+
+    match /scale_rooms/{code} {
+      function members() { return resource.data.players.keys(); }
+      function isMember() { return scaleIn() && request.auth.uid in resource.data.players; }
+
+      // Adding yourself and nothing else. You cannot read a room before you
+      // are in it, so joining has to be a blind write, exactly as the photo
+      // game's decks do it.
+      function joiningSelf() {
+        return scaleIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players'])
+          && request.auth.uid in request.resource.data.players
+          && !(request.auth.uid in resource.data.players)
+          && request.resource.data.players.keys().hasAll(members());
+      }
+
+      // The revealed number must be the one that was committed at the start.
+      function revealMatchesCommit() {
+        return request.resource.data.round.secret ==
+          get(/databases/$(database)/documents/scale_rooms/$(code)/private/$(request.auth.uid)).data.secret;
+      }
+      function settingSecret() {
+        return request.resource.data.round.secret != null
+          && resource.data.round.secret == null;
+      }
+
+      allow get: if isMember();
+      // No enumerating rooms: a code is the only way in.
+      allow list: if false;
+      allow create: if scaleIn()
+        && request.resource.data.hostUid == request.auth.uid
+        && request.auth.uid in request.resource.data.players;
+      allow update: if joiningSelf()
+        || (isMember() && (!settingSecret() || revealMatchesCommit()));
+      allow delete: if scaleIn() && resource.data.hostUid == request.auth.uid;
+
+      // The secret, readable by exactly one person in the world.
+      match /private/{uid} {
+        allow read, write: if scaleIn() && request.auth.uid == uid;
+      }
+    }
+
     // ── Park Planner ──────────────────────────────────────────────────────
     //
     // Wait times are not private: they are posted on a board in the park. But
@@ -993,6 +1049,7 @@ service cloud.firestore {
         && !collection.matches('whereami_.*')
         && !collection.matches('ezpayze_.*')
         && !collection.matches('park_.*')
+        && !collection.matches('scale_.*')
         && collection != 'work_private';
     }
   }

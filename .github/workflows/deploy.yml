@@ -78,6 +78,19 @@ jobs:
       - name: Test Park Planner
         run: node apps/portfolio/test/park.test.mjs
 
+      # The topic builder composes the line you read out loud, which is
+      # exactly the sort of thing that rots into "Desserts in in any park"
+      # unless something checks every subject against every place.
+      - name: Test 1 to 10
+        run: node apps/portfolio/test/scale.test.mjs
+
+      # Rooms, roles and turn order. The whole game is "only one person
+      # knows the number", so who may act when is worth proving. The
+      # security rules behind it have their own emulator suite, which CI
+      # does not run — see functions/test/scale-rules.test.mjs.
+      - name: Test 1 to 10 rooms
+        run: node apps/portfolio/test/room.test.mjs
+
       # Swing Coach's geometry engine is inlined in its static page; the suite
       # lifts it out of the shipped HTML and runs synthetic swings through it.
       # No install needed.

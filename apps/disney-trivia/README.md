@@ -13,73 +13,61 @@ published copy. There is no build step.
 | `index.html` | the ticket book, its inline styles and script, plus the tab switcher at the bottom |
 | `js/whereami.js` | the photo game (Firebase, lazy) |
 | `js/planner.js` | the Park Planner screen (lazy) |
+| `js/scaleui.js` | the "1 to 10" game screen (lazy) |
+| `js/scale.js` | its topic builder and scoring. Pure, tested in node |
+| `js/room.js` | rooms, roles and turn order. Pure, tested in node |
+| `js/roomstore.js` | the Firebase layer for rooms |
 | `js/park.js` | planner rules: walking, waits, scoring. Pure, tested in node |
 | `js/parkdata.js` | ThemeParks.wiki client with a cache-first fallback |
 | `js/music.js` / `js/musicui.js` | background music |
 | `parks/attractions.json` | the committed ride catalogue |
 | `scripts/seed-attractions.mjs` | rebuilds that catalogue |
 
-Tests: `node apps/portfolio/test/park.test.mjs` and
-`node apps/portfolio/test/whereami.test.mjs`. Both run in CI.
+Tests: `park.test.mjs`, `scale.test.mjs` and `whereami.test.mjs` under
+`apps/portfolio/test/`. All three run in CI.
 
-## Park Planner
+## 1 to 10
 
-Given where you are standing, what the queues are doing, and what you have
-already ridden, it suggests the next three moves. It optimises for **most
-rides in the day**: the score is value divided by total minutes, so ten
-minutes of walking costs exactly as much as ten minutes of queueing.
+One person picks a secret number from 1 to 10, which is how much they like
+things. The others ask about a category, and the picker answers with
+something they would rate exactly that: ask for an EPCOT ride on an 8 and
+you get Frozen Ever After, not Guardians and not Imagination. A few answers
+in, everyone guesses.
 
-Data comes from [ThemeParks.wiki](https://themeparks.wiki) — free, no key,
-300 requests a minute, and `access-control-allow-origin: *`, so the browser
-reads it directly and the planner needs no backend to work. Attribution is
-shown in the tab's footer.
+**Everyone plays on their own phone.** Playing it round one device defeats
+the point: if you are all stood together you would just talk. One person
+starts a room and reads out a five-character code, the others join with it
+and a name, and after that each screen shows exactly one thing to do.
 
-Things worth knowing:
+### The secret, and why it is a database problem
 
-- **Walk times** are straight-line distance times a 1.45 detour factor,
-  divided by your pace. Crude, but within a couple of minutes at park
-  scale, and it is what makes the planner usable without a walkway graph.
-  A real graph built from OpenStreetMap is the obvious next step.
-- **Lightning Lanes are typed in by hand.** Nothing here touches a Disney
-  account or My Disney Experience. The planner uses them to avoid sending
-  you somewhere you cannot get back from, and to skip rides you are about
-  to walk onto anyway (overridable: riding something twice is fine).
-- **Must-dos are a deadline, not a weight.** A fixed multiplier always
-  loses to a nearby walk-on, which is how you go home without riding the
-  thing you came for. Instead the planner works out what the remaining
-  must-dos need, compares it with how much day is left, and pushes harder
-  as that slack runs out.
-- **The day is kept in localStorage**, per park, per date. Firestore rules
-  for `park_plans/{uid}/days/{date}` are already in place for when it
-  should sync across phones, but a sign-in and a round trip before you can
-  tick off a ride is the wrong trade in a place with no signal.
+Firestore can hide a document but not a field inside one, and every player
+has to read the room document because the questions, the answers and the
+turn order all live there. So the number is never in the room while the
+round is running. It is committed to `scale_rooms/{code}/private/{uid}`,
+which the rules hand to exactly one person, and copied into the room only
+at the reveal.
 
-## The wait-time collector
+The copy is checked against the commit rather than trusted, so a picker
+cannot look at the guesses and then decide they meant a different number.
+That costs one document read per reveal and settles an argument that would
+otherwise have no answer.
 
-`functions/parks.js` polls all four parks and writes `park_live/{park}` and
-`park_snaps/{park}_{stamp}`. It is an HTTPS endpoint rather than
-`onSchedule` because Cloud Scheduler is not enabled on this project and CI
-deploys every function in one command, so a scheduled export would fail the
-whole site's deploy.
+`functions/test/scale-rules.test.mjs` proves all of that against the
+emulator, including by mutation: remove `scale_` from the catch-all deny
+list, or open up the private document, or drop the commit check, and the
+suite fails.
 
-`.github/workflows/collect-waits.yml` calls it every five minutes.
+### Other things worth keeping
 
-**Setup, needed once before any data lands:**
-
-1. Deploy, then copy the `parkCollect` function URL from the Firebase console.
-2. Generate a token: `openssl rand -hex 32`
-3. Firestore → create `park_secrets/collector` with field `token` = that value.
-4. GitHub → Settings → Secrets and variables → Actions, add:
-   - `PARK_COLLECT_URL` = the function URL
-   - `PARK_COLLECT_TOKEN` = the same token
-5. Actions tab → "Collect park waits" → Run workflow, to check it.
-
-Until both secrets exist the workflow exits cleanly without doing anything,
-so it is safe to merge before you set them up.
-
-Snapshots are deliberately lean: a row is
-`[status, standbyMinutes, llState, llReturnHHMM]`. Storing the API's
-24-entry hourly forecast 288 times a day would be roughly 40x the bytes for
-no extra information. At four parks and five-minute polling that is about
-3.5 MB a day, so an archive-to-Storage step and a Firestore TTL will be
-wanted before this runs for a year.
+- The topic builder is pure string composition: a subject (`desserts`,
+  `queues`, `single rider lines`) crossed with a place (`in Magic Kingdom`,
+  `in any park`, `at Disney Springs`). It stores nothing about actual
+  desserts, because the players already know what the desserts are. A
+  subject declares which kinds of place it accepts, so it never offers
+  "Disney films in EPCOT", and all four parks reads as "any park".
+- Room codes leave out `O`, `0`, `I`, `1` and `L`. Somebody is going to
+  read one down a phone to a grandparent.
+- Whose turn it is comes from one function, `whatNow()`, rather than being
+  decided per screen. Four phones each working it out for themselves is the
+  fastest way to break a turn-based game.

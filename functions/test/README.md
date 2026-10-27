@@ -95,3 +95,29 @@ STORAGE_BUCKET_URL=josh-cocciardi.firebasestorage.app \
 # in another
 node functions/test/readingbuddy-file.test.mjs
 ```
+
+## `scale-rules.test.mjs`
+
+The security rules behind "1 to 10" rooms, against the Firestore emulator.
+
+The whole game is "exactly one person knows the number", and every other
+player has to be able to read the room document, so the only thing keeping
+the number secret is a rule. This checks that nobody but the picker can read
+the private document holding it, that the number revealed at the end is the
+one committed at the start, that joining a room cannot shove the other
+players out, and that the catch-all at the bottom of `firestore.rules` does
+not reach `scale_` collections.
+
+Verified by mutation: dropping `scale_` from the deny list, opening the
+private document, or removing the commit check each make it fail.
+
+```sh
+# from the repo root, in one terminal
+npx firebase-tools@13 emulators:start --only firestore --project scale-rules-test
+# in another
+node functions/test/scale-rules.test.mjs
+```
+
+Needs `@firebase/rules-unit-testing` and `firebase`, which are not in
+`functions/package.json` (they are test-only and the deploy does not want
+them): `npm --prefix functions install --no-save @firebase/rules-unit-testing firebase`.
