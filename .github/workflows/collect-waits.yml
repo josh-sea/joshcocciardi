@@ -1,0 +1,56 @@
+# Park Planner: poll Disney World wait times every five minutes.
+#
+# Why here and not Cloud Scheduler: this repo's deploy pushes every function
+# in one command, and Cloud Scheduler is not enabled on the project, so an
+# onSchedule export would fail the whole site's deploy. A workflow cron needs
+# no GCP change and cannot take the site down.
+#
+# One-time setup — two repo secrets:
+#   PARK_COLLECT_URL    the deployed function's URL, e.g.
+#                       https://parkcollect-<hash>-uc.a.run.app
+#   PARK_COLLECT_TOKEN  the same token stored in Firestore at
+#                       park_secrets/collector { token: "..." }
+#
+# GitHub's scheduler is best-effort and runs late when the fleet is busy, so
+# treat five minutes as "about five minutes". For wait times that posts in
+# five-minute steps anyway, late is fine; missing is not, which is why the
+# job reports a failure rather than swallowing it.
+
+name: Collect park waits
+
+on:
+  schedule:
+    # Every five minutes. Disney World is America/New_York; the endpoint
+    # decides for itself which parks are inside their hours, so this can run
+    # round the clock and cost four skipped checks a cycle overnight.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: park-collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Poll
+        env:
+          URL: ${{ secrets.PARK_COLLECT_URL }}
+          TOKEN: ${{ secrets.PARK_COLLECT_TOKEN }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$TOKEN" ]; then
+            echo "PARK_COLLECT_URL or PARK_COLLECT_TOKEN is not set; nothing to do."
+            exit 0
+          fi
+          code=$(curl -sS -o response.json -w '%{http_code}' \
+            --max-time 120 --retry 2 --retry-delay 5 \
+            -H "Authorization: Bearer $TOKEN" \
+            "$URL")
+          echo "HTTP $code"
+          cat response.json
+          echo
+          # A non-2xx is a real failure: the gap it leaves in the history
+          # cannot be filled in later.
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]

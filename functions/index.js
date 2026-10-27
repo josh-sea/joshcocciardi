@@ -43,6 +43,13 @@ exports.sboxSeason = sbox.sboxSeason;
 exports.sboxHeartbeat = sbox.sboxHeartbeat;
 exports.sboxCheckKey = sbox.sboxCheckKey;
 
+// Park Planner: the Disney World wait-time collector. An HTTPS endpoint a
+// GitHub Actions cron calls every five minutes, rather than onSchedule, for
+// the same reason seasonalbox has no cron: Cloud Scheduler is not enabled on
+// this project and a scheduled export would fail the whole site's deploy.
+const parks = require('./parks');
+exports.parkCollect = parks.parkCollect;
+
 // Recompute a place's aggregates from all of its reviews whenever any
 // review is created or updated. Full recount (not incremental): reviews per
 // place are small, and a recount self-heals any historical drift.
