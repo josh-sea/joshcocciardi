@@ -363,3 +363,29 @@
   .pl-card.top h3 { font-size: 21px; }
   .pl-total { margin-left: 0; }
 }
+
+/* How today is running against the forecast.
+ *
+ * The planner's single biggest assumption about today, so it is on screen
+ * rather than buried in the maths: if it claims the park is quiet while you
+ * are stood in a crowd, you know to read the posted numbers instead.
+ */
+.pl-today {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.45;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+.pl-today:empty { display: none; }
+.pl-today[data-mood="hot"] {
+  color: #F3B9B4;
+  background: rgba(240,134,127,0.1);
+  border-color: rgba(240,134,127,0.26);
+}
+.pl-today[data-mood="cold"] {
+  color: #A8E3C3;
+  background: rgba(127,214,162,0.1);
+  border-color: rgba(127,214,162,0.26);
+}

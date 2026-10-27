@@ -112,6 +112,98 @@ export function forecastAt(forecast, when) {
   return pts[pts.length - 1].v;
 }
 
+/* ── today versus the forecast ─────────────────────────────────────────────
+ *
+ * The API's hourly forecast is a seasonal average: what this ride usually
+ * does on a day like today. It knows nothing about today in particular.
+ * Half term, a downpour at eleven, a ride down all morning pushing its
+ * queue onto the ride next door: on any of those the whole park runs hot
+ * or cold against the curve, all day.
+ *
+ * So compare what is posted now with what the forecast said for now, and
+ * carry that ratio forward. It needs no history at all, which is the point:
+ * it works on day one and it works on a day nothing in the archive looks
+ * like.
+ *
+ * Shape from the forecast, level from this morning. At arrival = now the
+ * correction reproduces the posted wait exactly, so nothing is lost near to
+ * hand and the curve beyond it is lifted or dropped to match the day.
+ */
+
+// A ratio outside this is not a busy day, it is bad data or a broken ride.
+export const RATIO_MIN = 0.5;
+export const RATIO_MAX = 2.0;
+
+/* Small forecasts make wild ratios: a ride forecast at 5 and posting 40 is
+ * an 8x that says nothing about the afternoon. Weight a ride's own evidence
+ * by the size of the number it is based on, and lean on the park-wide ratio
+ * for the rest. Ten minutes is where a ride's own ratio starts to be worth
+ * about as much as the park's.
+ */
+export const RATIO_HALF_WEIGHT_MIN = 10;
+
+export function clampRatio(r) {
+  /* Zero is allowed through and clamped up, because a posted wait of zero
+   * is a walk-on: a real observation that today is running cold, not a
+   * missing one. Rejecting it threw that away. Only a negative or a
+   * non-number is nonsense. */
+  if (!Number.isFinite(r) || r < 0) return null;
+  return Math.min(RATIO_MAX, Math.max(RATIO_MIN, r));
+}
+
+// One ride's ratio of posted to forecast, right now. Null when either is missing.
+export function ratioFor(liveMin, forecastNowMin) {
+  if (typeof liveMin !== 'number' || liveMin < 0) return null;
+  if (typeof forecastNowMin !== 'number' || forecastNowMin <= 0) return null;
+  return clampRatio(liveMin / forecastNowMin);
+}
+
+export function median(values) {
+  const v = values.filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const mid = v.length >> 1;
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+/* How the park as a whole is running against its forecast.
+ *
+ * The median rather than the mean, because one ride breaking down and
+ * dumping 90 minutes onto its queue should not drag the whole park's
+ * number with it. Needs a few rides reporting before it will say anything:
+ * two rides is an anecdote.
+ */
+export const RATIO_MIN_SAMPLE = 4;
+
+export function parkRatio(rides, live, now) {
+  const ratios = [];
+  for (const ride of rides || []) {
+    const l = (live || {})[ride.id];
+    if (!l || l.status !== STATUS_OPEN) continue;
+    const r = ratioFor(l.waitMin, forecastAt(l.forecast, now));
+    if (r !== null) ratios.push(r);
+  }
+  if (ratios.length < RATIO_MIN_SAMPLE) return { ratio: 1, sample: ratios.length };
+  return { ratio: median(ratios), sample: ratios.length };
+}
+
+/* A ride's working ratio: its own, pulled toward the park's by however
+ * little its own evidence is worth.
+ */
+export function blendRatio(rideRatio, park = 1, forecastNowMin = 0) {
+  if (rideRatio === null || rideRatio === undefined) return clampRatio(park) ?? 1;
+  const base = Math.max(0, Number(forecastNowMin) || 0);
+  const w = base / (base + RATIO_HALF_WEIGHT_MIN);   // 0 = trust the park, 1 = trust the ride
+  return clampRatio(park * (1 - w) + rideRatio * w) ?? 1;
+}
+
+/* The forecast for a moment, corrected for how today is actually going. */
+export function correctedForecastAt(forecast, when, ratio = 1) {
+  const raw = forecastAt(forecast, when);
+  if (raw === null) return null;
+  const r = clampRatio(ratio) ?? 1;
+  return raw * r;
+}
+
 /* How much worse this ride gets if you leave it for later. A ride at its
  * daily low is urgent in a way that a ride already past its peak is not: you
  * can come back to the second one, and the first one you cannot.
@@ -285,6 +377,9 @@ export function candidates(rides, live, state) {
   const timeLeft = closing ? (new Date(closing).getTime() - nowMs) / 60000 : Infinity;
   const pressure = mustDoPressure(timeLeft, mustDoCost(rides, live, mustDo, done));
 
+  // How the park is running against its forecast today, also once.
+  const today = parkRatio(rides, live, now);
+
   const out = [];
   for (const ride of rides) {
     if (!ride.queued) continue;                      // walk-through, no queue
@@ -303,7 +398,13 @@ export function candidates(rides, live, state) {
     if (walkMin === null) continue;
     const arrival = new Date(nowMs + walkMin * 60000);
 
-    const fc = forecastAt(l.forecast, arrival);
+    /* Correct the forecast for today before leaning on it. The blend then
+     * still trusts the posted number for an arrival that is almost
+     * immediate, because that is a measurement and this is an inference.
+     */
+    const fcNow = forecastAt(l.forecast, now);
+    const ratio = blendRatio(ratioFor(l.waitMin, fcNow), today.ratio, fcNow);
+    const fc = correctedForecastAt(l.forecast, arrival, ratio);
     const waitMin = blendWait(l.waitMin, fc, walkMin);
     if (waitMin === null) continue;
     if (maxWaitMin !== null && waitMin > maxWaitMin && !mustSet.has(ride.id)) continue;
@@ -328,6 +429,8 @@ export function candidates(rides, live, state) {
       rideMin,
       liveWaitMin: typeof l.waitMin === 'number' ? l.waitMin : null,
       forecastAtArrivalMin: typeof fc === 'number' ? fc : null,
+      rawForecastAtArrivalMin: forecastAt(l.forecast, arrival),
+      todayRatio: ratio,
       arrival,
       finish,
       mustDo: mustSet.has(ride.id),
@@ -392,6 +495,11 @@ export function explain(c) {
     bits.push(c.forecastAtArrivalMin > c.liveWaitMin
       ? `climbing to ${Math.round(c.forecastAtArrivalMin)}`
       : `easing to ${Math.round(c.forecastAtArrivalMin)}`);
+  }
+  // Only worth saying when the correction is big enough to have moved the
+  // answer; a 5% nudge is noise and reads as false precision.
+  if (typeof c.todayRatio === 'number' && Math.abs(c.todayRatio - 1) >= 0.2) {
+    bits.push(c.todayRatio > 1 ? 'busier than usual today' : 'quieter than usual today');
   }
   if (c.mustDo) {
     bits.push((c.pressure || 1) >= 2.5
