@@ -273,11 +273,12 @@ function renderList(candidates) {
     if (day.done.includes(ride.id)) row.classList.add('done');
     if (day.mustDo.includes(ride.id)) row.classList.add('must');
 
-    const wait = typeof l.waitMin === 'number' ? `${l.waitMin}` : (l.status === 'OPERATING' ? '–' : '');
+    const hasWait = typeof l.waitMin === 'number';
+    const wait = hasWait ? `${l.waitMin}` : '–';
     const note = l.status && l.status !== 'OPERATING' ? l.status.toLowerCase() : '';
 
     row.innerHTML = `
-      <span class="pl-wait">${wait}</span>
+      <span class="pl-wait" data-empty="${hasWait ? 'no' : 'yes'}">${wait}</span>
       <span class="pl-name">${escapeHtml(ride.name)}</span>
       <span class="pl-meta">${note || (c ? `${Math.round(c.walkMin)} min away` : '')}</span>
     `;
