@@ -8,6 +8,8 @@
  *   3. only the host writes the game; players can only post as themselves
  *   4. only the current drawer (or the host) can touch the drawing
  *   5. the host's seat can be taken only once the host has gone offline
+ *   6. the video call's setup messages reach only who they are for, and
+ *      only people in the room can join the call or send them
  *
  * Run (from the repo root):
  *   npx firebase-tools@13 emulators:start --only database --project party-rules-test
@@ -104,6 +106,25 @@ await check('nobody can hand it to someone else', assertFails(set(ref(db(CAM), r
 await check('a player takes it once the host has gone', assertSucceeds(set(ref(db(BO), room('meta/host')), BO)));
 await check('and can then read the vault', assertSucceeds(get(ref(db(BO), room('vault')))));
 await check('while the old host no longer can', assertFails(get(ref(db(HOST), room('vault')))));
+
+console.log('\nthe video call');
+await seed();
+const sig = (from, over = {}) => ({ from, t: 'offer', d: 'v=0', sid: 's1', to: 's2', ...over });
+await check('a player joins the call', assertSucceeds(set(ref(db(BO), room(`media/${BO}`)), { on: true, cam: true, mic: true, since: 1, sid: 'abc' })));
+await check('everyone in the room sees who is on it', assertSucceeds(get(ref(db(CAM), room('media')))));
+await check("nobody puts someone else on the call", assertFails(set(ref(db(CAM), room(`media/${BO}`)), { on: true, since: 1, sid: 'x' })));
+await check('a stranger who has not joined the room cannot join the call', assertFails(set(ref(db(STRANGER), room(`media/${STRANGER}`)), { on: true, since: 1, sid: 'x' })));
+await check('odd fields on the call are refused', assertFails(set(ref(db(CAM), room(`media/${CAM}`)), { on: true, since: 1, sid: 'x', url: 'http://' })));
+await check('a player sends a setup message to someone', assertSucceeds(push(ref(db(BO), room(`rtc/${CAM}`)), sig(BO))));
+await check('but not pretending to be someone else', assertFails(push(ref(db(BO), room(`rtc/${CAM}`)), sig(HOST))));
+await check('a stranger cannot send one', assertFails(push(ref(db(STRANGER), room(`rtc/${CAM}`)), sig(STRANGER))));
+await check('only offers, answers and candidates', assertFails(push(ref(db(BO), room(`rtc/${CAM}`)), sig(BO, { t: 'script' }))));
+await check('a message over 16 KB is refused', assertFails(push(ref(db(BO), room(`rtc/${CAM}`)), sig(BO, { d: 'x'.repeat(16001) }))));
+await check('only the recipient reads their messages', assertSucceeds(get(ref(db(CAM), room(`rtc/${CAM}`)))));
+await check("nobody else does, not even the host", assertFails(get(ref(db(HOST), room(`rtc/${CAM}`)))));
+await check('the recipient clears their messages', assertSucceeds(remove(ref(db(CAM), room(`rtc/${CAM}`)))));
+await check("nobody clears someone else's", assertFails(remove(ref(db(BO), room(`rtc/${CAM}`)))));
+await check('a player leaves the call', assertSucceeds(remove(ref(db(BO), room(`media/${BO}`)))));
 
 await env.cleanup();
 console.log(`\n${passes} passed, ${failures} failed`);

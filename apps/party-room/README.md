@@ -19,6 +19,34 @@ All the decks are in `js/decks.js` and are original, written for a family
 table: Cam and Bo should be able to play every one. Word Race's puzzles are
 generated from the SCOWL word lists (see below and `CREDITS.md`).
 
+## Video
+
+Tap **Turn on video** in a room to see and hear everyone, up to 6 people.
+The strip sits above the lobby and every game, smaller during a game, with
+buttons to mute, turn the camera off, or leave the call. It's optional:
+the games work the same without it.
+
+Video goes **phone to phone** (WebRTC), never through Firebase. Firebase
+only carries the few KB of setup messages each pair needs to find each
+other, so the call costs nothing beyond the free allowance.
+
+- Each phone sends its video to every other phone, which is why the call
+  stops at 6: past that, phones get hot and choppy. The seventh person is
+  told it's full and can still play.
+- Low quality on purpose: 320x240 at 15 fps, capped at 250 kbps per stream.
+- **No relay server (TURN), on purpose**, to keep the cost at zero. Most
+  home Wi-Fi connects directly. A pair that can't (some cellular carriers,
+  strict work Wi-Fi) shows "Video unavailable" for each other and carries
+  on playing.
+- iPhones ask for camera and mic permission when you tap Turn on video. A
+  Home Screen install asks more often than Safari does.
+
+Setup messages live at `party/rooms/{code}/rtc/{uid}`, readable only by who
+they're for and deleted as soon as they're read; who is on the call is
+`media/{uid}`. Both are removed by the server when a phone disconnects.
+Who connects to whom is `js/callplan.js` (pure, tested in node);
+`js/call.js` is the WebRTC side and `js/view-call.js` the strip.
+
 ## How it works
 
 The host's phone runs the game. Every other phone only says what it did
@@ -64,7 +92,9 @@ once the host has gone offline.
 | `js/room.js` | Codes, names, turn order, who is host. Pure |
 | `js/forehead.js`, `js/trivia.js`, `js/sketch.js`, `js/chips.js`, `js/race.js` | The games. Pure |
 | `js/engine.js` | Runs a game on the host's phone and writes it to the room |
-| `js/net.js` | Firebase: sign-in, presence, the room |
+| `js/net.js` | Firebase: sign-in, presence, the room, call setup messages |
+| `js/callplan.js` | Who is on the video call and who calls whom. Pure |
+| `js/call.js`, `js/view-call.js` | The video call (WebRTC) and its strip |
 | `js/app.js` | Home, lobby, the host loop, switching screens |
 | `js/view-*.js` | Each game's screen |
 | `js/ui.js` | Escaping, toasts, synthesised sounds |
