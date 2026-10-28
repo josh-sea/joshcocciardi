@@ -1,6 +1,6 @@
 # Party Room
 
-Four party games for a video call, in the spirit of the ones everyone played
+Five party games for a video call, in the spirit of the ones everyone played
 on Houseparty in 2020. Live at `/projects/party-room` (short link: `/party`).
 
 One person taps **Start a room** and reads out the five-character code (or
@@ -13,9 +13,11 @@ phone. The host picks a game; the others just play.
 | 🧠 **Trivia** | The same multiple-choice question on every phone. 100 points for right, up to 100 more for quick. Nine categories or everything, 5, 10 or 15 questions. |
 | ✏️ **Quick Sketch** | One person picks a word (easy, medium or hard) and draws it. Everyone else watches it appear and types guesses. A near miss gets a private "so close!", a letter is revealed at 40% and 70% of the time, and the drawer scores for everyone who gets it. |
 | 🥣 **Chips & Dip** | Two chips on the table ("Sticky" + "Famous"). Everyone but the judge plays the dip from their hand of five that goes best with both. The judge picks a favorite without knowing whose is whose. The judge changes every round; first to 3, 5 or 7 wins. |
+| 🔤 **Word Race** | Houseparty's Word Racers. Eight letters on a wheel, the same on every phone, and 90 seconds to swipe out as many words as you can (tap, or type on a laptop, works too). Longer words score far more (100 for three letters up to 1,600 for all eight), and being first in the round to find a 5, 6, 7 or 8-letter word earns a bonus, announced to everyone as it happens. Best score wins the round 👑; three or five rounds. |
 
 All the decks are in `js/decks.js` and are original, written for a family
-table: Cam and Bo should be able to play every one.
+table: Cam and Bo should be able to play every one. Word Race's puzzles are
+generated from the SCOWL word lists (see below and `CREDITS.md`).
 
 ## How it works
 
@@ -57,13 +59,38 @@ once the host has gone offline.
 | File | What it is |
 |---|---|
 | `js/decks.js` | Every card, question and word |
+| `js/race-puzzles.js` | Word Race's 400 puzzles. Generated, do not edit |
+| `scripts/build-race.mjs` | Regenerates them from SCOWL |
 | `js/room.js` | Codes, names, turn order, who is host. Pure |
-| `js/forehead.js`, `js/trivia.js`, `js/sketch.js`, `js/chips.js` | The games. Pure |
+| `js/forehead.js`, `js/trivia.js`, `js/sketch.js`, `js/chips.js`, `js/race.js` | The games. Pure |
 | `js/engine.js` | Runs a game on the host's phone and writes it to the room |
 | `js/net.js` | Firebase: sign-in, presence, the room |
 | `js/app.js` | Home, lobby, the host loop, switching screens |
 | `js/view-*.js` | Each game's screen |
 | `js/ui.js` | Escaping, toasts, synthesised sounds |
+
+## Word Race puzzles
+
+Each puzzle is a common eight-letter word, scrambled, plus every word its
+letters make. The answers are worked out ahead of time, so the game ships
+no dictionary: the host checks a word against the puzzle's own list.
+
+- **common** answers come from SCOWL's two most common sizes (10 and 20).
+  They make up the "every word" list at the end of a round.
+- **rare** answers (sizes 35 to 50, like "tarn" or "gelt") still score, and
+  show up at the reveal only if somebody found them, so nobody feels bad
+  for missing them.
+- Anything on the LDNOOBW list, plus a short extra list of words you don't
+  want on Grammy's phone, is left out entirely.
+
+To change the word lists or the filters, edit the script and rebuild:
+
+```sh
+npm --prefix /tmp/words install --no-save wordlist-english naughty-words
+node apps/party-room/scripts/build-race.mjs /tmp/words/node_modules
+```
+
+It is seeded, so the same inputs make the same file.
 
 ## Testing
 

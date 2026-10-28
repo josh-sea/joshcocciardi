@@ -18,6 +18,8 @@ import * as trivia from '../../party-room/js/trivia.js';
 import * as sketch from '../../party-room/js/sketch.js';
 import * as chips from '../../party-room/js/chips.js';
 import * as forehead from '../../party-room/js/forehead.js';
+import * as race from '../../party-room/js/race.js';
+import { PUZZLES } from '../../party-room/js/race-puzzles.js';
 import { startWorld, actWorld, tickWorld, Host, ENGINES } from '../../party-room/js/engine.js';
 
 let failures = 0, passes = 0;
@@ -349,6 +351,80 @@ console.log('\nchips & dip');
   ok('somebody who arrives mid-game is dealt in', late.secret.josh.hand.length === 5 && late.pub.scores.josh === 0);
 }
 
+/* ── Word Race ───────────────────────────────────────────────────────────── */
+console.log('\nword race');
+{
+  const bad = ['sex', 'crap', 'damn', 'hell', 'piss', 'butt', 'slut', 'rape', 'nazi', 'turd', 'tits'];
+  ok('there are hundreds of puzzles', PUZZLES.length >= 300);
+  ok('every puzzle has eight letters', PUZZLES.every(([k]) => /^[a-z]{8}$/.test(k)));
+  ok('every answer can be made from its letters, three to eight long', PUZZLES.every(([k, c, r]) => `${c} ${r}`.trim().split(' ').every((w) => w.length >= 3 && w.length <= 8 && race.canMake(w, k))));
+  ok('every puzzle has a word that uses all eight', PUZZLES.every(([, c]) => c.split(' ').some((w) => w.length === 8)));
+  ok('no puzzle lists a word twice', PUZZLES.every(([, c, r]) => { const a = `${c} ${r}`.trim().split(' '); return new Set(a).size === a.length; }));
+  ok('nothing rude is an answer', PUZZLES.every(([, c, r]) => !`${c} ${r}`.split(' ').some((w) => bad.includes(w))));
+  ok('a letter can only be used as often as it appears', race.canMake('bee', 'abegilnr') === false && race.canMake('been', 'abegilnr') === false && race.canMake('bring', 'abegilnr'));
+  ok('longer words are worth a lot more', race.pointsFor('cat') === 100 && race.pointsFor('planets') > 3 * race.pointsFor('cats'));
+  ok('the phone refuses short words, missing letters and repeats itself', /3 letters/.test(race.localProblem('at', 'abcdefgh', [])) && /wheel/.test(race.localProblem('zzz', 'abcdefgh', [])) && /Already/.test(race.localProblem('bad', 'abcdefgh', ['bad'])));
+  ok('round points add the first-to bonuses', JSON.stringify(race.roundPoints({ a: ['cat', 'tiger'] }, { 5: 'a' })) === JSON.stringify({ a: 100 + 400 + race.FIRST_BONUS[5] }));
+
+  const c = clock(), players = [CAM, BO, ASH];
+  let w = startWorld('race', players, { rounds: 3 }, ctxOf(c, players));
+  const pz = () => race.puzzle(w.vault.order[w.pub.round - 1]);
+  ok('starts with an intro to round one', w.pub.phase === 'intro' && w.pub.round === 1 && w.pub.letters.length === 8);
+  ok('the letters are the puzzle\'s, shuffled', [...w.pub.letters].sort().join('') === pz().key);
+  ok('no answers in the room', !pz().common.some((x) => x.length > 4 && JSON.stringify(w.pub).includes(`"${x}"`)));
+  w = actWorld(w, 'cam', { t: 'word', w: pz().common[0] }, ctxOf(c, players));
+  ok('no words before the round starts', !w.vault.found.cam);
+  c.add(race.INTRO_MS);
+  w = tickWorld(w, ctxOf(c, players));
+  ok('then the race is on', w.pub.phase === 'playing' && w.pub.deadline === c.now() + race.ROUND_MS);
+  const three = pz().common.find((x) => x.length === 3) || pz().common[0];
+  const five = pz().common.find((x) => x.length === 5);
+  const eight = pz().common.find((x) => x.length === 8);
+  w = actWorld(w, 'cam', { t: 'word', w: three.toUpperCase() }, ctxOf(c, players));
+  ok('a real word counts, whatever the case', w.secret.cam.found.includes(three) && w.secret.cam.last.ok && w.pub.counts.cam === 1);
+  w = actWorld(w, 'cam', { t: 'word', w: three }, ctxOf(c, players));
+  ok('the same word twice does not', w.secret.cam.found.length === 1 && !w.secret.cam.last.ok);
+  w = actWorld(w, 'cam', { t: 'word', w: 'zzzzz' }, ctxOf(c, players));
+  ok('letters not on the wheel are refused', /wheel/.test(w.secret.cam.last.why));
+  const fake = [...w.pub.letters].slice(0, 4).join('');
+  if (!pz().common.includes(fake) && !pz().rare.includes(fake)) {
+    w = actWorld(w, 'cam', { t: 'word', w: fake }, ctxOf(c, players));
+    ok('a jumble of the right letters is not a word', /dictionary/.test(w.secret.cam.last.why));
+  }
+  w = actWorld(w, 'bo', { t: 'word', w: three }, ctxOf(c, players));
+  ok('two people can find the same word', w.secret.bo.found.includes(three));
+  if (five) {
+    w = actWorld(w, 'bo', { t: 'word', w: five }, ctxOf(c, players));
+    ok('the first five-letter word earns the bonus', w.pub.firsts[5] === 'bo' && w.secret.bo.last.first && w.secret.bo.last.pts === 400 + race.FIRST_BONUS[5]);
+    w = actWorld(w, 'cam', { t: 'word', w: five }, ctxOf(c, players));
+    ok('the second one does not', w.pub.firsts[5] === 'bo' && !w.secret.cam.last.first);
+  }
+  ok('who got each first is public, the word is not', !JSON.stringify(w.pub).includes(`"${five}"`));
+  w = actWorld(w, 'ash', { t: 'word', w: eight }, ctxOf(c, players));
+  ok('finding the eight is the jackpot', w.pub.firsts[8] === 'ash' && w.secret.ash.last.pts === 1600 + race.FIRST_BONUS[8]);
+  c.add(race.ROUND_MS + race.LATE_MS + 1);
+  w = actWorld(w, 'cam', { t: 'word', w: eight }, ctxOf(c, players));
+  ok('nothing counts after the buzzer', !w.secret.cam.found.includes(eight));
+  w = tickWorld(w, ctxOf(c, players));
+  const rv = w.pub.reveal;
+  ok('time up reveals every word and who found it', w.pub.phase === 'reveal' && rv.common.length === pz().common.length && rv.common.find((x) => x.w === three).by.length === 2);
+  ok('the round goes to the best score', rv.winners.join() === 'ash' && w.pub.wins.ash === 1);
+  ok('round points go on the scoreboard', w.pub.scores.ash === rv.points.ash && w.pub.scores.cam === rv.points.cam);
+  c.add(race.REVEAL_MS);
+  w = viaDb(tickWorld(w, ctxOf(c, players)));
+  w.secret = w.secret || {}; w.fx = [];
+  ok('round two has new letters and a clean slate', w.pub.round === 2 && w.pub.phase === 'intro' && !w.pub.counts && !w.pub.firsts);
+  for (let r = 2; r <= 3; r++) {
+    c.add(race.INTRO_MS); w = tickWorld(w, ctxOf(c, players));
+    c.add(race.ROUND_MS + race.LATE_MS); w = tickWorld(w, ctxOf(c, players));
+    if (r === 2) ok('a round where nobody scores has no winner', w.pub.reveal.winners.length === 0);
+    c.add(race.REVEAL_MS); w = tickWorld(w, ctxOf(c, players));
+  }
+  ok('after three rounds it is over', w.pub.phase === 'over');
+  const late = tickWorld(startWorld('race', [CAM], {}, ctxOf(c, [CAM])), ctxOf(c, [CAM, JOSH]));
+  ok('somebody who arrives mid-game is on the scoreboard', late.pub.scores.josh === 0);
+}
+
 /* ── the host loop ───────────────────────────────────────────────────────── */
 console.log('\nhost');
 {
@@ -402,7 +478,8 @@ console.log('\nround trips');
         w = viaDb(w); w.secret = w.secret || {}; w.fx = w.fx || []; w.vault = w.vault || {};
         const who = players[i % 3].uid;
         const msgs = [{ t: 'go' }, { t: 'mark', i: (w.pub.results || []).length, ok: i % 2 === 0 }, { t: 'answer', pick: i % 4 },
-          { t: 'choose', i: 0 }, { t: 'guess', text: 'x' }, { t: 'play', i: 0 }, { t: 'pick', i: 0 }];
+          { t: 'choose', i: 0 }, { t: 'guess', text: 'x' }, { t: 'play', i: 0 }, { t: 'pick', i: 0 },
+          { t: 'word', w: w.pub.letters ? w.pub.letters.slice(0, 3 + (i % 5)) : '' }];
         w = actWorld(w, who, msgs[i % msgs.length], ctxOf(c, players, i));
         c.add(4000);
         w = tickWorld(w, ctxOf(c, players, i));

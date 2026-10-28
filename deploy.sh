@@ -41,7 +41,7 @@
 #                       → served at /projects/disney-trivia
 #   apps/tophat-spears/ - Tophat & Spears multiplayer RTS/FPS (static, Realtime Database)
 #                       → served at /projects/tophat-spears
-#   apps/party-room/    - Party Room: Forehead, Trivia, Quick Sketch, Chips & Dip
+#   apps/party-room/    - Party Room: Forehead, Trivia, Quick Sketch, Chips & Dip, Word Race
 #                       (static, Realtime Database) → served at /projects/party-room
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
@@ -226,6 +226,7 @@ build_party() {
     cp -r "$PARTY_DIR"/* "$PORTFOLIO_DIR/public/projects/party-room/"
     rm -f "$PORTFOLIO_DIR/public/projects/party-room/README.md" \
           "$PORTFOLIO_DIR/public/projects/party-room/package.json"
+    rm -rf "$PORTFOLIO_DIR/public/projects/party-room/scripts"
     success "party-room copied"
 }
 
