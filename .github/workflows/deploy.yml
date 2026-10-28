@@ -154,7 +154,7 @@ jobs:
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
-            rm -rf "apps/portfolio/public/projects/$app/test"
+            rm -rf "apps/portfolio/public/projects/$app/test" "apps/portfolio/public/projects/$app/scripts"
             rm -f "apps/portfolio/public/projects/$app/README.md" \
                   "apps/portfolio/public/projects/$app/package.json" \
                   "apps/portfolio/public/projects/$app/prototype.html"

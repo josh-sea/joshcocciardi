@@ -60,14 +60,14 @@ export function buzz(ms = 30) {
 }
 
 /* The scoreboard, as rows. `me` gets a highlight. */
-export function standingsHtml(scores, names, me, { limit = 0, unit = '' } = {}) {
+export function standingsHtml(scores, names, me, { limit = 0, unit = '', badges = null } = {}) {
   let rows = standings(scores, names);
   if (limit) rows = rows.slice(0, limit);
   if (!rows.length) return '<p class="muted">No scores yet.</p>';
   const medal = (n) => (n === 1 ? '🥇' : n === 2 ? '🥈' : n === 3 ? '🥉' : `${n}.`);
   return `<ol class="standings">${rows.map((r) => `
     <li class="${r.uid === me ? 'me' : ''}"><span class="place">${medal(r.place)}</span>
-      <span class="who">${esc(r.name)}${r.uid === me ? ' <em>(you)</em>' : ''}</span>
+      <span class="who">${esc(r.name)}${r.uid === me ? ' <em>(you)</em>' : ''}${badges && badges[r.uid] ? ` <span class="crowns" title="Rounds won">${'👑'.repeat(Math.min(badges[r.uid], 5))}</span>` : ''}</span>
       <span class="pts">${r.score}${unit}</span></li>`).join('')}</ol>`;
 }
 

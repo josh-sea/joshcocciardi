@@ -94,6 +94,10 @@ export const GAMES = {
     name: 'Chips & Dip', emoji: '🥣', min: 3,
     blurb: 'Two chips on the table. Play the dip from your hand that goes with both. The judge picks a favorite.',
   },
+  race: {
+    name: 'Word Race', emoji: '🔤', min: 1,
+    blurb: 'Eight letters on a wheel. Swipe out as many words as you can before time runs out. Best score wins the round.',
+  },
 };
 
 /* ── shared helpers for the games ────────────────────────────────────────── */

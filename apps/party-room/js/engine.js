@@ -17,10 +17,11 @@
 import * as trivia from './trivia.js';
 import * as sketch from './sketch.js';
 import * as chips from './chips.js';
+import * as race from './race.js';
 import * as forehead from './forehead.js';
 import { obj, arr } from './room.js';
 
-export const ENGINES = { trivia, sketch, chips, forehead };
+export const ENGINES = { trivia, sketch, chips, forehead, race };
 
 const clone = (x) => JSON.parse(JSON.stringify(x === undefined ? null : x));
 const norm = (w) => ({ pub: w.pub, vault: w.vault || {}, secret: obj(w.secret), fx: arr(w.fx) });

@@ -12,13 +12,15 @@ import { Host } from './engine.js';
 import { FOREHEAD_DECKS, TRIVIA_CATEGORIES } from './decks.js';
 import { questionPool, COUNTS } from './trivia.js';
 import { TARGETS } from './chips.js';
+import { ROUNDS as RACE_ROUNDS } from './race.js';
 import { $, esc, toast, unlockAudio, sound, standingsHtml, paintTimers, secondsLeft } from './ui.js';
 import * as foreheadView from './view-forehead.js';
 import * as triviaView from './view-trivia.js';
 import * as sketchView from './view-sketch.js';
 import * as chipsView from './view-chips.js';
+import * as raceView from './view-race.js';
 
-const VIEWS = { forehead: foreheadView, trivia: triviaView, sketch: sketchView, chips: chipsView };
+const VIEWS = { forehead: foreheadView, trivia: triviaView, sketch: sketchView, chips: chipsView, race: raceView };
 
 const S = {
   uid: null, room: null, host: null, inboxOff: null, hostTimer: 0,
@@ -226,7 +228,7 @@ function renderOver(s) {
   const html = `<div class="panel center over">
       <div class="confetti">🎉</div>
       <h2>Game over!</h2>
-      ${standingsHtml(s.pub.scores, s.names, s.me)}
+      ${standingsHtml(s.pub.scores, s.names, s.me, { badges: s.pub.wins })}
       ${s.isHost ? `<div class="row gap"><button class="btn big yellow" data-again>Play again</button>
         <button class="btn big" data-lobby>Pick another game</button></div>`
         : `<p class="muted">Waiting for ${esc(S.names[S.room.meta.host] || 'the host')} to pick what's next.</p>`}
@@ -297,7 +299,7 @@ function hue(uid) {
   return h;
 }
 
-const opts = { forehead: { deck: 'animals' }, trivia: { category: 'mixed', count: 10 }, sketch: { rounds: 1 }, chips: { target: 5 } };
+const opts = { forehead: { deck: 'animals' }, trivia: { category: 'mixed', count: 10 }, sketch: { rounds: 1 }, chips: { target: 5 }, race: { rounds: 3 } };
 
 function chipRow(key, items, current) {
   return `<div class="pills">${items.map(([v, label]) => `
@@ -324,6 +326,9 @@ function renderSetup() {
   } else if (id === 'chips') {
     body = `<h3>First to</h3>${chipRow('target', TARGETS.map((n) => [n, `${n} points`]), o.target)}
       <p class="muted">Everyone gets five dips. The judge changes every round.</p>`;
+  } else if (id === 'race') {
+    body = `<h3>Rounds</h3>${chipRow('rounds', RACE_ROUNDS.map((n) => [n, String(n)]), o.rounds)}
+      <p class="muted">90 seconds a round, same eight letters on every phone. Longer words score more, and the first to find a 5, 6, 7 or 8-letter word gets a bonus.</p>`;
   }
   box.innerHTML = `<h2>${g.emoji} ${esc(g.name)}</h2>${body}
     <button class="btn big yellow" data-start ${count < g.min ? 'disabled' : ''}>${count < g.min ? `Needs ${g.min} players` : 'Start'}</button>`;
