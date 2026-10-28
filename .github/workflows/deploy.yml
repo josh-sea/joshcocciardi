@@ -148,6 +148,13 @@ jobs:
         working-directory: apps/portfolio
         run: node test/boulder.test.mjs
 
+      # Camboku: every generated board must have exactly one answer and be
+      # finishable by logic alone, and hints must never point the wrong way.
+      # Plain module, no install needed.
+      - name: Test Camboku
+        working-directory: apps/portfolio
+        run: node test/camboku.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
           for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room; do

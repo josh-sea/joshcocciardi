@@ -162,6 +162,13 @@ const playthings = [
     link: "/projects/camboy",
   },
   {
+    title: "🧩 Camboku",
+    description:
+      "A logic puzzle starring Cam and Bo, with no ads. Put one face in every row, every column and every colored region, and never let two faces touch, not even at the corners. Every board is generated on the spot: the generator lays down an answer, grows the regions out from it, then reshapes the borders until that answer is the only one. A built-in solver then works the board the way a person would, and the level is kept only if it can be finished by logic alone. The hardest rule it needed sets the level's difficulty, from 5×5 warm ups to 9×9 boards that need pigeonhole reasoning. Wrong taps cost one of three hearts, Hint points at the next thing you can work out and says why, and there's a new 8×8 board every day.",
+    tech: ["JavaScript", "Procedural generation", "Constraint solving", "PWA"],
+    link: "/projects/camboku",
+  },
+  {
     title: "🎩 Tophat & Spears",
     description:
       "A co-op RTS and FPS in one match, for up to five friends. One player is the Tophat, commanding three squads of marines from above as a swarm pours over the ridge. Up to four Spears drop into those marines in first person and hop from body to body. The Tophat can leash a Spear to a zone; miss the deadline and you bleed. Everyone types the same password to land in the same lobby. One player's browser runs the battle and streams it to the rest through Firebase, and if that player leaves, the next one picks the match up where it was.",
