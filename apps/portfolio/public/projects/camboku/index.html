@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Camboku</title>
+<meta name="description" content="A logic puzzle starring Cam and Bo. One face in every row, column and color, and no two faces touch.">
+<meta name="theme-color" content="#FFF4E4">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Camboku">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/camboku.css">
+</head>
+<body>
+
+<!-- Home -->
+<section id="home" class="screen">
+  <div class="hero">
+    <div class="hero-faces">
+      <img src="img/cam.jpg" alt="Cam" class="face big tilt-l">
+      <img src="img/bo.jpg" alt="Bo" class="face big tilt-r">
+    </div>
+    <h1>Camboku</h1>
+    <p class="tag">One face per row, column and color. No touching.</p>
+  </div>
+
+  <button id="play" class="btn primary big-btn">Play level <span id="play-level">1</span></button>
+  <p id="play-stage" class="sub"></p>
+  <button id="daily" class="btn">Today's board</button>
+
+  <div class="card">
+    <h2>Faces</h2>
+    <div class="avatar-pick" role="radiogroup" aria-label="Which face to place">
+      <button class="pick" data-avatar="cam" role="radio"><img src="img/cam.jpg" alt="" class="face">Cam</button>
+      <button class="pick" data-avatar="bo" role="radio"><img src="img/bo.jpg" alt="" class="face">Bo</button>
+      <button class="pick" data-avatar="mix" role="radio"><span class="pair"><img src="img/cam.jpg" alt="" class="face"><img src="img/bo.jpg" alt="" class="face"></span>Both</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="auto-block"> Dot the cells a face rules out</label>
+  </div>
+
+  <div class="card">
+    <h2>Levels</h2>
+    <div id="levels" class="levels"></div>
+    <button id="more-levels" class="btn small">Show more</button>
+  </div>
+
+  <details class="card rules">
+    <summary>How to play</summary>
+    <ul>
+      <li><b>One face in every color.</b> Each colored region gets exactly one.</li>
+      <li><b>One face in every row and column.</b> A face claims its whole row and column.</li>
+      <li><b>No touching.</b> Not side by side, not corner to corner.</li>
+      <li><b>No guessing.</b> Every board can be worked out. A wrong tap costs a heart, and three wrong taps ends the round.</li>
+      <li>Switch to <b>✕</b> to mark cells you've ruled out. Drag to mark a bunch at once.</li>
+      <li>Stuck? <b>Hint</b> points at the next thing you can work out, and says why.</li>
+    </ul>
+  </details>
+</section>
+
+<!-- Game -->
+<section id="game" class="screen" hidden>
+  <header class="bar">
+    <button id="back" class="btn icon" aria-label="Back to levels">‹</button>
+    <div class="title">
+      <div id="g-name">Level 1</div>
+      <div id="g-stage" class="sub"></div>
+    </div>
+    <div id="timer" class="timer">0:00</div>
+  </header>
+
+  <div class="status">
+    <div id="hearts" class="hearts" aria-label="Hearts left"></div>
+    <div id="progress" class="sub"></div>
+  </div>
+
+  <div class="board-wrap">
+    <div id="board" class="board" role="grid"></div>
+    <div id="building" class="building" hidden>Building the board…</div>
+  </div>
+
+  <div id="hint-box" class="hint-box" hidden>
+    <p id="hint-text"></p>
+    <div class="hint-actions">
+      <button id="hint-apply" class="btn small primary" hidden>Mark ✕</button>
+      <button id="hint-close" class="btn small">Got it</button>
+    </div>
+  </div>
+
+  <div class="tools">
+    <div class="mode" role="radiogroup" aria-label="Tap mode">
+      <button id="mode-face" class="mode-btn on" role="radio" aria-checked="true"><img id="mode-face-img" src="img/cam.jpg" alt="" class="face"> Face</button>
+      <button id="mode-mark" class="mode-btn" role="radio" aria-checked="false"><span class="x">✕</span> Mark</button>
+    </div>
+    <button id="hint" class="btn">💡 Hint</button>
+    <button id="clear-marks" class="btn">Clear ✕</button>
+  </div>
+</section>
+
+<!-- Round over -->
+<div id="overlay" class="overlay" hidden>
+  <div class="panel">
+    <div id="o-faces" class="hero-faces"></div>
+    <h2 id="o-title"></h2>
+    <p id="o-text"></p>
+    <div class="panel-actions">
+      <button id="o-main" class="btn primary"></button>
+      <button id="o-alt" class="btn"></button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/game.mjs"></script>
+</body>
+</html>

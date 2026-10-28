@@ -155,6 +155,15 @@
           ]
         },
         {
+          "source": "/projects/camboku/**/*.@(js|mjs|css|json)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/swing-coach/**/*.@(js|mjs|css)",
           "headers": [
             {
@@ -244,6 +253,11 @@
         {
           "source": "/tophat",
           "destination": "/projects/tophat-spears/",
+          "type": 301
+        },
+        {
+          "source": "/camboku",
+          "destination": "/projects/camboku/",
           "type": 301
         },
         {
