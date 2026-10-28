@@ -1,0 +1,9 @@
+{
+  "name": "Party Room",
+  "short_name": "Party Room",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#2a0e5c",
+  "theme_color": "#2a0e5c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

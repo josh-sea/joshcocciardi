@@ -61,6 +61,10 @@
           "destination": "/projects/tophat-spears/index.html"
         },
         {
+          "source": "/projects/party-room/**",
+          "destination": "/projects/party-room/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -169,6 +173,15 @@
           ]
         },
         {
+          "source": "/projects/party-room/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/tophat-spears/**/*.@(js|css)",
           "headers": [
             {
@@ -231,6 +244,11 @@
         {
           "source": "/tophat",
           "destination": "/projects/tophat-spears/",
+          "type": 301
+        },
+        {
+          "source": "/party",
+          "destination": "/projects/party-room/",
           "type": 301
         }
       ]

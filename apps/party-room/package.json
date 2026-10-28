@@ -1,0 +1,9 @@
+{
+  "name": "party-room",
+  "private": true,
+  "type": "module",
+  "description": "Party Room games. Lets node load the pure modules as ES modules for the tests.",
+  "scripts": {
+    "test": "node ../portfolio/test/party-room.test.mjs"
+  }
+}
