@@ -27,6 +27,86 @@
         }
       }
     },
+    "party": {
+      "rooms": {
+        ".read": false,
+        ".write": false,
+        "$code": {
+          "meta": {
+            ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/)",
+            ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && (!data.exists() || data.child('host').val() === auth.uid) && newData.child('host').isString()",
+            "host": {
+              ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && newData.val() === auth.uid && root.child('party/rooms/' + $code + '/players/' + auth.uid).exists() && root.child('party/rooms/' + $code + '/players/' + data.val() + '/online').val() !== true",
+              ".validate": "newData.isString()"
+            },
+            "created": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "players": {
+            ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/)",
+            "$uid": {
+              ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && ($uid === auth.uid || root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid)",
+              "name": {
+                ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24"
+              },
+              "joined": {
+                ".validate": "newData.isNumber()"
+              },
+              "online": {
+                ".validate": "newData.isBoolean()"
+              },
+              "leftAt": {
+                ".validate": "newData.isNumber()"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "game": {
+            ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/)",
+            ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid"
+          },
+          "vault": {
+            ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid",
+            ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid"
+          },
+          "secret": {
+            ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid",
+            "$uid": {
+              ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && $uid === auth.uid"
+            }
+          },
+          "notes": {
+            ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid",
+            "$uid": {
+              ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && $uid === auth.uid"
+            }
+          },
+          "inbox": {
+            ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid",
+            "$msg": {
+              ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && ((!data.exists() && newData.child('uid').val() === auth.uid && root.child('party/rooms/' + $code + '/players/' + auth.uid).exists()) || (root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid && !newData.exists()))",
+              ".validate": "!newData.exists() || (newData.child('t').isString() && newData.child('t').val().length <= 12)"
+            }
+          },
+          "strokes": {
+            ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/)",
+            ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && (root.child('party/rooms/' + $code + '/meta/host').val() === auth.uid || root.child('party/rooms/' + $code + '/game/drawer').val() === auth.uid)",
+            "$s": {
+              ".validate": "newData.hasChildren(['p'])"
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
     "roy": {
       ".read": false,
       ".write": false,

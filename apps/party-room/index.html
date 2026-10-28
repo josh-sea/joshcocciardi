@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Party Room</title>
+<meta name="description" content="Party games for everyone on the call: Forehead, Trivia, Quick Sketch and Chips &amp; Dip. Each person plays on their own phone.">
+<meta name="theme-color" content="#2a0e5c">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/party.css">
+</head>
+<body>
+<main id="app">
+
+  <section id="home" class="screen">
+    <div class="brand">
+      <div class="wave" aria-hidden="true">👋</div>
+      <h1>Party Room</h1>
+      <p>Party games for everyone on the call. Hop on FaceTime or Zoom, then everybody plays on their own phone.</p>
+    </div>
+    <div class="card">
+      <label class="field">Your name
+        <input id="name" maxlength="16" autocomplete="nickname" placeholder="Cam, Bo, Grammy…" enterkeyhint="go">
+      </label>
+      <p class="invite-note">You've been invited to room <b id="inviteCode"></b>. Add your name and tap Join.</p>
+      <button id="create" class="btn big yellow">Start a room</button>
+      <div class="or"><span>or join one</span></div>
+      <div class="joinrow">
+        <input id="code" maxlength="8" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false" enterkeyhint="go" aria-label="Room code">
+        <button id="join" class="btn pink">Join</button>
+      </div>
+      <p id="homeErr" class="err" role="alert"></p>
+    </div>
+    <div class="card solo">
+      <h2>🤳 Just one phone?</h2>
+      <p>Play Forehead with whoever is on the couch. No room needed.</p>
+      <button id="soloBtn" class="btn teal">Play Forehead here</button>
+    </div>
+    <ul class="games-peek">
+      <li><span>🤳</span>Forehead</li><li><span>🧠</span>Trivia</li><li><span>✏️</span>Quick Sketch</li><li><span>🥣</span>Chips &amp; Dip</li>
+    </ul>
+  </section>
+
+  <section id="lobby" class="screen" hidden>
+    <header class="bar">
+      <button id="leave" class="ghost">← Leave</button>
+      <span id="live" class="offline" hidden>Reconnecting…</span>
+      <span></span>
+    </header>
+    <div class="codebox">
+      <span>Room code</span>
+      <b id="roomCode"></b>
+      <button id="share" class="btn small yellow">Invite people</button>
+    </div>
+    <ul id="people" class="people"></ul>
+    <h2 id="pickTitle" class="center">Pick a game</h2>
+    <div id="menu" class="menu"></div>
+    <div id="setup" class="card setup" hidden></div>
+  </section>
+
+  <section id="play" class="screen" hidden>
+    <header class="bar">
+      <span id="gameName" class="gname"></span>
+      <span id="timer" class="timer" hidden></span>
+      <span class="right"><button id="scoresBtn" class="ghost">Scores</button><button id="endBtn" class="ghost" hidden>End</button></span>
+    </header>
+    <div id="stage"></div>
+  </section>
+
+  <section id="solo" class="screen" hidden></section>
+
+</main>
+<div id="scores" class="sheet" hidden></div>
+<div id="toast" class="toast" hidden role="status"></div>
+<script>
+  // Shown on the home screen when the link carried a room code.
+  (function () {
+    var m = /[?&]room=([A-Za-z0-9-]+)/.exec(location.search);
+    if (m) document.getElementById('inviteCode').textContent = m[1].toUpperCase();
+  })();
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

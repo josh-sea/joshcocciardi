@@ -122,6 +122,32 @@ Needs `@firebase/rules-unit-testing` and `firebase`, which are not in
 `functions/package.json` (they are test-only and the deploy does not want
 them): `npm --prefix functions install --no-save @firebase/rules-unit-testing firebase`.
 
+## `party-rules.test.mjs`
+
+The Realtime Database rules behind Party Room rooms, against the database
+emulator.
+
+Every phone reads the room, so the only things keeping a trivia answer, a
+Chips & Dip hand or the word being drawn private are rules. This checks that
+rooms cannot be listed, that the vault is readable only by whoever is host
+right now and each secret and note only by its owner, that only the host
+writes the game and players can only post to the inbox as themselves, that
+only the drawer or the host can touch the drawing, and that the host's seat
+can be taken only once the host has gone offline (after which the old host
+loses the vault).
+
+Verified by mutation: opening the vault or the secrets to every signed-in
+user makes four checks fail.
+
+```sh
+# from the repo root, in one terminal
+npx firebase-tools@13 emulators:start --only database --project party-rules-test
+# in another
+node functions/test/party-rules.test.mjs
+```
+
+Same test-only dependencies as `scale-rules.test.mjs` above.
+
 ## `scale-race.test.mjs`
 
 Concurrent writes in a "1 to 10" room, against the Firestore emulator.

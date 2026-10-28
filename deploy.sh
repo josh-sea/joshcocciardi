@@ -22,6 +22,7 @@
 #   ./deploy.sh storage      - Deploy storage rules only
 #   ./deploy.sh ezpayze      - Test + build EzPayze, deploy its hosting site, functions, and rules
 #   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
+#   ./deploy.sh party        - Test Party Room, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
 #
 # Apps live in:
@@ -40,6 +41,8 @@
 #                       → served at /projects/disney-trivia
 #   apps/tophat-spears/ - Tophat & Spears multiplayer RTS/FPS (static, Realtime Database)
 #                       → served at /projects/tophat-spears
+#   apps/party-room/    - Party Room: Forehead, Trivia, Quick Sketch, Chips & Dip
+#                       (static, Realtime Database) → served at /projects/party-room
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
 # (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
@@ -60,6 +63,7 @@ PSX_DIR="$ROOT_DIR/apps/psx"
 SOLRA_DIR="$ROOT_DIR/apps/solra"
 DISNEY_DIR="$ROOT_DIR/apps/disney-trivia"
 TOPHAT_DIR="$ROOT_DIR/apps/tophat-spears"
+PARTY_DIR="$ROOT_DIR/apps/party-room"
 WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
@@ -210,6 +214,21 @@ build_tophat() {
     success "tophat-spears copied"
 }
 
+build_party() {
+    # No build step. Every game is a pure state machine with a node suite.
+    log "Testing Party Room..."
+    cd "$ROOT_DIR"
+    node apps/portfolio/test/party-room.test.mjs || fail "Party Room tests failed"
+
+    log "Copying party-room to portfolio/public/projects/party-room (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/party-room"
+    rm -rf "$PORTFOLIO_DIR/public/projects/party-room"/*
+    cp -r "$PARTY_DIR"/* "$PORTFOLIO_DIR/public/projects/party-room/"
+    rm -f "$PORTFOLIO_DIR/public/projects/party-room/README.md" \
+          "$PORTFOLIO_DIR/public/projects/party-room/package.json"
+    success "party-room copied"
+}
+
 build_portfolio() {
     # Swing Coach ships as a single static page inside public/, with its swing
     # geometry inlined. The suite lifts that engine out of the page and runs
@@ -272,6 +291,7 @@ deploy_hosting() {
     echo "  Golf Caddy:     https://www.joshcocciardi.com/projects/swing-coach/golf/caddy"
     echo "  Boulder Smash:  https://www.joshcocciardi.com/projects/boulder-smash"
     echo "  Tophat&Spears:  https://www.joshcocciardi.com/projects/tophat-spears"
+    echo "  Party Room:     https://www.joshcocciardi.com/projects/party-room  (short link: /party)"
     echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy, Boulder Smash)"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
     echo "  Reading Buddy:  https://www.joshcocciardi.com/tools/myreadingbuddy"
@@ -370,6 +390,7 @@ case "${1:-all}" in
         build_solra
         build_disney
         build_tophat
+        build_party
         build_workbook
         build_portfolio
         deploy_firestore
@@ -542,9 +563,18 @@ case "${1:-all}" in
         deploy_database
         deploy_hosting
         ;;
+    party)
+        echo "========================================"
+        echo "  Deploying Party Room"
+        echo "========================================"
+        build_party
+        build_portfolio
+        deploy_database
+        deploy_hosting
+        ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|roy|ezpayze|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|roy|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac

@@ -10,7 +10,7 @@
 #
 # What it deploys (mirrors ./deploy.sh):
 #   - copies the static apps (playball, canitwo, recipebox, psx, solra, disney-trivia,
-#     tophat-spears) into portfolio/public
+#     tophat-spears, party-room) into portfolio/public
 #   - builds the mail app and copies it to portfolio/public/projects/electronic-mail
 #   - builds the portfolio (the built copy of moments is committed under
 #     apps/portfolio/public/projects/)
@@ -91,6 +91,13 @@ jobs:
       - name: Test 1 to 10 rooms
         run: node apps/portfolio/test/room.test.mjs
 
+      # Party Room: all four games played start to finish in node, through a
+      # fake database round trip at every step, plus the host hand-over. The
+      # rules behind it have an emulator suite CI does not run; see
+      # functions/test/party-rules.test.mjs.
+      - name: Test Party Room
+        run: node apps/portfolio/test/party-room.test.mjs
+
       # Swing Coach's geometry engine is inlined in its static page; the suite
       # lifts it out of the shipped HTML and runs synthetic swings through it.
       # No install needed.
@@ -143,7 +150,7 @@ jobs:
 
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears; do
+          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
