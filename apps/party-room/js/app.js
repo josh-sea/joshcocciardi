@@ -9,6 +9,8 @@ import {
   GAMES, codeProblem, normaliseCode, cleanName, nameProblem, online, displayNames, pickHost, byJoin,
 } from './room.js';
 import { Host } from './engine.js';
+import { Call } from './call.js';
+import { mountCallBar } from './view-call.js';
 import { FOREHEAD_DECKS, TRIVIA_CATEGORIES } from './decks.js';
 import { questionPool, COUNTS } from './trivia.js';
 import { TARGETS } from './chips.js';
@@ -36,6 +38,8 @@ const store = {
 
 function show(id) {
   for (const sc of document.querySelectorAll('.screen')) sc.hidden = sc.id !== id;
+  // The video strip shrinks during a game, where the screen is busy.
+  document.body.classList.toggle('in-game', id === 'play');
   window.scrollTo(0, 0);
 }
 
@@ -101,7 +105,29 @@ async function enter(code, name) {
   room.onLive = (live) => { $('#live').hidden = live; };
   room.watch(onChange);
   $('#roomCode').textContent = code;
+  startCallBar(room);
   show('lobby');
+}
+
+/* ── the video call ──────────────────────────────────────────────────────── */
+
+function startCallBar(room) {
+  const bar = $('#videoBar');
+  const call = new Call(room, {
+    onChange: () => {
+      // Seven people turned video on at once: the last one in is told.
+      if (call.on && call.full()) {
+        call.stop().then(() => { call.error = 'The video call is full (6 people). You can still play.'; S.callBar.render(); });
+        return;
+      }
+      S.callBar.render();
+    },
+  });
+  S.call = call;
+  S.callBar = mountCallBar(bar, call, { names: () => S.names });
+  room.onLeave = () => call.stop();
+  bar.hidden = false;
+  S.callBar.render();
 }
 
 async function leave() {
@@ -114,6 +140,9 @@ async function leave() {
   history.replaceState(null, '', location.pathname + (location.search.includes('emu') ? '?emu' : ''));
   document.body.classList.remove('invited');
   codeIn.value = '';
+  $('#videoBar').hidden = true;
+  $('#videoBar').replaceChildren();
+  S.call = null;
   show('home');
   await room.leave().catch(() => {});
 }
@@ -134,6 +163,7 @@ function onChange(key) {
   if (!room) return;
   S.names = displayNames(room.players);
   if (key === 'meta' || key === 'players') syncHost();
+  if (key === 'players' && S.call) S.call.sync();
   if (key === 'note' && room.note && room.note.at > S.noteAt) {
     S.noteAt = room.note.at;
     // A note left over from before a reload is old news.

@@ -20,6 +20,7 @@ import * as chips from '../../party-room/js/chips.js';
 import * as forehead from '../../party-room/js/forehead.js';
 import * as race from '../../party-room/js/race.js';
 import { PUZZLES } from '../../party-room/js/race-puzzles.js';
+import { onCall, isFull, offers, plan, forMe, newSid, CAP } from '../../party-room/js/callplan.js';
 import { startWorld, actWorld, tickWorld, Host, ENGINES } from '../../party-room/js/engine.js';
 
 let failures = 0, passes = 0;
@@ -423,6 +424,39 @@ console.log('\nword race');
   ok('after three rounds it is over', w.pub.phase === 'over');
   const late = tickWorld(startWorld('race', [CAM], {}, ctxOf(c, [CAM])), ctxOf(c, [CAM, JOSH]));
   ok('somebody who arrives mid-game is on the scoreboard', late.pub.scores.josh === 0);
+}
+
+/* ── the video call ──────────────────────────────────────────────────────── */
+console.log('\nvideo call');
+{
+  const players = { a: P('a', 'A', 1), b: P('b', 'B', 2), c: P('c', 'C', 3), d: { ...P('d', 'D', 4), online: false } };
+  const media = {
+    b: { on: true, since: 10, sid: 'sb' },
+    a: { on: true, since: 20, sid: 'sa' },
+    c: { on: true, since: 30, sid: 'sc' },
+    d: { on: true, since: 5, sid: 'sd' },
+  };
+  ok('the call is in the order people turned video on', onCall(media, players).join() === 'b,a,c');
+  ok('someone whose phone dropped out of the room is not on it', !onCall(media, players).includes('d'));
+  ok('nobody without a session is on it', !onCall({ a: { on: true, since: 1 } }, players).length);
+  const many = {}, crowd = {};
+  for (let i = 0; i < 8; i++) { crowd[`u${i}`] = P(`u${i}`, `U${i}`, i); many[`u${i}`] = { on: true, since: i, sid: `s${i}` }; }
+  ok(`the call stops at ${CAP}`, onCall(many, crowd).length === CAP && onCall(many, crowd).at(-1) === `u${CAP - 1}`);
+  ok('the seventh is told it is full, the first six are not', isFull(many, crowd, 'u6') && !isFull(many, crowd, 'u0'));
+  ok('exactly one side of each pair makes the offer', offers('a', 'b') !== offers('b', 'a'));
+  const first = plan('a', media, players, {});
+  ok('a new call connects to everyone else on it', first.connect.sort().join() === 'b,c' && !first.drop.length);
+  ok('a live connection is left alone', !plan('a', media, players, { b: 'sb', c: 'sc' }).connect.length);
+  const reloaded = plan('a', { ...media, b: { ...media.b, sid: 'sb2' } }, players, { b: 'sb', c: 'sc' });
+  ok('someone who reloaded is hung up on and called again', reloaded.drop.join() === 'b' && reloaded.connect.join() === 'b');
+  const { c: _gone, ...left } = media;
+  ok('someone who left the call is hung up on', plan('a', left, players, { b: 'sb', c: 'sc' }).drop.join() === 'c');
+  ok('if you are not on the call you hang up on everyone', plan('d', media, players, { a: 'sa' }).drop.join() === 'a');
+  ok('a setup message for this session is used', forMe({ t: 'offer', d: 'v=0', to: 'me1' }, 'me1'));
+  ok('one left over from before a reload is not', !forMe({ t: 'offer', d: 'v=0', to: 'old' }, 'me1'));
+  ok('nor is anything that is not an offer, answer or candidate', !forMe({ t: 'bye', d: '', to: 'me1' }, 'me1'));
+  const r = seeded(9);
+  ok('session ids are fresh each time', newSid(r) !== newSid(r));
 }
 
 /* ── the host loop ───────────────────────────────────────────────────────── */

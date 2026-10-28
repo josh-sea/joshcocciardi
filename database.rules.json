@@ -101,6 +101,40 @@
               ".validate": "newData.hasChildren(['p'])"
             }
           },
+          "media": {
+            ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/)",
+            "$uid": {
+              ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && $uid === auth.uid && (!newData.exists() || root.child('party/rooms/' + $code + '/players/' + auth.uid).exists())",
+              "on": {
+                ".validate": "newData.isBoolean()"
+              },
+              "cam": {
+                ".validate": "newData.isBoolean()"
+              },
+              "mic": {
+                ".validate": "newData.isBoolean()"
+              },
+              "since": {
+                ".validate": "newData.isNumber()"
+              },
+              "sid": {
+                ".validate": "newData.isString() && newData.val().length <= 32"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          },
+          "rtc": {
+            "$to": {
+              ".read": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && $to === auth.uid",
+              ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && $to === auth.uid && !newData.exists()",
+              "$msg": {
+                ".write": "auth != null && $code.matches(/^[A-HJKMNP-Z2-9]{5}$/) && ((!data.exists() && newData.child('from').val() === auth.uid && root.child('party/rooms/' + $code + '/players/' + auth.uid).exists()) || ($to === auth.uid && !newData.exists()))",
+                ".validate": "!newData.exists() || (newData.child('t').isString() && newData.child('t').val().matches(/^(offer|answer|ice)$/) && newData.child('d').isString() && newData.child('d').val().length <= 16000 && newData.child('sid').isString() && newData.child('to').isString())"
+              }
+            }
+          },
           "$other": {
             ".validate": false
           }

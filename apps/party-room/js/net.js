@@ -9,6 +9,9 @@
  *   notes      { [uid]: { text, at } } a private nudge ("so close!")
  *   inbox      { [push id]: { uid, t, ... } } what players did; the host consumes it
  *   strokes    { [push id]: { s, c, w, p } } the drawing, written by whoever is drawing
+ *   media      { [uid]: { on, cam, mic, since, sid } } who is on the video call
+ *   rtc        { [to uid]: { [push id]: { from, t, d, sid, to } } } call setup
+ *              messages (offer, answer, ice), readable only by who they're for
  *
  * The rules (database.rules.json) refuse to list rooms, keep the vault to
  * the current host, and keep each secret and note to its owner. See
@@ -98,6 +101,9 @@ export function openRoom(code, uid) {
         if (!room.live) return;
         onDisconnect(r(`players/${uid}`)).update({ online: false, leftAt: serverTimestamp() });
         update(r(`players/${uid}`), { online: true, name });
+        // The server dropped our place on the call when the connection
+        // went; put it back.
+        if (room.mediaNow) room.setMedia(room.mediaNow);
       }));
     },
 
@@ -146,7 +152,39 @@ export function openRoom(code, uid) {
       return () => { a(); b(); };
     },
 
+    // ---- the video call (rtc.js). Video goes phone to phone; only these
+    // small setup messages pass through the database. ----
+    mediaNow: null,
+    async setMedia(v) {
+      room.mediaNow = v;
+      await onDisconnect(r(`media/${uid}`)).remove();
+      await onDisconnect(r(`rtc/${uid}`)).remove();
+      return set(r(`media/${uid}`), v);
+    },
+    updateMedia(v) {
+      if (room.mediaNow) Object.assign(room.mediaNow, v);
+      return update(r(`media/${uid}`), v);
+    },
+    async clearMedia() {
+      room.mediaNow = null;
+      await Promise.all([remove(r(`media/${uid}`)), remove(r(`rtc/${uid}`))]);
+      await onDisconnect(r(`media/${uid}`)).cancel();
+      await onDisconnect(r(`rtc/${uid}`)).cancel();
+    },
+    onMedia(cb) {
+      const u = onValue(r('media'), (s) => cb(s.val() || {}));
+      unsubs.push(u);
+      return u;
+    },
+    sendSignal(to, msg) { return push(r(`rtc/${to}`), { ...msg, from: uid }); },
+    onSignal(cb) {
+      const u = onChildAdded(r(`rtc/${uid}`), (s) => { const v = s.val(); remove(s.ref); if (v) cb(v); });
+      unsubs.push(u);
+      return u;
+    },
+
     async leave() {
+      room.onLeave && await room.onLeave();
       unsubs.splice(0).forEach((u) => u());
       await onDisconnect(r(`players/${uid}`)).cancel();
       await remove(r(`players/${uid}`));
