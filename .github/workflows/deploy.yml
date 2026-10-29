@@ -84,6 +84,11 @@ jobs:
       - name: Test the wait curves
         run: node apps/portfolio/test/curve.test.mjs
 
+      # What else is on in a given hour. The claims are specific enough to
+      # be wrong: a parade at two, a park shutting at six for a party.
+      - name: Test what's on
+        run: node apps/portfolio/test/whatson.test.mjs
+
       # The topic builder composes the line you read out loud, which is
       # exactly the sort of thing that rots into "Desserts in in any park"
       # unless something checks every subject against every place.

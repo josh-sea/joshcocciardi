@@ -82,6 +82,13 @@ export async function liveFor(park, opts = {}) {
     `live.${park}`, `/entity/${id}/live`, LIVE_FRESH_MS, opts
   );
 
+  /* Shows are kept, not dropped. They are what explains an odd-looking
+   * hour on a ride's curve: a parade at two, fireworks at nine. They cost
+   * nothing extra, being in the same payload. */
+  const shows = (data.liveData || [])
+    .filter((e) => e.entityType === 'SHOW' && Array.isArray(e.showtimes) && e.showtimes.length)
+    .map((e) => ({ id: e.id, name: e.name, status: e.status, showtimes: e.showtimes }));
+
   const rides = {};
   for (const e of data.liveData || []) {
     if (e.entityType !== 'ATTRACTION') continue;
@@ -94,7 +101,7 @@ export async function liveFor(park, opts = {}) {
       ll: ret ? { state: ret.state, start: ret.returnStart, end: ret.returnEnd } : null,
     };
   }
-  return { rides, age, from, error };
+  return { rides, shows, age, from, error };
 }
 
 /* Today's hours, including Early Entry. */
@@ -113,6 +120,9 @@ export async function hoursFor(park, dateStr, opts = {}) {
     open: operating ? operating.openingTime : null,
     close: operating ? operating.closingTime : null,
     earlyOpen: early ? early.openingTime : null,
+    /* The raw rows as well: ticketed parties live here, and they are what
+     * explain a park that shuts at six. */
+    schedule: data.schedule || [],
     age, from,
   };
 }

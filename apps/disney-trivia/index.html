@@ -629,8 +629,18 @@
       <button type="button" id="pl-curve-close" aria-label="Close">×</button>
     </div>
     <div class="pl-bars" id="pl-curve-bars"></div>
+    <p class="pl-curve-hint">Tap an hour to see what is on.</p>
     <p class="pl-curve-says" id="pl-curve-says"></p>
     <p class="pl-curve-best" id="pl-curve-best"></p>
+
+    <!-- What was happening in the hour you tapped. -->
+    <div class="pl-hour" id="pl-hour" hidden>
+      <div class="pl-hour-top">
+        <strong id="pl-hour-when"></strong>
+        <button type="button" id="pl-hour-close" aria-label="Close">×</button>
+      </div>
+      <div id="pl-hour-list"></div>
+    </div>
   </div>
 
   <div class="pl-cards" id="pl-cards"></div>
