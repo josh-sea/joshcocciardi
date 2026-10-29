@@ -11,6 +11,7 @@
 
 import { planAhead, explain, parkRatio, DEFAULT_PACE } from './park.js';
 import { bars, bestAhead, verdict, verdictWords, rightNow, hasCurve, coversUntil } from './curve.js';
+import { whatsOn } from './whatson.js';
 import { liveFor, hoursFor, parkDate, parkClock, ageWords } from './parkdata.js';
 
 const $ = (id) => document.getElementById(id);
@@ -338,14 +339,20 @@ function openCurve(rideId) {
   const now = new Date();
   const drawn = bars(l.forecast, now);
   $('pl-curve-bars').replaceChildren(...drawn.map((b) => {
-    const col = document.createElement('div');
+    /* A button, because every bar is a question: why is this hour like
+     * that. The answer is usually a parade, fireworks, or the park
+     * shutting early for a ticketed party. */
+    const col = document.createElement('button');
+    col.type = 'button';
     col.className = 'pl-col';
     col.dataset.when = b.isNow ? 'now' : (b.isPast ? 'past' : 'ahead');
     col.style.setProperty('--h', `${Math.round(b.rel * 100)}%`);
-    col.title = `${parkClock(b.t)} · ${b.waitMin} min`;
+    col.setAttribute('aria-label', `${parkClock(b.t)}, ${b.waitMin} minutes. What is on.`);
     col.innerHTML = `<i></i><span>${new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric' }).format(b.t)}</span>`;
+    col.onclick = () => openHour(b.t, b.waitMin);
     return col;
   }));
+  $('pl-hour').hidden = true;
 
   $('pl-curve-says').textContent = verdictWords(verdict(l.waitMin, l.forecast, now));
 
@@ -359,6 +366,62 @@ function openCurve(rideId) {
     bits.push(`The forecast only runs to ${parkClock(until)}, so the evening is not in this chart.`);
   }
   $('pl-curve-best').textContent = bits.join(' ');
+}
+
+/* What was happening at a given hour.
+ *
+ * The curve says a ride is busy at two. It does not say that the Festival
+ * of Fantasy parade starts at two, or that the park shuts at six for a
+ * ticketed party and everybody has been piling on since four. Those are the
+ * answers you want when a bar looks wrong, and the feed has them: shows
+ * carry their times and the schedule carries the park's.
+ */
+function openHour(t, waitMin) {
+  const box = $('pl-hour');
+  box.hidden = false;
+
+  const on = whatsOn(t, {
+    shows: live.shows || [],
+    schedule: (hours && hours.schedule) || [],
+    dateStr: parkDate(),
+  });
+
+  $('pl-hour-when').textContent = `${parkClock(t)} · about ${waitMin} min`;
+
+  const rows = [];
+  if (on.note) {
+    const p = document.createElement('p');
+    p.className = 'pl-hour-note';
+    p.dataset.tone = on.note.tone;
+    p.textContent = on.note.says;
+    rows.push(p);
+  }
+  const line = (e, big) => {
+    const el = document.createElement('div');
+    el.className = 'pl-hour-row';
+    if (big) el.dataset.big = 'yes';
+    el.innerHTML =
+      `<span class="pl-hour-time">${parkClock(e.start)}</span>` +
+      `<span class="pl-hour-name">${escapeHtml(e.name)}</span>` +
+      `<span class="pl-hour-kind">${escapeHtml(e.kind)}</span>`;
+    return el;
+  };
+  on.big.forEach((e) => rows.push(line(e, true)));
+  on.other.forEach((e) => rows.push(line(e, false)));
+
+  if (on.quiet.length) {
+    const more = document.createElement('p');
+    more.className = 'pl-hour-quiet';
+    more.textContent = 'Also on: ' + on.quiet.map((e) => e.name).join(', ');
+    rows.push(more);
+  }
+  if (!rows.length) {
+    const p = document.createElement('p');
+    p.className = 'pl-hour-quiet';
+    p.textContent = 'Nothing scheduled in this hour that would move crowds.';
+    rows.push(p);
+  }
+  $('pl-hour-list').replaceChildren(...rows);
 }
 
 /* The full board, so you can argue with the suggestion. Sorted by wait, which
@@ -527,7 +590,8 @@ export async function init() {
   renderLL();
   paintWhere();
 
-  $('pl-curve-close').onclick = () => { $('pl-curve').hidden = true; };
+  $('pl-curve-close').onclick = () => { $('pl-curve').hidden = true; $('pl-hour').hidden = true; };
+  $('pl-hour-close').onclick = () => { $('pl-hour').hidden = true; };
   $('pl-refresh').onclick = () => refresh({ force: true });
   $('pl-where').onclick = startWatching;
 
