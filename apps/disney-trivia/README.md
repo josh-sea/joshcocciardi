@@ -18,6 +18,7 @@ published copy. There is no build step.
 | `js/room.js` | rooms, roles and turn order. Pure, tested in node |
 | `js/roomstore.js` | the Firebase layer for rooms |
 | `js/park.js` | planner rules: walking, waits, scoring. Pure, tested in node |
+| `js/curve.js` | each ride's hourly day curve, and whether now is a good moment. Pure |
 | `js/parkdata.js` | ThemeParks.wiki client with a cache-first fallback |
 | `js/music.js` / `js/musicui.js` | background music |
 | `parks/attractions.json` | the committed ride catalogue |

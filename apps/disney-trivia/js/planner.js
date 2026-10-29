@@ -10,6 +10,7 @@
  */
 
 import { planAhead, explain, parkRatio, DEFAULT_PACE } from './park.js';
+import { bars, bestAhead, verdict, verdictWords, rightNow, hasCurve, coversUntil } from './curve.js';
 import { liveFor, hoursFor, parkDate, parkClock, ageWords } from './parkdata.js';
 
 const $ = (id) => document.getElementById(id);
@@ -209,6 +210,7 @@ function render() {
   if (!catalogue) return;
   $('pl-status').textContent = statusLine();
   todayLine();
+  drawRightNow();
 
   const from = here || parkCentre();
   const state = {
@@ -277,6 +279,88 @@ function whyNothing() {
   return 'Nothing to suggest just now. Pull to refresh in a few minutes.';
 }
 
+/* Rides having an unusually quiet spell, best first.
+ *
+ * The planner's own ranking answers "where next". This answers a different
+ * question: what is cheap right now that usually is not. It is the one
+ * thing the hourly curve gives you that a posted wait alone cannot, and it
+ * is deliberately a list rather than a single suggestion, because which of
+ * them is worth crossing a park for is a judgement about your day, not a
+ * number.
+ */
+function drawRightNow() {
+  const box = $('pl-now');
+  const head = $('pl-now-head');
+  const found = rightNow(ridesHere(), live.rides, new Date());
+
+  if (!found.length) {
+    box.replaceChildren();
+    head.textContent = '';
+    return;
+  }
+  head.textContent = `${found.length} ride${found.length === 1 ? '' : 's'} quieter than usual`;
+  box.replaceChildren(...found.slice(0, 6).map((r) => {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'pl-nowrow';
+    el.innerHTML =
+      `<span class="pl-nowsave">-${Math.round(r.saves)}</span>` +
+      `<span class="pl-nowname">${escapeHtml(r.name)}</span>` +
+      `<span class="pl-nownums"><b>${Math.round(r.liveMin)}</b> vs ${Math.round(r.expected)} usual</span>`;
+    el.onclick = () => openCurve(r.id);
+    return el;
+  }));
+}
+
+/* The ride's own day, drawn.
+ *
+ * Relative to its own busiest hour rather than any absolute scale, because
+ * the question is "when is this ride worth doing", not "is it busier than
+ * that one". The curve usually stops before closing time, so the chart says
+ * where it ends rather than letting the shape imply the evening.
+ */
+function openCurve(rideId) {
+  const ride = ridesHere().find((r) => r.id === rideId);
+  const l = (live.rides || {})[rideId] || {};
+  if (!ride) return;
+
+  const box = $('pl-curve');
+  box.hidden = false;
+  $('pl-curve-name').textContent = ride.name;
+
+  if (!hasCurve(l.forecast)) {
+    $('pl-curve-bars').replaceChildren();
+    $('pl-curve-says').textContent = 'No hourly forecast for this one, only the posted wait.';
+    $('pl-curve-best').textContent = '';
+    return;
+  }
+
+  const now = new Date();
+  const drawn = bars(l.forecast, now);
+  $('pl-curve-bars').replaceChildren(...drawn.map((b) => {
+    const col = document.createElement('div');
+    col.className = 'pl-col';
+    col.dataset.when = b.isNow ? 'now' : (b.isPast ? 'past' : 'ahead');
+    col.style.setProperty('--h', `${Math.round(b.rel * 100)}%`);
+    col.title = `${parkClock(b.t)} · ${b.waitMin} min`;
+    col.innerHTML = `<i></i><span>${new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric' }).format(b.t)}</span>`;
+    return col;
+  }));
+
+  $('pl-curve-says').textContent = verdictWords(verdict(l.waitMin, l.forecast, now));
+
+  const better = bestAhead(l.forecast, now, 2);
+  const until = coversUntil(l.forecast);
+  const bits = [];
+  if (better.length) {
+    bits.push('Quietest left today: ' + better.map((b) => `${parkClock(b.t)} (${b.waitMin} min)`).join(' and ') + '.');
+  }
+  if (until && hours && hours.close && until < new Date(hours.close).getTime() - 30 * 60000) {
+    bits.push(`The forecast only runs to ${parkClock(until)}, so the evening is not in this chart.`);
+  }
+  $('pl-curve-best').textContent = bits.join(' ');
+}
+
 /* The full board, so you can argue with the suggestion. Sorted by wait, which
  * is how everyone actually reads a wait-times list.
  */
@@ -308,13 +392,22 @@ function renderList(candidates) {
       <span class="pl-meta">${note || (c ? `${Math.round(c.walkMin)} min away` : '')}</span>
     `;
 
+    /* The whole row opens the ride's day, which is the natural thing to
+     * reach for once a chart exists at all. The star keeps its own hit
+     * area so starring never opens the chart by accident. */
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.onclick = () => openCurve(ride.id);
+    row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCurve(ride.id); } };
+
     const star = document.createElement('button');
     star.type = 'button';
     star.className = 'pl-star';
     star.setAttribute('aria-pressed', String(day.mustDo.includes(ride.id)));
     star.setAttribute('aria-label', `Must do ${ride.name}`);
     star.textContent = '★';
-    star.onclick = () => {
+    star.onclick = (e) => {
+      e.stopPropagation();
       day.mustDo = day.mustDo.includes(ride.id)
         ? day.mustDo.filter((x) => x !== ride.id)
         : [...day.mustDo, ride.id];
@@ -434,6 +527,7 @@ export async function init() {
   renderLL();
   paintWhere();
 
+  $('pl-curve-close').onclick = () => { $('pl-curve').hidden = true; };
   $('pl-refresh').onclick = () => refresh({ force: true });
   $('pl-where').onclick = startWatching;
 

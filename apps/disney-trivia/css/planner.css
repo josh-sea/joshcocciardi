@@ -389,3 +389,135 @@
   background: rgba(127,214,162,0.1);
   border-color: rgba(127,214,162,0.26);
 }
+
+/* ── rides having an unusually quiet spell ───────────────────────────────── */
+
+.pl-nowhead {
+  margin: 18px 0 8px !important;
+  color: var(--good) !important;
+}
+.pl-nowhead:empty { display: none; }
+
+.pl-now { display: grid; gap: 6px; }
+.pl-now:empty { display: none; }
+
+.pl-nowrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  padding: 10px 12px;
+  color: #EDE7F7;
+  background: rgba(127,214,162,0.09);
+  border: 1px solid rgba(127,214,162,0.28);
+  border-radius: 11px;
+  cursor: pointer;
+}
+/* Minutes saved, which is the number that decides whether to walk. */
+.pl-nowsave {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--good);
+  font-variant-numeric: tabular-nums;
+}
+.pl-nowname {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pl-nownums { flex: 0 0 auto; font-size: 11px; color: #9D90BD; }
+.pl-nownums b { color: #EDE7F7; }
+
+/* ── a ride's day ────────────────────────────────────────────────────────── */
+
+.pl-curvebox {
+  margin: 14px 0 0;
+  padding: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 14px;
+}
+.pl-curvebox[hidden] { display: none; }
+
+.pl-curvetop {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.pl-curvetop strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--display);
+  font-size: 17px;
+  line-height: 1.15;
+  color: var(--gold);
+}
+.pl-curvetop button {
+  flex: 0 0 auto;
+  width: 28px; height: 28px;
+  font: inherit; font-size: 18px; line-height: 1;
+  color: #9D90BD;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Bars scaled to the ride's own busiest hour, so a quiet ride still draws a
+ * readable shape. Heights come from a custom property set per bar. */
+.pl-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 104px;
+}
+.pl-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+}
+.pl-col i {
+  display: block;
+  width: 100%;
+  height: var(--h, 10%);
+  background: #4C4169;
+  border-radius: 4px 4px 2px 2px;
+}
+.pl-col span {
+  display: block;
+  margin-top: 5px;
+  font-size: 8.5px;
+  text-align: center;
+  color: #6F628E;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pl-col[data-when="past"] i { background: #352C52; }
+.pl-col[data-when="ahead"] i { background: #5D4F86; }
+/* Now, in gold, the way Google marks the live bar. */
+.pl-col[data-when="now"] i { background: var(--gold); }
+.pl-col[data-when="now"] span { color: var(--gold); font-weight: 800; }
+
+.pl-curve-says {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #EDE7F7;
+}
+.pl-curve-best {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #9D90BD;
+}
+.pl-curve-best:empty, .pl-curve-says:empty { display: none; }
+
+.pl-row[role="button"] { cursor: pointer; }

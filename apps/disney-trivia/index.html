@@ -617,6 +617,22 @@
   <p class="pl-today" id="pl-today"></p>
   <p class="pl-error" id="pl-error"></p>
 
+  <!-- Rides having an unusually quiet spell. The one thing an hourly
+       forecast gives you that a posted number cannot. -->
+  <h3 class="pl-nowhead" id="pl-now-head"></h3>
+  <div class="pl-now" id="pl-now"></div>
+
+  <!-- A ride's day, drawn. Opened by tapping any ride. -->
+  <div class="pl-curvebox" id="pl-curve" hidden>
+    <div class="pl-curvetop">
+      <strong id="pl-curve-name"></strong>
+      <button type="button" id="pl-curve-close" aria-label="Close">×</button>
+    </div>
+    <div class="pl-bars" id="pl-curve-bars"></div>
+    <p class="pl-curve-says" id="pl-curve-says"></p>
+    <p class="pl-curve-best" id="pl-curve-best"></p>
+  </div>
+
   <div class="pl-cards" id="pl-cards"></div>
 
   <details class="pl-fold">
