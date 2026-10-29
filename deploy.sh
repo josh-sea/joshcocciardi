@@ -182,6 +182,7 @@ build_disney() {
     cd "$ROOT_DIR"
     node apps/portfolio/test/whereami.test.mjs || fail "Where Am I tests failed"
     node apps/portfolio/test/park.test.mjs || fail "Park Planner tests failed"
+    node apps/portfolio/test/curve.test.mjs || fail "Wait curve tests failed"
     node apps/portfolio/test/scale.test.mjs || fail "1 to 10 tests failed"
     node apps/portfolio/test/room.test.mjs || fail "1 to 10 room tests failed"
 
