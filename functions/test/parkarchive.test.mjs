@@ -133,9 +133,29 @@ if (gapDoc) {
 }
 
 // ---- the window refusal is information, not a crash
-const far = await _internal.getDay('75ea578a-adc8-4116-a54d-dccb60765ef9', '2020-01-01', null);
+const MK = '75ea578a-adc8-4116-a54d-dccb60765ef9';
+const far = await _internal.getPage(
+  `https://api.themeparks.wiki/v1/entity/${MK}/history/daily?date=2020-01-01`, null);
 ok('an out-of-window day reports the boundary', far.windowExceeded === true && !!far.earliest, far);
 console.log('   API says the earliest readable day is', far.earliest);
+
+// ---- a range comes back paged, which is the whole point of the rewrite
+{
+  const page = await _internal.getPage(
+    `https://api.themeparks.wiki/v1/entity/${MK}/history/daily?from=2026-10-25&to=2026-10-30`, null);
+  ok('a range request succeeds', page.ok === true, page);
+  const dates = new Set();
+  for (const e of page.data.entities || []) for (const d of e.days || []) dates.add(d.date);
+  ok('and carries many days in one call', dates.size >= 5, dates.size);
+  console.log(`   one call returned ${dates.size} days for ${(page.data.entities || []).length} entities`);
+  // Six days is inside one 31-day page, so there is nothing after it.
+  ok('with no next page for a short range', !page.data.next, page.data.next);
+}
+
+// ---- /v1/me decides the window, and says nothing useful without a key
+ok('no key means no plan floor', (await _internal.planFloor(null)) === null, 'expected null');
+ok('a bad key degrades to null rather than throwing',
+  (await _internal.planFloor('not-a-real-key')) === null, 'expected null');
 
 // ---- today is never stored
 const todayDoc = docs.find((d) => d.data().date === r1.today);

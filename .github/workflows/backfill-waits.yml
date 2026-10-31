@@ -25,9 +25,14 @@
 # have quietly walked 7 and reported success. The job now also checks the
 # response's own `keyed` and `from` fields rather than trusting a 200.
 #
-# The 30-day window needs the API key in Firestore as well:
+# Reading further back than 7 days needs the API key in Firestore as well:
 #   park_secrets/collector { token: "...", apiKey: "..." }
 # Without the key this still runs, just inside the 7-day no-key window.
+#
+# How far back a blank `from` reaches is the key's own business: the run asks
+# /v1/me for its plan's earliest readable day. Nothing here needs editing
+# when the plan changes, and a run reports the window it walked so you can
+# see which one it got.
 
 name: Backfill park waits
 
@@ -35,7 +40,7 @@ on:
   workflow_dispatch:
     inputs:
       from:
-        description: 'Earliest day to fetch (YYYY-MM-DD). Blank = as far back as the key allows.'
+        description: 'Earliest day (YYYY-MM-DD). Leave BLANK to take everything the key allows: the run asks the API how far back its plan reaches.'
         required: false
         type: string
       to:

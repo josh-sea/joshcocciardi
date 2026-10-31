@@ -30,7 +30,9 @@
 // A free key is free and raises the readable window from 7 days to 30, plus
 // the hourly history budget from 60 calls to 600. It is worth having purely
 // for the one-time backfill; nothing afterwards needs it, because the open
-// path only ever asks for recent days.
+// path only ever asks for recent days. A paid key reaches further back (400
+// days on Pro, the whole archive on Business) and needs no change here: the
+// window comes from /v1/me, not from a constant.
 //
 //   1. Get a key at https://www.themeparks.wiki/pricing ("Create a free
 //      API key"). No card.
@@ -38,8 +40,11 @@
 //      bearer token, in Firestore: park_secrets/collector { apiKey: "..." }
 //      It must not go in the browser: a key in client-side JS is public, and
 //      the free tier's limits are per key.
-//   3. Actions tab -> "Backfill park waits" -> Run workflow, with `from` set
-//      to the oldest day you want (blank goes as far back as the key allows).
+//   3. Actions tab -> "Backfill park waits" -> Run workflow. Leave `from`
+//      blank: the run asks /v1/me how far back the key may read and takes
+//      all of it, so it is correct on free (30 days), Pro (400) or a
+//      full-archive plan without anyone editing a number here. Set `from`
+//      only to deliberately take less than the plan allows.
 //
 // That workflow holds the bearer token already, as the repo secret the
 // collector cron uses, so nothing has to be copied anywhere. It also retries
@@ -84,7 +89,10 @@ const UA = 'joshcocciardi.com park planner (personal, non-commercial)';
 // cold archive fills over a few visits rather than in one long request that
 // risks the function timeout; a backfill asks for the lot.
 const OPEN_LIMIT = 8;
-const BACKFILL_LIMIT = 40;
+// Ranges made days almost free to fetch, so this is now bounded by writes
+// and wall clock rather than by the history budget. The job is resumable,
+// so overshooting costs a second run and never a lost day.
+const BACKFILL_LIMIT = 400;
 
 // The function's own timeout is 300s. A full 30-day backfill is 120 API calls
 // across four parks, which should finish well inside that but is not
@@ -98,17 +106,27 @@ const CURSOR = '_cursor';
 
 /* ── the API ──────────────────────────────────────────────────────────────
  *
- * Returns `{ ok, data }`, or `{ windowExceeded, earliest }` for the one error
- * we treat as information rather than failure: a 403 naming the oldest day
- * this key may read is exactly the boundary we need, and far better than
- * computing it from "7 days" and hoping we agree with the server about what
- * that means.
+ * One page of daily summaries. Asked for by URL rather than by park and
+ * date, because the response's `next` is an absolute URL with the caller's
+ * parameters already carried forward, and following it as given is both
+ * simpler and less likely to drift from what the server meant.
+ *
+ * Returns `{ ok, data }`, or `{ windowExceeded, earliest }` for the one
+ * error treated as information rather than failure: a 403 naming the oldest
+ * day this key may read is exactly the boundary we want, and far better than
+ * computing it from "30 days" and hoping we agree with the server.
+ *
+ * Why a range and not a day at a time, which is what this did first: a park
+ * range answers with up to 31 park-local days per page and costs one unit of
+ * the hourly history budget either way. Day-at-a-time, a 400-day backfill of
+ * four parks is 1,600 calls against a Pro budget of 1,200 an hour, so it
+ * cannot finish. By range it is 52. Identical data, 30x less of the budget.
  */
-async function getDay(parkId, date, apiKey) {
+async function getPage(url, apiKey) {
   const headers = { 'user-agent': UA };
   if (apiKey) headers['X-API-Key'] = apiKey;
 
-  const res = await fetch(`${API}/entity/${parkId}/history/daily?date=${date}`, { headers });
+  const res = await fetch(url, { headers });
 
   if (res.status === 403) {
     const body = await res.json().catch(() => ({}));
@@ -116,7 +134,7 @@ async function getDay(parkId, date, apiKey) {
     if (err && err.type === 'HISTORY_WINDOW_EXCEEDED') {
       return { windowExceeded: true, earliest: err.earliestAllowedDate || null };
     }
-    throw new Error(`daily ${date} -> 403 ${(err && err.type) || ''}`);
+    throw new Error(`daily -> 403 ${(err && err.type) || ''}`);
   }
   if (res.status === 429) {
     const body = await res.json().catch(() => ({}));
@@ -125,9 +143,32 @@ async function getDay(parkId, date, apiKey) {
     e.retryAfter = (body.error && body.error.retryAfter) || null;
     throw e;
   }
-  if (!res.ok) throw new Error(`daily ${date} -> ${res.status}`);
+  if (!res.ok) throw new Error(`daily -> ${res.status}`);
 
   return { ok: true, data: await res.json() };
+}
+
+/* How far back this key may actually read.
+ *
+ * Asked rather than assumed. The floor used to be `today - 29`, which was
+ * right for a free key and silently wrong the moment the plan changed: a Pro
+ * key reaching 400 days would still have been asked for 30. /v1/me reports
+ * `historyEarliestDate` directly, costs no history budget, and is correct on
+ * every tier including a full-archive one.
+ *
+ * Returns null rather than throwing: a failure here should fall back to the
+ * conservative default, not lose the run.
+ */
+async function planFloor(apiKey) {
+  if (!apiKey) return null;
+  try {
+    const res = await fetch(`${API}/me`, { headers: { 'user-agent': UA, 'X-API-Key': apiKey } });
+    if (!res.ok) return null;
+    const me = await res.json();
+    return typeof me.historyEarliestDate === 'string' ? me.historyEarliestDate : null;
+  } catch {
+    return null;
+  }
 }
 
 /* ── what we already hold ──────────────────────────────────────────────────
@@ -135,11 +176,74 @@ async function getDay(parkId, date, apiKey) {
  * Asked by document id rather than with a query, so it needs no composite
  * index and costs exactly one read per candidate day.
  */
+const LOOKUP_CHUNK = 300;
+
 async function held(park, dates) {
   if (!dates.length) return new Set();
-  const refs = dates.map((d) => db().collection('park_history').doc(`${park}_${d}`));
-  const snaps = await db().getAll(...refs);
-  return new Set(snaps.filter((s) => s.exists).map((s) => s.data().date));
+  const out = new Set();
+  // Chunked: a getAll of several thousand refs is not a request anyone
+  // should send, and a full-archive window is exactly that size.
+  for (let i = 0; i < dates.length; i += LOOKUP_CHUNK) {
+    const slice = dates.slice(i, i + LOOKUP_CHUNK);
+    const refs = slice.map((d) => db().collection('park_history').doc(`${park}_${d}`));
+    const snaps = await db().getAll(...refs);
+    for (const snap of snaps) if (snap.exists) out.add(snap.data().date);
+  }
+  return out;
+}
+
+/* ── one park's missing days ───────────────────────────────────────────────
+ *
+ * Walks the range in the pages the API hands back, writing each page's days
+ * before asking for the next. Page by page rather than accumulating: a
+ * 31-day page of one park is well over a megabyte, so holding 400 days of
+ * four parks in memory at once would be tens of megabytes for no reason.
+ *
+ * Writes are batched per page. One `set` per park-day was fine at 92 of
+ * them and is not at 1,600.
+ */
+async function fillRange(key, park, todo, apiKey, deadline) {
+  const want = new Set(todo);
+  const stored = [];
+  const notes = [];
+
+  let url = `${API}/entity/${park.id}/history/daily?from=${todo[0]}&to=${todo[todo.length - 1]}`;
+  let pages = 0;
+
+  while (url) {
+    const page = await getPage(url, apiKey);
+    if (page.windowExceeded) {
+      notes.push(`out of window before ${page.earliest || '?'}`);
+      break;
+    }
+    pages++;
+    const entities = page.data.entities || [];
+
+    // Which of the days we still want does this page actually carry?
+    const here = new Set();
+    for (const e of entities) for (const d of e.days || []) if (want.has(d.date)) here.add(d.date);
+
+    const batch = db().batch();
+    let queued = 0;
+    for (const date of [...here].sort()) {
+      const { rides, index } = leanDay(entities, date);
+      if (!index.rides) continue;
+      batch.set(db().collection('park_history').doc(`${key}_${date}`), {
+        park: key, date, rides, index,
+        source: 'themeparks.daily',
+        fetchedAt: FieldValue.serverTimestamp(),
+      });
+      queued++;
+      stored.push(date);
+    }
+    if (queued) await batch.commit();
+
+    url = page.data.next || null;
+    if (url && Date.now() > deadline) { notes.push('out of time, run again'); return { stored, notes, ranOut: true }; }
+  }
+
+  notes.unshift(`${stored.length} days over ${pages} page${pages === 1 ? '' : 's'}`);
+  return { stored, notes };
 }
 
 /* ── the job ───────────────────────────────────────────────────────────────
@@ -157,10 +261,16 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
   let stored = 0;
   let ranOut = false;
 
-  // Hoisted and reported, because a backfill that quietly walks a 7-day
-  // window when it was asked for 30 looks exactly like a backfill that
-  // worked. The caller gets to check rather than trust.
-  const windowFloor = from || addDays(today, apiKey ? -29 : -6);
+  /* Hoisted and reported, because a backfill that quietly walks a 7-day
+   * window when it was asked for 400 looks exactly like one that worked.
+   * The caller gets to check rather than trust.
+   *
+   * An explicit `from` wins. Otherwise the key's own plan decides, asked
+   * from /v1/me rather than assumed: the floor was `today - 29`, which was
+   * right for a free key and would have quietly held a Pro key to 30 days
+   * of the 400 it can read. Keyless falls back to the published 7.
+   */
+  const windowFloor = from || (await planFloor(apiKey)) || addDays(today, -6);
 
   for (const [key, park] of Object.entries(PARKS)) {
     // The whole readable window first, then drop what we hold, then cap. See
@@ -179,35 +289,24 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
     const todo = pick(window, have, limit);
     if (!todo.length) { report[key] = 'up to date'; continue; }
 
-    const done = [];
-    for (const date of todo) {
-      if (Date.now() > deadline) {
-        ranOut = true;
-        done.push(`${date}: out of time, run again`);
-        break;
+    if (Date.now() > deadline) { ranOut = true; report[key] = 'out of time, run again'; continue; }
+
+    try {
+      const res = await fillRange(key, park, todo, apiKey, deadline);
+      if (res.ranOut) ranOut = true;
+      if (res.stored.length) {
+        stored += res.stored.length;
+        storedByPark[key] = res.stored;
       }
-      try {
-        const res = await getDay(park.id, date, apiKey);
-        if (res.windowExceeded) { report[key] = `out of window before ${res.earliest || '?'}`; break; }
-
-        const { rides, index } = leanDay(res.data.entities, date);
-        if (!index.rides) { done.push(`${date}: empty`); continue; }
-
-        await db().collection('park_history').doc(`${key}_${date}`).set({
-          park: key, date, rides, index,
-          source: 'themeparks.daily',
-          fetchedAt: FieldValue.serverTimestamp(),
-        });
-        stored++;
-        (storedByPark[key] || (storedByPark[key] = [])).push(date);
-        done.push(`${date}: ${index.waits} waits, median ${index.p50}`);
-      } catch (err) {
-        if (err.rateLimited) { report[key] = `rate limited, retry after ${err.retryAfter}s`; break; }
-        console.error(`[parkArchive] ${key} ${date} failed`, err);
-        done.push(`${date}: failed`);
+      report[key] = res.notes;
+    } catch (err) {
+      if (err.rateLimited) {
+        report[key] = `rate limited, retry after ${err.retryAfter}s`;
+      } else {
+        console.error(`[parkArchive] ${key} failed`, err);
+        report[key] = `failed: ${err.message || err}`;
       }
     }
-    if (done.length) report[key] = done;
   }
 
   if (stored) await writeCursor(storedByPark);
@@ -308,4 +407,7 @@ exports.parkArchive = onRequest(
 );
 
 exports.archive = archive;
-exports._internal = { getDay, held, writeCursor, OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS };
+exports._internal = {
+  getPage, planFloor, held, fillRange, writeCursor,
+  OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS, LOOKUP_CHUNK,
+};
