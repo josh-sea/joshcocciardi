@@ -45,8 +45,12 @@
 // collector cron uses, so nothing has to be copied anywhere. It also retries
 // the resumable passes for you. The equivalent by hand, if you would rather:
 //
-//     curl -H "X-Park-Token: $PARK_COLLECT_TOKEN" \
-//       'https://joshcocciardi.com/api/park/archive?from=2026-10-01'
+//     curl -sSL -H "X-Park-Token: $PARK_COLLECT_TOKEN" \
+//       'https://www.joshcocciardi.com/api/park/archive?from=2026-10-01'
+//
+// Note the www and the -L. The bare host answers 301 to www, and a 301 is
+// not a 2xx, which is how the first real backfill run failed. X-Park-Token
+// does survive that cross-host redirect; Authorization would not have.
 //
 // Note the header. Hosting does not forward `Authorization` through a
 // rewrite, so a bearer token sent that way is silently dropped and the call

@@ -65,7 +65,12 @@ jobs:
             exit 1
           fi
 
-          BASE="${DIRECT:-https://joshcocciardi.com/api/park/archive}"
+          # www, not the bare host: joshcocciardi.com answers 301 to
+          # www.joshcocciardi.com, and a 301 is not a 2xx, so the first real
+          # run of this job died on it. Belt and braces, curl also follows
+          # redirects below. Measured: X-Park-Token does survive a cross-host
+          # redirect, where Authorization would have been stripped.
+          BASE="${DIRECT:-https://www.joshcocciardi.com/api/park/archive}"
 
           # if-blocks rather than `[ -n "$X" ] && ...`: a step's default shell
           # is `bash -e`, so a short-circuit that evaluates false is a failed
@@ -84,7 +89,7 @@ jobs:
           # cheap and reports "up to date".
           for pass in 1 2 3; do
             echo "--- pass $pass"
-            code=$(curl -sS -o out.json -w '%{http_code}' \
+            code=$(curl -sS -L -o out.json -w '%{http_code}' \
               --max-time 300 --retry 2 --retry-delay 5 \
               -H "X-Park-Token: $TOKEN" \
               "$URL")
@@ -96,7 +101,18 @@ jobs:
               echo "403: the token does not match park_secrets/collector.token."
               exit 1
             fi
+            # A 3xx gets its own message. The first real run of this job
+            # exited 1 on a 301 with nothing but the status code to go on,
+            # which is a poor thing to hand someone.
+            if [ "$code" -ge 300 ] && [ "$code" -lt 400 ]; then
+              echo
+              echo "HTTP $code: the URL redirected and the redirect was not"
+              echo "followed to a final answer. Check the host in use above."
+              exit 1
+            fi
             if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+              echo
+              echo "HTTP $code from the archive endpoint. Body above, if any."
               exit 1
             fi
 
