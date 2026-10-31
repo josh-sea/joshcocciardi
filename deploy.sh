@@ -189,6 +189,7 @@ build_disney() {
     node apps/portfolio/test/curve.test.mjs || fail "Wait curve tests failed"
     node apps/portfolio/test/whatson.test.mjs || fail "What's-on tests failed"
     node apps/portfolio/test/parkdaily.test.mjs || fail "Wait archive tests failed"
+    node apps/portfolio/test/hist.test.mjs || fail "History screen tests failed"
     node apps/portfolio/test/scale.test.mjs || fail "1 to 10 tests failed"
     node apps/portfolio/test/room.test.mjs || fail "1 to 10 room tests failed"
 

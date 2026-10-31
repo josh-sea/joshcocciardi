@@ -77,6 +77,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { timingSafeEqual } = require('node:crypto');
 
 const { leanDay, daysInWindow, pick, addDays } = require('./parkdaily');
+const rollup = require('./parkrollup');
 const { _internal: live } = require('./parks');
 
 const { PARKS, localDate } = live;
@@ -115,7 +116,7 @@ const BACKFILL_LIMIT = 400;
  * across several passes instead of one long call. 40s of work plus the page
  * in flight lands comfortably inside 60.
  */
-const { BUDGET_MS, HOSTING_CAP_MS } = require('./parkhistory-limits.cjs');
+const { BUDGET_MS, FETCH_SHARE_MS, HOSTING_CAP_MS } = require('./parkhistory-limits.cjs');
 
 const CURSOR = '_cursor';
 
@@ -270,7 +271,11 @@ async function fillRange(key, park, todo, apiKey, deadline) {
  */
 async function archive({ now = new Date(), apiKey = null, from = null, to = null, limit = OPEN_LIMIT, budgetMs = BUDGET_MS } = {}) {
   const today = localDate(now);
-  const deadline = Date.now() + budgetMs;
+  const started = Date.now();
+  // Fetching gets the first share; whatever is left goes to rollups. Both
+  // are resumable, so an overrun costs a pass and never a day.
+  const deadline = started + Math.min(budgetMs, FETCH_SHARE_MS);
+  const hardStop = started + budgetMs;
   const report = {};
   const storedByPark = {};
   let stored = 0;
@@ -325,6 +330,36 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
   }
 
   if (stored) await writeCursor(storedByPark);
+
+  /* Rollups. Anything stored this run invalidates that park's charts, and a
+   * park left stale by an earlier pass is picked up here even when this pass
+   * stored nothing: that is the case a "rebuild what I just wrote" approach
+   * would drop on the floor.
+   */
+  const freshlyStale = Object.keys(storedByPark);
+  if (freshlyStale.length) await markStale(freshlyStale);
+
+  const rolled = {};
+  let rollupsLeft = 0;
+  try {
+    const todo = await staleParks();
+    for (const key of todo) {
+      if (Date.now() > hardStop) { rollupsLeft++; continue; }
+      try {
+        const out = await rebuildRollup(key);
+        await clearStale(key);
+        rolled[key] = out ? `${out.rides} rides over ${out.days} days` : 'nothing to roll up';
+      } catch (err) {
+        console.error(`[parkArchive] rollup ${key} failed`, err);
+        rolled[key] = `failed: ${err.message || err}`;
+        rollupsLeft++;
+      }
+    }
+  } catch (err) {
+    console.error('[parkArchive] stale lookup failed', err);
+  }
+  if (rollupsLeft) ranOut = true;
+
   return {
     today,
     stored,
@@ -334,8 +369,62 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
     keyed: !!apiKey,
     from: windowFloor,
     report,
+    ...(Object.keys(rolled).length ? { rollups: rolled } : {}),
     ...(ranOut ? { incomplete: true } : {}),
   };
+}
+
+/* ── rollups ───────────────────────────────────────────────────────────────
+ *
+ * The archive is one document per park-day, which is right for writing and
+ * useless for reading: a history chart wants one ride across the year, a
+ * column through 399 documents. So each park keeps two derived documents a
+ * browser can fetch whole. See parkrollup.js for why they hold strings.
+ *
+ * Rebuilt from the archive rather than patched in place. A rebuild costs the
+ * park's documents in reads, which is more than an incremental splice would,
+ * and buys something worth more: the rollup cannot drift from the archive it
+ * claims to summarise, because it is never anything but a fresh projection
+ * of it.
+ *
+ * Which parks need one is kept on the cursor, so a rebuild that runs out of
+ * budget is picked up by the next pass instead of being silently skipped and
+ * leaving a stale chart.
+ */
+async function rebuildRollup(key) {
+  const snap = await db().collection('park_history').where('park', '==', key).get();
+  const docs = snap.docs.map((d) => d.data());
+  const built = rollup.build(key, docs);
+  if (!built) return null;
+
+  const { rides, ...head } = built;
+  await Promise.all([
+    db().collection('park_rollups').doc(key).set({
+      ...head, builtAt: FieldValue.serverTimestamp(),
+    }),
+    db().collection('park_rollups').doc(`${key}_rides`).set({
+      park: key, from: built.from, to: built.to, days: built.days,
+      rides, builtAt: FieldValue.serverTimestamp(),
+    }),
+  ]);
+  return { days: built.days, rides: Object.keys(rides).length };
+}
+
+async function markStale(parks) {
+  if (!parks.length) return;
+  await db().collection('park_history').doc(CURSOR)
+    .set({ stale: FieldValue.arrayUnion(...parks) }, { merge: true });
+}
+
+async function clearStale(key) {
+  await db().collection('park_history').doc(CURSOR)
+    .set({ stale: FieldValue.arrayRemove(key) }, { merge: true });
+}
+
+async function staleParks() {
+  const snap = await db().collection('park_history').doc(CURSOR).get();
+  const list = (snap.exists && snap.data().stale) || [];
+  return list.filter((k) => Object.prototype.hasOwnProperty.call(PARKS, k));
 }
 
 /* The cursor exists so the app can tell whether the archive is behind with a
@@ -424,5 +513,6 @@ exports.parkArchive = onRequest(
 exports.archive = archive;
 exports._internal = {
   getPage, planFloor, held, fillRange, writeCursor,
-  OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS, HOSTING_CAP_MS, LOOKUP_CHUNK,
+  rebuildRollup, markStale, clearStale, staleParks,
+  OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS, FETCH_SHARE_MS, HOSTING_CAP_MS, LOOKUP_CHUNK,
 };

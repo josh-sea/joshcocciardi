@@ -97,6 +97,17 @@ jobs:
       - name: Test the wait archive
         run: node apps/portfolio/test/parkdaily.test.mjs
 
+      # The history screen. Two implementations meet here: the function
+      # encodes a year of waits into a string and the browser decodes it and
+      # indexes into it by date. Disagree about where day N sits and every
+      # chart is silently shifted while still looking plausible, so the suite
+      # checks them against each other rather than each against a fixture.
+      # The screen itself is driven in a real browser by
+      # apps/portfolio/test/history-render.mjs, which needs Chromium and the
+      # live archive and so is not run here.
+      - name: Test the history screen
+        run: node apps/portfolio/test/hist.test.mjs
+
       # The topic builder composes the line you read out loud, which is
       # exactly the sort of thing that rots into "Desserts in in any park"
       # unless something checks every subject against every place.

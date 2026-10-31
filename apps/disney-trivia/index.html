@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="css/music.css">
 <link rel="stylesheet" href="css/planner.css">
 <link rel="stylesheet" href="css/scale.css">
+<link rel="stylesheet" href="css/history.css">
 <link rel="manifest" href="manifest.json">
 
 <style>
@@ -475,6 +476,7 @@
     <button id="game-trivia" role="tab" aria-selected="true">Trivia</button>
     <button id="game-wa" role="tab" aria-selected="false">Where am I?</button>
     <button id="game-pl" role="tab" aria-selected="false">Planner</button>
+    <button id="game-hx" role="tab" aria-selected="false">History</button>
     <button id="game-sc" role="tab" aria-selected="false">1 to 10</button>
   </div>
 
@@ -689,6 +691,43 @@
   </details>
 
   <p class="pl-credit">Wait times from <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a>. Walk times are straight-line distance with a detour factor, so treat them as a guide.</p>
+</section>
+
+<section id="hx" hidden>
+
+  <div class="hx-parks" id="hx-parks" role="radiogroup" aria-label="Which park"></div>
+
+  <p class="hx-when"><span id="hx-range-when"></span> <span id="hx-age"></span></p>
+  <p class="hx-summary" id="hx-summary">Loading…</p>
+  <p class="hx-error" id="hx-error"></p>
+
+  <div class="hx-ranges" id="hx-ranges" aria-label="Which stretch of time"></div>
+
+  <h3 class="hx-head">By month</h3>
+  <div class="hx-bars" id="hx-months" role="group" aria-label="Median wait by month. Tap a month to look at it."></div>
+
+  <h3 class="hx-head">By day of the week</h3>
+  <div class="hx-bars" id="hx-days" role="group" aria-label="Median wait by day of the week"></div>
+
+  <h3 class="hx-head">Rides, busiest first</h3>
+  <div class="hx-detail" id="hx-ride-detail" hidden>
+    <div class="hx-detail-top">
+      <strong id="hx-ride-name"></strong>
+      <button type="button" id="hx-ride-close" aria-label="Close">×</button>
+    </div>
+    <p class="hx-says" id="hx-ride-says"></p>
+    <ul class="hx-extremes" id="hx-ride-extremes"></ul>
+    <h3 class="hx-head">Its months</h3>
+    <div class="hx-bars" id="hx-ride-months" role="group" aria-label="This ride by month"></div>
+    <h3 class="hx-head">Its days of the week</h3>
+    <div class="hx-bars" id="hx-ride-days" role="group" aria-label="This ride by day of the week"></div>
+  </div>
+
+  <div class="hx-rides" id="hx-rides"></div>
+
+  <button class="hx-more" id="hx-more" type="button" hidden></button>
+
+  <p class="hx-credit">Historical waits from <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a>, copied into this site's own archive a day at a time. Every figure is a median of what was actually posted, so a ride that broke down does not drag the day with it.</p>
 </section>
 
 <section id="sc" hidden>
@@ -1464,6 +1503,14 @@ const TABS = {
     load: () => import('./js/planner.js'),
     failInto: 'pl-error',
     failWith: 'Could not load the planner: ',
+  },
+  hx: {
+    panel: document.getElementById('hx'),
+    button: document.getElementById('game-hx'),
+    blurb: 'A year of queues, by month, by day of the week, and ride by ride.',
+    load: () => import('./js/histui.js'),
+    failInto: 'hx-error',
+    failWith: 'Could not load the history: ',
   },
   sc: {
     panel: document.getElementById('sc'),
