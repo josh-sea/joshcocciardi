@@ -165,8 +165,20 @@ is(daysInWindow({ today: '2026-10-31', earliest: '2026-10-25', through: '2026-10
 
 is(daysInWindow({ today: '2026-10-31', earliest: '2026-11-05' }), [], 'floor after the newest day is empty');
 is(daysInWindow({ today: 'nonsense', earliest: '2026-10-25' }), [], 'a bad today yields nothing');
-ok(daysInWindow({ today: '2026-10-31', earliest: '2020-01-01' }).length === WINDOW_MAX,
-  'a huge range is capped rather than looping forever');
+ok(daysInWindow({ today: '2026-10-31', earliest: '1990-01-01' }).length === WINDOW_MAX,
+  'an absurd range is capped rather than looping forever');
+
+// The cap must not be mistakable for a plan limit. A Pro key reads 400 days
+// and a full-archive one reaches 2021, so a 400-wide guard would clip a real
+// window while looking like a sanity check.
+ok(WINDOW_MAX > 400, 'the guard is wider than any plan it could be confused with');
+is(daysInWindow({ today: '2026-10-31', earliest: '2025-09-26' }).length, 400,
+  "a Pro-sized window is not clipped");
+// 1946, not 1945: the window is inclusive at both ends, floor through
+// yesterday. 2021-07-03 to 2026-10-30 is a difference of 1945 days and a
+// count of 1946, and the first number I wrote here was the difference.
+is(daysInWindow({ today: '2026-10-31', earliest: '2021-07-03' }).length, 1946,
+  'nor is a full-archive one');
 
 // The ordering bug this suite exists for. A full cap of held days must not
 // hide a gap behind them: cap-then-filter returns nothing here, and the day

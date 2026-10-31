@@ -125,7 +125,12 @@ function parkIndex(rides) {
  * days" or "30 days" but the boundary is the server's to draw, and guessing
  * it off-by-one costs either a lost day or a wasted 403 on every run.
  */
-const WINDOW_MAX = 400;
+// A guard against an absurd range or a runaway loop, not a tier limit. It
+// was 400, which is exactly what a Pro key can read, so the guard and the
+// plan were indistinguishable: a full-archive key reaching back to 2021
+// would have been silently clipped to 400 days by what looks like a
+// sanity check. The real limit is whatever /v1/me reports.
+const WINDOW_MAX = 4000;
 
 function daysInWindow({ today, earliest, through = null } = {}) {
   if (!isDate(today)) return [];
