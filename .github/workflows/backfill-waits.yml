@@ -11,18 +11,19 @@
 # What it needs:
 #   PARK_COLLECT_TOKEN  (already set, shared with collect-waits.yml) the token
 #                       stored in Firestore at park_secrets/collector.
-#   PARK_ARCHIVE_URL    optional. The deployed parkArchive URL, e.g.
+#   PARK_ARCHIVE_URL    optional, and not normally needed. The deployed
+#                       parkArchive URL, e.g.
 #                       https://parkarchive-<hash>-uc.a.run.app. Unset, the
 #                       job goes through the site's own /api/park/archive
 #                       rewrite, which is the normal path.
 #
-#                       It is there because I could not confirm from the docs
-#                       whether a Hosting rewrite forwards the Authorization
-#                       header. The documented stripping case is cookies, and
-#                       Firebase Auth's own pattern sends ID tokens this way,
-#                       so the rewrite should be fine. If it is not, the job
-#                       returns 403 and says to set this secret, rather than
-#                       leaving you to guess which end is at fault.
+# The token goes in an `X-Park-Token` header, not `Authorization`. Firebase
+# Hosting does not forward `Authorization` through a rewrite: tested against
+# the deployed function, a deliberately wrong bearer token came back 200 on
+# the unauthenticated path instead of 403, which it could only do if the
+# header never arrived. An authenticated backfill asking for 30 days would
+# have quietly walked 7 and reported success. The job now also checks the
+# response's own `keyed` and `from` fields rather than trusting a 200.
 #
 # The 30-day window needs the API key in Firestore as well:
 #   park_secrets/collector { token: "...", apiKey: "..." }
@@ -85,21 +86,47 @@ jobs:
             echo "--- pass $pass"
             code=$(curl -sS -o out.json -w '%{http_code}' \
               --max-time 300 --retry 2 --retry-delay 5 \
-              -H "Authorization: Bearer $TOKEN" \
+              -H "X-Park-Token: $TOKEN" \
               "$URL")
             echo "HTTP $code"
             cat out.json; echo
 
             if [ "$code" = "403" ]; then
               echo
-              echo "403. Either the token does not match park_secrets/collector,"
-              echo "or the Authorization header is not reaching the function"
-              echo "through the hosting rewrite. For the latter, set the"
-              echo "PARK_ARCHIVE_URL secret to the deployed function URL and"
-              echo "run this again."
+              echo "403: the token does not match park_secrets/collector.token."
               exit 1
             fi
-            [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || exit 1
+            if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+              exit 1
+            fi
+
+            # A 200 is not success. The run can be authenticated but keyless,
+            # in which case it walked 7 days and stored them perfectly well
+            # while silently ignoring the `from` you asked for. Checked on
+            # the first pass only, since later passes are the same request.
+            if [ "$pass" = "1" ]; then
+              if ! grep -q '"keyed":true' out.json; then
+                echo
+                echo "The run was NOT using the ThemeParks API key, so it only"
+                echo "reached back 7 days."
+                echo
+                echo "Add the key in the Firebase console under Firestore ->"
+                echo "park_secrets -> collector, as a field named apiKey,"
+                echo "alongside the existing token field. Then run this again."
+                echo
+                echo "Nothing is wrong with what it stored; there is just less"
+                echo "of it than you asked for."
+                exit 1
+              fi
+              if [ -n "$FROM" ] && ! grep -q "\"from\":\"$FROM\"" out.json; then
+                echo
+                echo "Asked for from=$FROM but the run reports a different"
+                echo "window, above. The key's 30-day limit may not reach that"
+                echo "far back; try a later date."
+                exit 1
+              fi
+              echo "Authenticated, key in use, window honoured."
+            fi
 
             # Stop as soon as a pass had nothing left to do.
             if ! grep -q '"incomplete"' out.json; then

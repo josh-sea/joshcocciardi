@@ -61,6 +61,23 @@ ok('no null values stored', !JSON.stringify(one.rides).includes('null'), null);
 ok('source recorded', one.source === 'themeparks.daily', one.source);
 ok('fetchedAt is a timestamp', !!one.fetchedAt, one.fetchedAt);
 
+// ---- the response has to make a keyless run obvious
+//
+// Hosting eats the Authorization header on a rewrite, so an authenticated
+// backfill can arrive keyless and walk 7 days while answering 200. The only
+// defence is the response saying which it was, so the caller can refuse it.
+ok('an unkeyed run says so', r1.keyed === false, r1.keyed);
+ok('and echoes the window floor it walked', /^\d{4}-\d{2}-\d{2}$/.test(r1.from), r1.from);
+{
+  // budgetMs of -1 so this reads the window and writes nothing: an assertion
+  // placed mid-suite must not move the state later assertions were set up
+  // against. Storing a day here silently broke the cursor checks below.
+  const asked = '2026-10-26';
+  const r = await archive({ limit: 1, from: asked, budgetMs: -1 });
+  ok('an explicit from is echoed back', r.from === asked, r.from);
+  ok('and nothing was stored to get that answer', r.stored === 0, r.stored);
+}
+
 // ---- the cursor
 const cur = (await db.collection('park_history').doc('_cursor').get()).data();
 console.log('cursor newest:', JSON.stringify(cur.newest));
