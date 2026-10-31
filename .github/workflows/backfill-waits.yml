@@ -1,0 +1,114 @@
+# Park Planner: backfill the wait-time archive.
+#
+# Run by hand from the Actions tab. There is no schedule: this exists for the
+# one-time catch-up after adding a free ThemeParks.wiki API key, and for the
+# rare case of filling a gap left by a stretch of nobody opening the app.
+#
+# Why a workflow rather than a curl from a laptop: the bearer token is already
+# a repo secret here, for the collector cron. Running it here means the token
+# is never copied anywhere, and the run is logged.
+#
+# What it needs:
+#   PARK_COLLECT_TOKEN  (already set, shared with collect-waits.yml) the token
+#                       stored in Firestore at park_secrets/collector.
+#   PARK_ARCHIVE_URL    optional. The deployed parkArchive URL, e.g.
+#                       https://parkarchive-<hash>-uc.a.run.app. Unset, the
+#                       job goes through the site's own /api/park/archive
+#                       rewrite, which is the normal path.
+#
+#                       It is there because I could not confirm from the docs
+#                       whether a Hosting rewrite forwards the Authorization
+#                       header. The documented stripping case is cookies, and
+#                       Firebase Auth's own pattern sends ID tokens this way,
+#                       so the rewrite should be fine. If it is not, the job
+#                       returns 403 and says to set this secret, rather than
+#                       leaving you to guess which end is at fault.
+#
+# The 30-day window needs the API key in Firestore as well:
+#   park_secrets/collector { token: "...", apiKey: "..." }
+# Without the key this still runs, just inside the 7-day no-key window.
+
+name: Backfill park waits
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Earliest day to fetch (YYYY-MM-DD). Blank = as far back as the key allows.'
+        required: false
+        type: string
+      to:
+        description: 'Latest day to fetch (YYYY-MM-DD). Blank = yesterday.'
+        required: false
+        type: string
+
+concurrency:
+  group: park-archive
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Backfill
+        env:
+          TOKEN: ${{ secrets.PARK_COLLECT_TOKEN }}
+          DIRECT: ${{ secrets.PARK_ARCHIVE_URL }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+        run: |
+          set -u
+          if [ -z "$TOKEN" ]; then
+            echo "PARK_COLLECT_TOKEN is not set. Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          BASE="${DIRECT:-https://joshcocciardi.com/api/park/archive}"
+
+          # if-blocks rather than `[ -n "$X" ] && ...`: a step's default shell
+          # is `bash -e`, so a short-circuit that evaluates false is a failed
+          # command at the top level and would end the job right here, with a
+          # blank input as the only cause.
+          QS=""
+          if [ -n "$FROM" ]; then QS="from=$FROM"; fi
+          if [ -n "$TO" ]; then QS="${QS:+$QS&}to=$TO"; fi
+          URL="$BASE${QS:+?$QS}"
+          echo "Calling ${BASE} ${QS:+with $QS}"
+
+          # The endpoint is resumable by design: it walks oldest-first and
+          # skips days it already holds, so a run that hits its internal time
+          # budget is continued simply by running again. Three passes covers
+          # a full 30 days comfortably, and a pass with nothing left to do is
+          # cheap and reports "up to date".
+          for pass in 1 2 3; do
+            echo "--- pass $pass"
+            code=$(curl -sS -o out.json -w '%{http_code}' \
+              --max-time 300 --retry 2 --retry-delay 5 \
+              -H "Authorization: Bearer $TOKEN" \
+              "$URL")
+            echo "HTTP $code"
+            cat out.json; echo
+
+            if [ "$code" = "403" ]; then
+              echo
+              echo "403. Either the token does not match park_secrets/collector,"
+              echo "or the Authorization header is not reaching the function"
+              echo "through the hosting rewrite. For the latter, set the"
+              echo "PARK_ARCHIVE_URL secret to the deployed function URL and"
+              echo "run this again."
+              exit 1
+            fi
+            [ "$code" -ge 200 ] && [ "$code" -lt 300 ] || exit 1
+
+            # Stop as soon as a pass had nothing left to do.
+            if ! grep -q '"incomplete"' out.json; then
+              echo "Nothing left to fetch."
+              break
+            fi
+            echo "Ran out of time budget; continuing."
+          done
+
+          echo
+          echo "Done. Stored this run:"
+          grep -o '"stored":[0-9]*' out.json || true

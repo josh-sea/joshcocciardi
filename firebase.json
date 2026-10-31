@@ -17,6 +17,13 @@
           }
         },
         {
+          "source": "/api/park/archive",
+          "function": {
+            "functionId": "parkArchive",
+            "region": "us-central1"
+          }
+        },
+        {
           "source": "/projects/moments/**",
           "destination": "/projects/moments/index.html"
         },

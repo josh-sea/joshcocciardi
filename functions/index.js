@@ -50,6 +50,9 @@ exports.sboxCheckKey = sbox.sboxCheckKey;
 const parks = require('./parks');
 exports.parkCollect = parks.parkCollect;
 
+const parkHistory = require('./parkhistory');
+exports.parkArchive = parkHistory.parkArchive;
+
 // Recompute a place's aggregates from all of its reviews whenever any
 // review is created or updated. Full recount (not incremental): reviews per
 // place are small, and a recount self-heals any historical drift.
