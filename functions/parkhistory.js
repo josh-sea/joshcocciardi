@@ -45,12 +45,19 @@
 // collector cron uses, so nothing has to be copied anywhere. It also retries
 // the resumable passes for you. The equivalent by hand, if you would rather:
 //
-//     curl -H "Authorization: Bearer $PARK_COLLECT_TOKEN" \
+//     curl -H "X-Park-Token: $PARK_COLLECT_TOKEN" \
 //       'https://joshcocciardi.com/api/park/archive?from=2026-10-01'
 //
-// The response reports per park what it stored. `incomplete: true` means it
-// ran out of its time budget; call it again and it continues where it
-// stopped. Calling it with nothing missing is cheap and says "up to date".
+// Note the header. Hosting does not forward `Authorization` through a
+// rewrite, so a bearer token sent that way is silently dropped and the call
+// runs as the keyless 7-day path while still answering 200. See the note on
+// the handler below.
+//
+// The response reports per park what it stored, plus `keyed` and `from`, so
+// a caller can tell a 30-day run from a 7-day one rather than inferring it
+// from a 200. `incomplete: true` means it ran out of its time budget; call
+// it again and it continues where it stopped. Calling it with nothing
+// missing is cheap and says "up to date".
 //
 // Without the key in step 2 the backfill still works, just inside the 7-day
 // no-key window, so a missing key degrades rather than fails.
@@ -146,10 +153,14 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
   let stored = 0;
   let ranOut = false;
 
+  // Hoisted and reported, because a backfill that quietly walks a 7-day
+  // window when it was asked for 30 looks exactly like a backfill that
+  // worked. The caller gets to check rather than trust.
+  const windowFloor = from || addDays(today, apiKey ? -29 : -6);
+
   for (const [key, park] of Object.entries(PARKS)) {
     // The whole readable window first, then drop what we hold, then cap. See
     // the note on ordering in parkdaily.js: capping first hides gaps.
-    const windowFloor = from || addDays(today, apiKey ? -29 : -6);
     const window = daysInWindow({ today, earliest: windowFloor, through: to });
     if (!window.length) { report[key] = 'nothing in range'; continue; }
 
@@ -196,7 +207,17 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
   }
 
   if (stored) await writeCursor(storedByPark);
-  return { today, stored, report, ...(ranOut ? { incomplete: true } : {}) };
+  return {
+    today,
+    stored,
+    // `keyed` says whether the ThemeParks API key was in play, which is what
+    // decides a 7-day window from a 30-day one. `from` echoes the floor
+    // actually walked, so a caller can see it was honoured.
+    keyed: !!apiKey,
+    from: windowFloor,
+    report,
+    ...(ranOut ? { incomplete: true } : {}),
+  };
 }
 
 /* The cursor exists so the app can tell whether the archive is behind with a
@@ -240,8 +261,24 @@ exports.parkArchive = onRequest(
   // Nothing here needs to be callable from another site's page.
   { cors: false, timeoutSeconds: 300, memory: '256MiB', maxInstances: 2 },
   async (req, res) => {
+    /* Two ways to present the token, for one measured reason.
+     *
+     * Firebase Hosting does not forward `Authorization` through a rewrite.
+     * Tested against the deployed function: a deliberately wrong bearer
+     * token came back 200 on the unauthenticated path rather than 403, which
+     * it could only do if the header never arrived. That is the dangerous
+     * shape of failure, because an authenticated backfill asking for 30 days
+     * would quietly walk 7 and report success.
+     *
+     * `X-Park-Token` is a header Hosting has no opinion about, so it reaches
+     * the function through the rewrite and nobody has to know the function's
+     * own URL. `Authorization` is still read, for a direct call that bypasses
+     * Hosting, and because taking it away would be a trap of its own.
+     */
     const header = req.get('Authorization') || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const token = req.get('X-Park-Token')
+      || (header.startsWith('Bearer ') ? header.slice(7) : '')
+      || '';
 
     let authed = false;
     let apiKey = null;
