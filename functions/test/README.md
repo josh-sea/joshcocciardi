@@ -166,3 +166,30 @@ double-tapped answers landing once, writes into a round that has moved on,
 and that rejoining a room keeps your score instead of resetting it to zero.
 
 Same setup as `scale-rules.test.mjs`.
+
+## `parkarchive.test.mjs`
+
+Drives `parkArchive` against the emulator, with real ThemeParks.wiki calls.
+
+The archive exists because a free API key may only read the last 30 days of
+their history, so each park-day has to be copied into our own store before it
+ages out. A day lost here cannot be recovered, which is why this covers the
+write path and not just the arithmetic: documents landing with the right id
+and shape, a second run being a no-op, a hole punched in the middle of the
+window being found and refilled, today never being archived, and a day outside
+the window reading as a boundary rather than an exception.
+
+The suite clears `park_history` before it starts: the emulator can outlive a
+run, and a suite that assumes an empty database is one that passes or fails on
+whether the last one shut down cleanly.
+
+```sh
+# from the repo root, in one terminal
+npx --yes firebase-tools@13 emulators:start --only firestore --project josh-cocciardi
+
+# in another
+node functions/test/parkarchive.test.mjs
+```
+
+The arithmetic has its own suite with no emulator and no network, which CI
+runs on every deploy: `apps/portfolio/test/parkdaily.test.mjs`.

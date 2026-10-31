@@ -1014,6 +1014,20 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    // park_history is our own copy of ThemeParks.wiki's daily summaries, kept
+    // because a free key can only read the last 30 days of theirs. Public to
+    // read, like the live board: it is the same wait times, a day later.
+    //
+    // Writes are denied to every client, the signed-in ones included. The
+    // archive's whole value is that a day is written once from the API and
+    // then never touched, so the only writer is parkArchive through the
+    // Admin SDK, which bypasses these rules. `_cursor` lives in here too and
+    // is deliberately under the same rule: it is a cache of the archive, so
+    // a client that could write it could make the app skip real days.
+    match /park_history/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
     // A day plan belongs to the person who made it: must-dos, Lightning Lane
     // windows, what they have ridden and where they walked.
     match /park_plans/{uid}/days/{date} {

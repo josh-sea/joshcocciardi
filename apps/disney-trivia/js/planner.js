@@ -13,6 +13,7 @@ import { planAhead, explain, parkRatio, DEFAULT_PACE } from './park.js';
 import { bars, bestAhead, verdict, verdictWords, rightNow, hasCurve, coversUntil } from './curve.js';
 import { whatsOn } from './whatson.js';
 import { liveFor, hoursFor, parkDate, parkClock, ageWords } from './parkdata.js';
+import { nudge as nudgeArchive } from './history.js';
 
 const $ = (id) => document.getElementById(id);
 const PARK_ORDER = ['mk', 'ep', 'hs', 'ak'];
@@ -602,6 +603,17 @@ export async function init() {
    * back in, and the planner keeps working from the middle of the park.
    */
   startWatching();
+
+  /* Top up the wait-time archive. ThemeParks.wiki only lets a free key read
+   * the last 30 days of its history, so a day has to be copied into our own
+   * store before it ages out. Opening the planner is what triggers that,
+   * because no scheduler here has proved reliable enough to trust a day to.
+   *
+   * Deliberately not awaited, and its failure deliberately ignored: this is
+   * housekeeping for next year's charts, and it must never be the reason the
+   * planner is slow to show you a queue you are standing in.
+   */
+  nudgeArchive().catch(() => {});
 
   $('pl-skipheld').checked = day.skipHeld;
   $('pl-skipheld').onchange = (e) => { day.skipHeld = e.target.checked; saveDay(); render(); };
