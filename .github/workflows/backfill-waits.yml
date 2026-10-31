@@ -88,14 +88,23 @@ jobs:
           echo "Calling ${BASE} ${QS:+with $QS}"
 
           # The endpoint is resumable by design: it walks oldest-first and
-          # skips days it already holds, so a run that hits its internal time
-          # budget is continued simply by running again. Three passes covers
-          # a full 30 days comfortably, and a pass with nothing left to do is
-          # cheap and reports "up to date".
-          for pass in 1 2 3; do
+          # skips days it already holds, so a pass that hits its time budget
+          # is continued simply by asking again.
+          #
+          # Ten passes, not three, because the budget is now 40s rather than
+          # 240s: Firebase Hosting caps a request to a function at 60 seconds
+          # and answers 504, so a longer budget did not buy a longer call, it
+          # just meant the caller was cut off while the function carried on
+          # writing. A pass with nothing left to do is cheap and says
+          # "up to date", so an unused pass costs almost nothing.
+          for pass in 1 2 3 4 5 6 7 8 9 10; do
             echo "--- pass $pass"
+            # max-time just over Hosting's 60s cap: there is no point waiting
+            # 300s for a reply that cannot come after 60. The retry stays for
+            # a genuine network blip, and is no longer a way to start a second
+            # overlapping invocation, because a pass now finishes in ~40s.
             code=$(curl -sS -L -o out.json -w '%{http_code}' \
-              --max-time 300 --retry 2 --retry-delay 5 \
+              --max-time 75 --retry 2 --retry-delay 5 \
               -H "X-Park-Token: $TOKEN" \
               "$URL")
             echo "HTTP $code"
@@ -113,6 +122,20 @@ jobs:
               echo
               echo "HTTP $code: the URL redirected and the redirect was not"
               echo "followed to a final answer. Check the host in use above."
+              exit 1
+            fi
+            # A 504 is Hosting's 60s cap, not a broken function. It means a
+            # pass tried to do more than 60 seconds of work, which the budget
+            # is set to prevent; if it happens, the function carried on
+            # writing after the caller was cut off, so say so rather than
+            # implying nothing was stored.
+            if [ "$code" = "504" ]; then
+              echo
+              echo "HTTP 504: Firebase Hosting cut the request off at its 60s"
+              echo "cap. The function may still be writing. Wait a minute and"
+              echo "run this again; it resumes where it stopped. If this keeps"
+              echo "happening, BUDGET_MS in functions/parkhistory.js is too"
+              echo "close to the cap."
               exit 1
             fi
             if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then

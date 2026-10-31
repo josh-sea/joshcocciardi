@@ -94,13 +94,28 @@ const OPEN_LIMIT = 8;
 // so overshooting costs a second run and never a lost day.
 const BACKFILL_LIMIT = 400;
 
-// The function's own timeout is 300s. A full 30-day backfill is 120 API calls
-// across four parks, which should finish well inside that but is not
-// guaranteed to: a slow day upstream could run us over and the platform would
-// kill us mid-write. So we stop starting new days at 240s and report what is
-// left, which is safe precisely because the job is resumable: it walks
-// oldest-first and skips what it holds, so running it again continues.
-const BUDGET_MS = 240 * 1000;
+/* The budget that matters is Firebase Hosting's, not the function's.
+ *
+ * onRequest is configured for 300s and Cloud Run would allow it, but every
+ * caller reaches this through the /api/park/archive rewrite, and Hosting caps
+ * a request to a function at 60 seconds and answers 504. The function is not
+ * cancelled by that: it keeps running and writing while the caller has given
+ * up, and curl's --retry then starts a second one on top of the first.
+ *
+ * That is exactly what the first Pro backfill did. One dispatch produced two
+ * overlapping invocations: the first filled 618 park-days before Hosting cut
+ * the caller off at 60s, the second filled the remaining 862 and reported
+ * only its own share, so the log read "mk: up to date" for a park that had
+ * just been filled by an invocation nobody could see. The archive came out
+ * complete and gap-free because the writes are idempotent, which is luck, not
+ * design: it spent twice the API budget and produced a report that did not
+ * describe what happened.
+ *
+ * So the budget sits well under Hosting's cap, and a large backfill finishes
+ * across several passes instead of one long call. 40s of work plus the page
+ * in flight lands comfortably inside 60.
+ */
+const { BUDGET_MS, HOSTING_CAP_MS } = require('./parkhistory-limits.cjs');
 
 const CURSOR = '_cursor';
 
@@ -409,5 +424,5 @@ exports.parkArchive = onRequest(
 exports.archive = archive;
 exports._internal = {
   getPage, planFloor, held, fillRange, writeCursor,
-  OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS, LOOKUP_CHUNK,
+  OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS, HOSTING_CAP_MS, LOOKUP_CHUNK,
 };
