@@ -116,6 +116,26 @@ if (gapDoc) {
   ok('and only that day', r4.stored === 1, r4.stored);
 }
 
+// ---- a missing rollup is built even when nothing was stored
+//
+// The case this gets wrong exactly once: the first run after the feature
+// ships. The archive is already complete, so nothing is stored, nothing is
+// marked stale, and a rollup triggered only by storing would never be built.
+// The history screen would report no data for a complete archive.
+{
+  await db.collection('park_rollups').doc('mk').delete();
+  await db.collection('park_rollups').doc('mk_rides').delete();
+  const before = await db.collection('park_rollups').doc('mk').get();
+  ok('the rollup is gone to start with', !before.exists, null);
+
+  const r = await archive({ limit: 8 });
+  ok('and the run stores nothing, because the archive is complete', r.stored === 0, r.stored);
+  const after = await db.collection('park_rollups').doc('mk').get();
+  ok('yet the missing rollup is rebuilt anyway', after.exists, r.rollups);
+  ok('and its rides document with it',
+    (await db.collection('park_rollups').doc('mk_rides').get()).exists, null);
+}
+
 // ---- the rollups, which are what the history screen actually reads
 //
 // The archive is written per day and read per ride, so everything on screen

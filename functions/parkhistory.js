@@ -342,7 +342,7 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
   const rolled = {};
   let rollupsLeft = 0;
   try {
-    const todo = await staleParks();
+    const todo = [...new Set([...(await staleParks()), ...(await missingRollups())])];
     for (const key of todo) {
       if (Date.now() > hardStop) { rollupsLeft++; continue; }
       try {
@@ -425,6 +425,23 @@ async function staleParks() {
   const snap = await db().collection('park_history').doc(CURSOR).get();
   const list = (snap.exists && snap.data().stale) || [];
   return list.filter((k) => Object.prototype.hasOwnProperty.call(PARKS, k));
+}
+
+/* A park whose rollup does not exist yet needs one, whether or not this run
+ * stored anything.
+ *
+ * Without this the rollups are built only as a side effect of storing a day,
+ * which is fine forever after and wrong exactly once: the first run after
+ * this shipped. The archive was already complete to yesterday, so nothing
+ * would have been stored, nothing marked stale, and the history screen would
+ * have reported no data for a full archive until the next day rolled over.
+ * Four existence reads a run is a cheap way not to ship that.
+ */
+async function missingRollups() {
+  const keys = Object.keys(PARKS);
+  const refs = keys.map((k) => db().collection('park_rollups').doc(k));
+  const snaps = await db().getAll(...refs);
+  return keys.filter((_, i) => !snaps[i].exists);
 }
 
 /* The cursor exists so the app can tell whether the archive is behind with a
@@ -513,6 +530,6 @@ exports.parkArchive = onRequest(
 exports.archive = archive;
 exports._internal = {
   getPage, planFloor, held, fillRange, writeCursor,
-  rebuildRollup, markStale, clearStale, staleParks,
+  rebuildRollup, markStale, clearStale, staleParks, missingRollups,
   OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS, FETCH_SHARE_MS, HOSTING_CAP_MS, LOOKUP_CHUNK,
 };
