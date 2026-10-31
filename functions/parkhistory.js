@@ -38,15 +38,19 @@
 //      bearer token, in Firestore: park_secrets/collector { apiKey: "..." }
 //      It must not go in the browser: a key in client-side JS is public, and
 //      the free tier's limits are per key.
-//   3. Run it, with the same bearer token the GitHub Actions cron uses:
+//   3. Actions tab -> "Backfill park waits" -> Run workflow, with `from` set
+//      to the oldest day you want (blank goes as far back as the key allows).
 //
-//        curl -H "Authorization: Bearer $PARK_COLLECTOR_TOKEN" \
-//          'https://joshcocciardi.com/api/park/archive?from=2026-10-01'
+// That workflow holds the bearer token already, as the repo secret the
+// collector cron uses, so nothing has to be copied anywhere. It also retries
+// the resumable passes for you. The equivalent by hand, if you would rather:
 //
-// The response reports per park what it stored. If it comes back with
-// `incomplete: true` it ran out of its time budget; run the same command
-// again and it continues where it stopped. Running it when there is nothing
-// missing is free and reports "up to date".
+//     curl -H "Authorization: Bearer $PARK_COLLECT_TOKEN" \
+//       'https://joshcocciardi.com/api/park/archive?from=2026-10-01'
+//
+// The response reports per park what it stored. `incomplete: true` means it
+// ran out of its time budget; call it again and it continues where it
+// stopped. Calling it with nothing missing is cheap and says "up to date".
 //
 // Without the key in step 2 the backfill still works, just inside the 7-day
 // no-key window, so a missing key degrades rather than fails.
