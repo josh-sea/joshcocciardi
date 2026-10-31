@@ -199,6 +199,30 @@ is(pick(w, ['2026-10-25', '2026-10-26', '2026-10-28', '2026-10-29', '2026-10-30'
 is(daysToFetch({ today: '2026-10-31', earliest: '2026-10-25', have: held, limit: 4 }),
   ['2026-10-29', '2026-10-30'], 'the one-call form agrees with the two-step form');
 
+/* ── the budget has to fit inside Hosting's cap ──────────────────────────
+ *
+ * Every caller reaches the archive through a Firebase Hosting rewrite, and
+ * Hosting answers 504 after 60 seconds while leaving the function running
+ * and writing. A budget above that cap does not buy a longer call; it buys
+ * an invisible second invocation when the caller retries. The first Pro
+ * backfill did exactly that: two overlapping runs, double the API budget,
+ * and a report that described only one of them.
+ *
+ * This is the one number where being wrong is silent, so it gets a test
+ * rather than a comment.
+ */
+{
+  const { createRequire: cr } = await import('node:module');
+  const req = cr(import.meta.url);
+  const { BUDGET_MS, HOSTING_CAP_MS } = req('../../../functions/parkhistory-limits.cjs');
+
+  ok(BUDGET_MS < HOSTING_CAP_MS, `budget ${BUDGET_MS}ms must be under the ${HOSTING_CAP_MS}ms cap`);
+  // Not merely under it: a page fetch in flight when the deadline passes
+  // still has to finish and be written, so leave real room.
+  ok(HOSTING_CAP_MS - BUDGET_MS >= 15000,
+    'with at least 15s of room for the page in flight');
+}
+
 /* ── the poke ───────────────────────────────────────────────────────────
  *
  * The browser side decides only whether to poke the endpoint. Getting this
