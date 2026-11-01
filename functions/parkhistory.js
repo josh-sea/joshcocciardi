@@ -83,7 +83,7 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { timingSafeEqual } = require('node:crypto');
 
-const { leanDay, daysInWindow, pick, addDays } = require('./parkdaily');
+const { leanDay, daysInWindow, pick, addDays, clampRange, laterDate } = require('./parkdaily');
 const rollup = require('./parkrollup');
 const hours = require('./parkhours');
 const { _internal: live } = require('./parks');
@@ -238,12 +238,37 @@ async function fillRange(key, park, todo, apiKey, deadline) {
   const stored = [];
   const notes = [];
 
-  let url = `${API}/entity/${park.id}/history/daily?from=${todo[0]}&to=${todo[todo.length - 1]}`;
+  const rangeUrl = (days) => `${API}/entity/${park.id}/history/daily`
+    + `?from=${days[0]}&to=${days[days.length - 1]}`;
+
+  // Narrowed rather than flagged, so each retry provably asks for less. See
+  // the refusal branch below.
+  let asking = todo;
+  let url = rangeUrl(asking);
   let pages = 0;
 
   while (url) {
     const page = await getPage(url, apiKey);
     if (page.windowExceeded) {
+      /* A refusal names the oldest readable day, and it refuses the whole
+       * range: one day past the boundary at the old end costs every
+       * reachable day behind it, so the pass stores nothing and the next
+       * pass asks for exactly the same thing. Retry from the boundary.
+       *
+       * This retries as many times as the boundary moves, which it can: a
+       * backfill running across midnight sees it move once. What stops that
+       * being a loop is that clampRange only ever returns a strictly shorter
+       * list, so `asking` shrinks on every retry and a server that keeps
+       * naming the same boundary gets null the second time. Termination is a
+       * property of the narrowing, not of a counter someone has to maintain.
+       */
+      const reach = clampRange(asking, page.earliest);
+      if (reach) {
+        notes.push(`clamped to ${page.earliest}`);
+        asking = reach;
+        url = rangeUrl(asking);
+        continue;
+      }
       notes.push(`out of window before ${page.earliest || '?'}`);
       break;
     }
@@ -305,7 +330,22 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
    * right for a free key and would have quietly held a Pro key to 30 days
    * of the 400 it can read. Keyless falls back to the published 7.
    */
-  const windowFloor = from || (await planFloor(apiKey)) || addDays(today, -6);
+  /* The later of the two, not whichever was asked for. An explicit `from`
+   * older than the plan can read used to stand as given, which put
+   * unreachable days at the oldest end of every request: the range endpoint
+   * refuses the whole range, so the pass stored nothing, and the next pass
+   * asked for exactly the same days. A backfill that cannot progress and
+   * answers 200.
+   *
+   * Raised to the plan's floor it simply fetches what it can, and the
+   * reported `from` no longer matches what was asked for, which is what the
+   * backfill workflow checks and reports as "that is further back than this
+   * key reaches".
+   *
+   * Keyless there is no plan to ask, so the floor stays unknown and
+   * fillRange's clamp is what keeps a straddling range honest.
+   */
+  const windowFloor = laterDate(from, await planFloor(apiKey)) || addDays(today, -6);
 
   for (const [key, park] of Object.entries(PARKS)) {
     // The whole readable window first, then drop what we hold, then cap. See
@@ -568,13 +608,27 @@ async function archiveHours({ now = new Date(), apiKey = null, from = null, to =
   let ranOut = false;
   let rateLimited = false;
 
+  /* The plan's own floor, so a day the key can no longer reach is not
+   * counted as work outstanding.
+   *
+   * Without it `left` cannot reach zero once the daily archive reaches
+   * further back than the plan does, which is the steady state as soon as a
+   * Pro month lapses: every run would call the archive incomplete and spend
+   * a call per park rediscovering the same boundary. On a schedule that is
+   * a job that fails forever while nothing is wrong.
+   *
+   * Asked for rather than assumed, and only used when the answer arrives: a
+   * /v1/me that fails must leave the window alone, not shrink it to a guess.
+   */
+  const floor = laterDate(from, await planFloor(apiKey));
+
   for (const [key, park] of Object.entries(PARKS)) {
     if (Date.now() > deadline) { ranOut = true; report[key] = 'out of time, run again'; continue; }
 
     let window;
     try {
       window = (await hourlyWindow(key)).filter((d) => d < today
-        && (!from || d >= from) && (!to || d <= to));
+        && (!floor || d >= floor) && (!to || d <= to));
     } catch (err) {
       report[key] = `lookup failed: ${err.message || err}`;
       continue;
@@ -629,9 +683,9 @@ async function archiveHours({ now = new Date(), apiKey = null, from = null, to =
     }
   }
 
-  const left = await hoursLeft(today);
+  const left = await hoursLeft(today, floor);
   return {
-    today, mode: 'hours', stored, keyed: !!apiKey, report, left,
+    today, mode: 'hours', stored, keyed: !!apiKey, from: floor || null, report, left,
     ...(Object.keys(rolled).length ? { rollups: rolled } : {}),
     ...(rateLimited ? { rateLimited: true } : {}),
     ...(ranOut || left ? { incomplete: true } : {}),
@@ -641,11 +695,12 @@ async function archiveHours({ now = new Date(), apiKey = null, from = null, to =
 /* How many park-days of hourly profile are still missing, so a caller can
  * say "stop" rather than guess from a report that only describes this pass.
  */
-async function hoursLeft(today) {
+async function hoursLeft(today, floor = null) {
   let left = 0;
   for (const key of Object.keys(PARKS)) {
     try {
-      const window = (await hourlyWindow(key)).filter((d) => d < today);
+      const window = (await hourlyWindow(key))
+        .filter((d) => d < today && (!floor || d >= floor));
       const have = await heldHours(key, window);
       left += window.length - have.size;
     } catch { /* counted as zero rather than failing the run over a count */ }

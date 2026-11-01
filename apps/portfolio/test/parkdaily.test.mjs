@@ -18,6 +18,7 @@ const require = createRequire(import.meta.url);
 const {
   addDays, median, leanRide, leanDay, parkIndex,
   daysInWindow, pick, daysToFetch, isDate, WINDOW_MAX,
+  clampRange, laterDate,
 } = require('../../../functions/parkdaily.js');
 
 let checks = 0;
@@ -300,6 +301,88 @@ is(daysToFetch({ today: '2026-10-31', earliest: '2026-10-25', have: held, limit:
  * furthest ahead there is. A server moving region must not silently shift
  * which day a wait time belongs to.
  */
+/* ── the plan's boundary ───────────────────────────────────────────────────
+ *
+ * The daily endpoint takes a range and refuses the whole of it, naming the
+ * oldest day the key may read. So one unreachable day at the old end of a
+ * request costs every reachable day behind it: the pass stores nothing, and
+ * the next pass asks for exactly the same range. That is a run that reports
+ * success, stores nothing, and never recovers on its own.
+ */
+
+is(clampRange(['2026-10-01', '2026-10-02', '2026-10-03'], '2026-10-02'),
+  ['2026-10-02', '2026-10-03'], 'a refusal is retried from the day the server named');
+is(clampRange(['2026-10-01', '2026-10-02'], '2026-10-02'),
+  ['2026-10-02'], 'down to a single reachable day');
+
+// Each of these must return null rather than a range, because each is a case
+// where asking again cannot help.
+is(clampRange(['2026-10-01', '2026-10-02'], '2026-11-01'), null,
+  'nothing inside the boundary is not worth a retry');
+is(clampRange(['2026-10-01', '2026-10-02'], null), null,
+  'no boundary named, nothing to clamp to');
+is(clampRange(['2026-10-01', '2026-10-02'], 'rubbish'), null,
+  'and a boundary that is not a date is not one');
+is(clampRange([], '2026-10-02'), null, 'an empty request has nothing to retry');
+/* The loop guard. A server that refuses a range and then names a boundary
+ * at or before the oldest day in it has contradicted itself; retrying the
+ * identical URL is how that becomes an infinite loop rather than a bug
+ * report.
+ */
+is(clampRange(['2026-10-01', '2026-10-02'], '2026-10-01'), null,
+  'a boundary that excludes nothing would retry the same range, so it does not');
+is(clampRange(['2026-10-02'], '2026-10-01'), null,
+  'likewise for a single day already inside it');
+
+/* The termination argument for the retry in fillRange, which narrows the
+ * days it is asking for on each refusal rather than counting attempts. The
+ * boundary genuinely can move more than once (a backfill running across
+ * midnight sees it move), so the retry is not capped at one; what stops it
+ * being a loop is that every clamp returns a strictly shorter list, and a
+ * boundary named a second time returns null instead of the same list again.
+ */
+{
+  let asking = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'];
+  let steps = 0;
+  for (;;) {
+    const reach = clampRange(asking, '2026-10-03');
+    if (!reach) break;
+    ok(reach.length < asking.length, 'every clamp asks for strictly fewer days');
+    asking = reach;
+    if (++steps > 10) { assert.fail('clampRange did not converge'); }
+  }
+  is(steps, 1, 'and a boundary named twice ends the retry instead of repeating it');
+  is(asking, ['2026-10-03', '2026-10-04'], 'leaving only the reachable days');
+}
+
+// A boundary that moves forward each time still converges, and still only
+// ever narrows.
+{
+  let asking = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'];
+  for (const boundary of ['2026-10-02', '2026-10-03', '2026-10-04']) {
+    const reach = clampRange(asking, boundary);
+    ok(reach && reach.length < asking.length, `a boundary moving to ${boundary} narrows again`);
+    asking = reach;
+  }
+  is(asking, ['2026-10-04'], 'down to the last reachable day');
+  is(clampRange(asking, '2026-10-05'), null, 'and then there is nothing left to ask for');
+}
+
+/* Two floors, the asked-for one and the plan's own. Both are constraints, so
+ * the one in force is whichever is later. Missing has to mean unconstrained:
+ * a /v1/me lookup that failed must not read as "reaches back nowhere" and
+ * shrink the window to a guess, which would make a job report the archive
+ * complete when it had stopped collecting.
+ */
+is(laterDate('2026-10-01', '2026-10-15'), '2026-10-15', 'the plan wins when it is the later');
+is(laterDate('2026-10-15', '2026-10-01'), '2026-10-15', 'and the request wins when it is');
+is(laterDate('2026-10-15', '2026-10-15'), '2026-10-15', 'equal is either');
+is(laterDate(null, '2026-10-15'), '2026-10-15', 'no request leaves the plan in force');
+is(laterDate('2026-10-15', null), '2026-10-15', 'no plan leaves the request in force');
+is(laterDate(null, null), null, 'neither is unconstrained, not a date');
+is(laterDate('rubbish', '2026-10-15'), '2026-10-15', 'rubbish is not a constraint');
+is(laterDate('2026-10-15', 'rubbish'), '2026-10-15', 'on either side');
+
 const ZONES = ['Asia/Tokyo', 'Pacific/Kiritimati', 'America/New_York', 'UTC'];
 
 if (process.env.PARKDAILY_ZONE_CHILD) {
