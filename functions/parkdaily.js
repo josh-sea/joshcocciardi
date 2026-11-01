@@ -157,7 +157,50 @@ function daysToFetch({ have = [], today, earliest, through = null, limit = 40 } 
   return pick(daysInWindow({ today, earliest, through }), have, limit);
 }
 
+
+/* ── the plan's boundary ───────────────────────────────────────────────────
+ *
+ * Two small decisions about a readable window that is narrower than the days
+ * we would like. Both live here, pure and tested, because getting either
+ * wrong produces a run that reports success and stores nothing.
+ */
+
+/* Which of the days asked for are still inside a boundary the server named.
+ *
+ * The daily endpoint takes a range, and one refusal covers the whole
+ * request: a single day past the boundary at the oldest end costs every
+ * reachable day behind it. So a refusal is worth one retry from the boundary
+ * itself.
+ *
+ * Returns null when a retry cannot help, which is the case worth being
+ * careful about: no boundary named, nothing inside it, or everything already
+ * inside it. That last one means the refusal was not about the range after
+ * all, and retrying the same days is how you build a loop.
+ */
+function clampRange(todo, earliest) {
+  if (!isDate(earliest) || !Array.isArray(todo) || !todo.length) return null;
+  const reach = todo.filter((d) => d >= earliest);
+  if (!reach.length || reach.length === todo.length) return null;
+  return reach;
+}
+
+/* The later of two boundaries, either of which may be missing.
+ *
+ * An asked-for floor and the plan's own floor are both constraints, so the
+ * effective one is whichever is later. Missing means unconstrained, not
+ * zero: a plan lookup that failed must not read as "reaches back forever",
+ * and it must not read as "reaches back nowhere" either.
+ */
+function laterDate(a, b) {
+  const x = isDate(a) ? a : null;
+  const y = isDate(b) ? b : null;
+  if (!x) return y;
+  if (!y) return x;
+  return x > y ? x : y;
+}
+
 module.exports = {
   addDays, before, median, leanRide, leanDay, parkIndex,
   daysInWindow, pick, daysToFetch, isDate, WINDOW_MAX,
+  clampRange, laterDate,
 };

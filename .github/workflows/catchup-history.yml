@@ -1,0 +1,78 @@
+# Park Planner: keep the archive inside the API's lookback window.
+#
+# The one scheduled job here with a deadline. Everything else can be re-run
+# whenever; this cannot. The history endpoints only serve days inside the
+# key's lookback window, which is thirty days on the free plan, so a day that
+# ages past the floor before it has been collected is gone for good. No
+# backfill brings it back, at any price short of the Business plan's archive.
+#
+# So the point of this job is to make the Pro month optional. Pro was bought
+# to reach back four hundred days once; this is what means we never need to
+# reach back more than one.
+#
+# Why daily and not fortnightly. The calls are nearly free: in the steady
+# state it is four range calls for the daily summaries and four park-days of
+# hourly detail, against a free-key budget of six hundred history calls an
+# hour. What a longer gap buys is nothing, and what it costs is slack. Daily
+# leaves a missed day twenty-nine more chances to be noticed; fortnightly
+# leaves one, and two failures in a row lose data permanently.
+#
+# It passes no dates on purpose. Both endpoints work out what they are
+# missing inside whatever the key can currently reach, so this is a gap sweep
+# rather than a "fetch yesterday": a run that was skipped is made good by the
+# next one. That self-healing is why there is nothing to configure here.
+#
+# The two Backfill workflows stay for what they are good at: a large
+# one-time catch-up over a window wider than this job ever needs to care
+# about. This is the thing that runs forever.
+#
+# Needs, both already in place for the collector:
+#   PARK_COLLECT_TOKEN  repo secret, the token at park_secrets/collector.
+#   the ThemeParks key  in Firestore at park_secrets/collector { apiKey }.
+#
+# Without the key the job fails rather than collecting a seven-day window and
+# calling it a success, which on a schedule is how an archive quietly becomes
+# a week long.
+
+name: Catch up park history
+
+on:
+  schedule:
+    # 18:41 UTC, which is early afternoon in Florida. Late enough that
+    # yesterday's park day is long closed and its history settled: parks can
+    # run to 1am, and a day fetched while it is still being written would be
+    # stored short and never asked for again, because both endpoints skip
+    # days they already hold.
+    #
+    # Odd minute deliberately. Scheduled jobs pile up on the hour and get
+    # delayed for it.
+    - cron: '41 18 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # Shared with both Backfill workflows: these write the same documents, and
+  # two of them at once would spend API budget racing each other.
+  group: park-archive
+  cancel-in-progress: false
+
+jobs:
+  catchup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned rather than relying on whatever the runner image ships, since
+      # the script wants global fetch and AbortController.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Catch up
+        env:
+          PARK_TOKEN: ${{ secrets.PARK_COLLECT_TOKEN }}
+          # Optional overrides. Unset, the script goes through the site's own
+          # /api/park/archive and /api/park/hours rewrites, which is normal.
+          PARK_ARCHIVE_URL: ${{ secrets.PARK_ARCHIVE_URL }}
+          PARK_HOURS_URL: ${{ secrets.PARK_HOURS_URL }}
+        run: node scripts/park-catchup.mjs

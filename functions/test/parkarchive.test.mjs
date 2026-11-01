@@ -181,6 +181,73 @@ if (gapDoc) {
     { was: r.left, now: again.left, stored: again.stored });
 }
 
+/* ---- the hourly pass respects a floor, so `left` can reach zero
+ *
+ * The count of outstanding park-days is what decides whether the catch-up
+ * job calls itself finished. If it counts days the key can no longer read,
+ * it can never reach zero: every run would report the archive incomplete
+ * and spend a call per park rediscovering the same boundary, for ever.
+ *
+ * Driven here with an explicit `from`, which takes the same path a plan
+ * floor from /v1/me does. Run with a key, the floor arrives on its own.
+ */
+{
+  /* The write cursor lives in this collection too, as a document with no
+   * date, and an undefined sorts to the end of an array rather than being
+   * ignored. So the newest day has to be taken from the dated documents
+   * only. The production path never sees it: every read of this collection
+   * is scoped `where('park', '==', key)`.
+   */
+  const all = (await db.collection('park_history').get()).docs
+    .map((d) => d.data().date)
+    .filter((d) => typeof d === 'string')
+    .sort();
+  const days = [...new Set(all)].sort();
+  const floor = days[days.length - 1];  // the newest day the archive holds
+
+  const r = await archiveHours({ from: floor, limit: 0, budgetMs: 60000 });
+  ok('a floor is reported back, so a caller can see it was applied',
+    r.from === floor, r.from);
+
+  /* limit: 0 fetches nothing, so `left` here is purely the count. With the
+   * floor at the newest archived day, the only day that can count is that
+   * day, and the hourly pass above already holds it for every park. Zero is
+   * the number that matters: it is what lets the catch-up job stop.
+   */
+  ok('nothing outside the floor is counted as outstanding', r.left === 0,
+    { left: r.left, floor });
+
+  /* And unbounded it is not zero, which is what proves the floor did the
+   * work rather than the archive happening to be complete. Without this the
+   * assertion above passes on an empty collection.
+   */
+  const open = await archiveHours({ limit: 0, budgetMs: 60000 });
+  ok('while the same count unbounded still has days outstanding', open.left > 0,
+    { bounded: r.left, unbounded: open.left });
+  ok('and reports no floor when none applies', open.from === null, open.from);
+
+  /* The floor decides what is asked for as well as what is counted, and the
+   * two are separate code paths. A pass that counts correctly but still
+   * asks for unreachable days spends a call per park per pass rediscovering
+   * a boundary it was already told about.
+   *
+   * `days[1]` is older than anything the hourly pass above profiled, so
+   * there is exactly one day per park inside this floor to fetch and one
+   * day outside it that must be left alone. Ignore the floor and the pass
+   * takes both, because it works newest-first through everything unheld.
+   */
+  const mid = days[1];
+  const before = new Set((await db.collection('park_hours').get()).docs.map((d) => d.id));
+  await archiveHours({ from: mid, limit: 2, budgetMs: 60000 });
+  const added = (await db.collection('park_hours').get()).docs
+    .map((d) => d.id).filter((id) => !before.has(id));
+
+  ok('a pass fetched something, so the next assertion is not vacuous',
+    added.length > 0, added);
+  ok('and nothing older than its floor', added.every((id) => id.slice(-10) >= mid),
+    { added, floor: mid });
+}
+
 // ---- a missing rollup is built even when nothing was stored
 //
 // The case this gets wrong exactly once: the first run after the feature
@@ -269,8 +336,18 @@ console.log('   API says the earliest readable day is', far.earliest);
 
 // ---- a range comes back paged, which is the whole point of the rewrite
 {
+  /* Derived from the boundary the call above just reported, not written
+   * down. This read `from=2026-10-25&to=2026-10-30`, which was inside the
+   * keyless seven-day window on the day it was written and fell out of it
+   * six days later: the suite then failed on a hardcoded date in a test
+   * whose whole subject is a window that slides. `far.earliest` is the
+   * oldest readable day according to the API itself, so the range is the
+   * full keyless window and stays correct on any day it is run.
+   */
+  const from = far.earliest;
+  const to = nextDayRaw(from, 5);
   const page = await _internal.getPage(
-    `https://api.themeparks.wiki/v1/entity/${MK}/history/daily?from=2026-10-25&to=2026-10-30`, null);
+    `https://api.themeparks.wiki/v1/entity/${MK}/history/daily?from=${from}&to=${to}`, null);
   ok('a range request succeeds', page.ok === true, page);
   const dates = new Set();
   for (const e of page.data.entities || []) for (const d of e.days || []) dates.add(d.date);
@@ -278,6 +355,37 @@ console.log('   API says the earliest readable day is', far.earliest);
   console.log(`   one call returned ${dates.size} days for ${(page.data.entities || []).length} entities`);
   // Six days is inside one 31-day page, so there is nothing after it.
   ok('with no next page for a short range', !page.data.next, page.data.next);
+}
+
+/* ---- a range that straddles the window boundary is retried, not abandoned
+ *
+ * The range endpoint refuses the whole request and names the oldest day it
+ * will serve. So one unreachable day at the old end of a request costs every
+ * reachable day behind it: the pass stores nothing and the next pass asks
+ * for the same range again.
+ *
+ * Keyless here on purpose. With a key the floor comes from /v1/me and the
+ * window never contains an unreachable day; without one the floor is
+ * unknown, which is the case the retry exists for. Driven against the real
+ * API's own refusal rather than a fixture, and derived from the boundary it
+ * reported above so it cannot go stale.
+ */
+{
+  const wipe = await db.collection('park_history').get();
+  await Promise.all(wipe.docs.map((d) => d.ref.delete()));
+
+  const straddle = nextDayRaw(far.earliest, -2);  // two days past what it will serve
+  const r = await archive({ from: straddle, limit: 8 });
+  console.log('   straddling:', JSON.stringify(r.report));
+
+  ok('a straddling range stores the days it can reach', r.stored > 0, r.stored);
+  ok('and says it clamped rather than claiming the whole window',
+    Object.values(r.report).some((n) => /clamped to /.test(String(n))), r.report);
+
+  const got = (await db.collection('park_history').get()).docs
+    .map((d) => d.data().date).filter((d) => typeof d === 'string');
+  ok('storing nothing the API refused to serve',
+    got.every((d) => d >= far.earliest), { oldest: got.sort()[0], boundary: far.earliest });
 }
 
 // ---- /v1/me decides the window, and says nothing useful without a key
