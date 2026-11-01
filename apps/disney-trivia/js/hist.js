@@ -268,3 +268,208 @@ const WEEKDAYS_SHORT = DOW;
 
 export const WEEKDAYS = DOW;
 export const MONTH_NAMES = MONTHS;
+
+/* ── cross-filtering ───────────────────────────────────────────────────────
+ *
+ * The four charts on a ride used to come from two different places: months
+ * and weekdays from the daily series, hours and the heatmap from the hourly
+ * rollup's pre-collapsed profiles. That is why none of them could filter any
+ * other. Two datasets have no shared rows to filter.
+ *
+ * So they now share one fact table: a value per day per hour, which for a
+ * ride is 398 x 24, about 9,500 numbers. Every chart is a grouping of that
+ * table, which makes each of them both a display and a control.
+ *
+ * The rule that makes it feel right is crossfilter's: a chart is aggregated
+ * with every filter EXCEPT its own. Select October and the months chart
+ * still shows all months, so you can see what you picked and pick another;
+ * the weekday, hour and heat charts show October only. Apply a chart's own
+ * filter to itself and it collapses to a single bar, which tells you nothing
+ * and leaves nowhere to click.
+ *
+ * Medians are recomputed over whatever is selected rather than combined from
+ * stored ones, because a median cannot be re-aggregated. This is the whole
+ * reason the grid is stored per day.
+ */
+
+export const DAY_SEP = ';';
+
+/* The stored grid: 24-slot series joined by ';', positional from `from`, an
+ * empty entry for a day with nothing. Trailing days are trimmed on write, so
+ * a short grid is normal and the missing tail is absent, not zero.
+ */
+export function decodeGrid(text) {
+  if (typeof text !== 'string' || !text.length) return [];
+  return text.split(DAY_SEP).map((day) => (day === '' ? null : decodeSeries(day)));
+}
+
+export const noSelection = () => ({ months: [], dows: [], hours: [] });
+
+export const isEmptySelection = (sel) =>
+  !sel || (!sel.months.length && !sel.dows.length && !sel.hours.length);
+
+/* Toggle a value in one dimension, which is what a click on a bar does.
+ * Returns a new selection rather than mutating, so a caller can keep the
+ * previous one to compare against.
+ */
+export function toggle(sel, dim, value) {
+  const base = sel || noSelection();
+  const list = base[dim] || [];
+  const has = list.some((v) => String(v) === String(value));
+  return {
+    ...base,
+    [dim]: has ? list.filter((v) => String(v) !== String(value)) : [...list, value],
+  };
+}
+
+/* The fact table. Built once per ride, reused for every re-render: the
+ * filtering is cheap but the date arithmetic per day is not free, and there
+ * are four views recomputed on every click.
+ */
+export function cube(from, grid) {
+  const days = grid.map((slots, i) => {
+    const date = dateAt(from, i);
+    return { date, month: date.slice(0, 7), dow: at(date).getUTCDay(), slots };
+  });
+  const months = [];
+  for (const d of days) if (!months.includes(d.month)) months.push(d.month);
+  return { from, days, months: months.sort() };
+}
+
+const monthLabel = (key) => `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(2, 4)}`;
+
+/* `skip` lists the dimensions this view groups by, which are the dimensions
+ * its own filters must not be applied to. The heatmap groups by two of them
+ * at once, which is why this is a list and not a name: it was a name, and
+ * comparing 'dows,hours' against 'dows' matched neither, so the heatmap
+ * quietly applied the very filters it was supposed to ignore and collapsed
+ * to one row when a weekday was selected.
+ */
+function picker(sel) {
+  const s = sel || noSelection();
+  const months = new Set(s.months.map(String));
+  const dows = new Set(s.dows.map(String));
+  const hours = new Set(s.hours.map(String));
+  const off = (skip, dim) => Array.isArray(skip) && skip.includes(dim);
+  return {
+    day: (d, skip) =>
+      (off(skip, 'months') || !months.size || months.has(d.month))
+      && (off(skip, 'dows') || !dows.size || dows.has(String(d.dow))),
+    hour: (h, skip) => off(skip, 'hours') || !hours.size || hours.has(String(h)),
+  };
+}
+
+/* Walk the table once per view, collecting values into buckets. `bucket`
+ * decides where a cell goes and returns null to drop it.
+ */
+function collect(cube, pick, skip, bucket) {
+  const out = new Map();
+  for (const d of cube.days) {
+    if (!d.slots || !pick.day(d, skip)) continue;
+    for (let h = 0; h < HOURS; h++) {
+      const v = d.slots[h];
+      if (v === null || v === undefined) continue;
+      if (!pick.hour(h, skip)) continue;
+      const key = bucket(d, h);
+      if (key === null) continue;
+      if (!out.has(key)) out.set(key, { values: [], days: new Set() });
+      const slot = out.get(key);
+      slot.values.push(v);
+      slot.days.add(d.date);
+    }
+  }
+  return out;
+}
+
+export function viewMonths(cube, sel) {
+  const pick = picker(sel);
+  const got = collect(cube, pick, ['months'], (d) => d.month);
+  return cube.months.map((key) => {
+    const slot = got.get(key);
+    return {
+      key,
+      label: monthLabel(key),
+      value: slot ? median(slot.values) : null,
+      days: slot ? slot.days.size : 0,
+    };
+  });
+}
+
+export function viewWeekdays(cube, sel) {
+  const pick = picker(sel);
+  const got = collect(cube, pick, ['dows'], (d) => String(d.dow));
+  return DOW_ORDER.map((d) => {
+    const slot = got.get(String(d));
+    return {
+      key: String(d),
+      label: DOW[d],
+      value: slot ? median(slot.values) : null,
+      days: slot ? slot.days.size : 0,
+    };
+  });
+}
+
+/* A 24-slot series under the current selection, in the same shape the hour
+ * chart, openHours and bestHour already take.
+ */
+export function viewHours(cube, sel) {
+  const pick = picker(sel);
+  const got = collect(cube, pick, ['hours'], (d, h) => String(h));
+  return Array.from({ length: HOURS }, (_, h) => {
+    const slot = got.get(String(h));
+    return slot ? median(slot.values) : null;
+  });
+}
+
+/* The weekday-by-hour grid, scaled against the busiest cell in the grid as
+ * drawn. Under a filter that top moves, which is the point: a heatmap of
+ * October should be scaled to October.
+ */
+export function viewHeat(cube, sel) {
+  const pick = picker(sel);
+  const got = collect(cube, pick, ['dows', 'hours'], (d, h) => `${d.dow}|${h}`);
+  const value = (d, h) => {
+    const slot = got.get(`${d}|${h}`);
+    return slot ? median(slot.values) : null;
+  };
+
+  let top = 0;
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < HOURS; h++) {
+      const v = value(d, h);
+      if (v !== null && v > top) top = v;
+    }
+  }
+
+  return {
+    top,
+    rows: DOW_ORDER.map((d) => ({
+      key: String(d),
+      label: DOW[d],
+      cells: Array.from({ length: HOURS }, (_, h) => {
+        const v = value(d, h);
+        return { hour: h, dow: d, value: v, pct: top > 0 && v !== null ? Math.round((v / top) * 100) : null };
+      }),
+    })),
+  };
+}
+
+/* What the current selection actually covers, so the page can say so. A
+ * filtered chart drawn without its sample count invites reading a median of
+ * two afternoons as a fact about October.
+ */
+export function viewScope(cube, sel) {
+  const pick = picker(sel);
+  const days = new Set();
+  const values = [];
+  for (const d of cube.days) {
+    if (!d.slots || !pick.day(d, [])) continue;
+    for (let h = 0; h < HOURS; h++) {
+      const v = d.slots[h];
+      if (v === null || v === undefined || !pick.hour(h, [])) continue;
+      days.add(d.date);
+      values.push(v);
+    }
+  }
+  return { days: days.size, cells: values.length, value: median(values) };
+}

@@ -94,6 +94,18 @@ export const ridesRollup = (park, opts) => doc(`${park}_rides`, opts);
 // every caller has to cope with `data` being null rather than assume it.
 export const hoursRollup = (park, opts) => doc(`${park}_hours`, opts);
 
+/* One ride's hour-by-hour grid, a value per day per hour.
+ *
+ * Its own document, and fetched only when that ride is opened. All of a
+ * park's grids together are about 566KB and grow with every day collected,
+ * which is both a document-size limit with a date on it and half a megabyte
+ * to draw one chart on park wifi. Separately each is about 21KB.
+ *
+ * Missing is normal: a ride added since the last rollup, or a park whose
+ * hourly backfill has not reached it. Callers cope with null.
+ */
+export const rideHours = (park, id, opts) => doc(`${park}_hours_${id}`, opts);
+
 /* How old, in words. Deliberately vague past a point: "3 days ago" is the
  * honest answer and "73 hours" pretends to a precision nobody needs.
  */

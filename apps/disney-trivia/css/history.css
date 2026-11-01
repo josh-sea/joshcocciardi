@@ -342,3 +342,70 @@ button.hx-col:focus-visible i { outline: 2px solid var(--gold); outline-offset: 
   .hx-parks { grid-template-columns: repeat(2, 1fr); }
   .hx-bars { height: 112px; }
 }
+
+/* ── cross-filtering ────────────────────────────────────────────────────────
+ *
+ * A chart here is both a display and a control, so a bar has to read as
+ * pressable, and the unselected bars have to stay legible once something is
+ * selected. They are dimmed rather than hidden: the question a filtered
+ * chart answers is "how does October compare", and hiding the comparison
+ * answers it with nothing.
+ */
+.hx-col[data-off="yes"] i { opacity: 0.3; }
+.hx-col[data-off="yes"] span,
+.hx-col[data-off="yes"] em { opacity: 0.45; }
+
+/* The heat cells become buttons when there is a table behind them. A button
+ * brings its own padding, border and background, all of which would break a
+ * grid whose cells are 14px tall and one pixel apart.
+ */
+.hx-heat button {
+  display: block;
+  height: 14px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.05);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.hx-heat button[data-v] { background: rgba(232,179,60,calc(var(--v) / 100)); }
+.hx-heat button[data-on="yes"] { box-shadow: inset 0 0 0 2px var(--gold); }
+.hx-heat button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+/* What is filtered, written out. Without it a filtered chart is
+ * indistinguishable from a quiet ride.
+ */
+.hx-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 2px;
+}
+.hx-chip {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #150E24;
+  background: var(--gold);
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.hx-chip::after { content: " ×"; }
+.hx-chip-clear {
+  color: var(--gold);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(232,179,60,0.5);
+}
+.hx-chip-clear::after { content: ""; }
+.hx-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.hx-scope {
+  font-size: 12px;
+  color: #9D90BC;
+  margin-left: 2px;
+}

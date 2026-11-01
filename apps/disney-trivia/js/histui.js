@@ -15,11 +15,13 @@
  * height, no width, and were invisible. A prefix nobody else uses is cheap.
  */
 
-import { parkRollup, ridesRollup, hoursRollup, ageWords } from './histdata.js';
+import { parkRollup, ridesRollup, hoursRollup, rideHours, ageWords } from './histdata.js';
 import {
   decodeSeries, median, byMonth, byWeekday, compareRange,
   rankRides, extremes, bars, dateAt, indexOfDate,
   hourRows, openHours, bestHour, heatGrid, hourLabel, WEEKDAYS, DOW_ORDER,
+  decodeGrid, cube, toggle, noSelection, isEmptySelection,
+  viewMonths, viewWeekdays, viewHours, viewHeat, viewScope,
 } from './hist.js';
 
 const $ = (id) => document.getElementById(id);
@@ -45,6 +47,18 @@ const FIRST_SHOWN = 12;
 let showAll = false;
 let hours = null;      // the hourly rollup, if the backfill has run
 let dow = 'all';       // which day of the week the hourly charts show
+
+/* The open ride's fact table and what is selected in it.
+ *
+ * One table, three dimensions, four charts over it. Each chart is both a
+ * display and a control, and each is aggregated with every filter except
+ * its own, so selecting October leaves the months chart showing every month
+ * and narrows everything else. A chart that filtered itself would collapse
+ * to one bar with nowhere left to click.
+ */
+let rideCube = null;   // { id, cube, span } for the ride that is open
+let rideBusy = false;  // a grid fetch in flight, so a double click is not two
+let sel = noSelection();
 
 /* ── presets ───────────────────────────────────────────────────────────────
  *
@@ -116,18 +130,30 @@ function drawRanges() {
  * into elements. Each bar is a real button when `onPick` is given, because a
  * chart you can tap has to be reachable without a pointer too.
  */
+/* `active` is a single key or a list of them: a cross-filtered chart can
+ * have several bars selected at once.
+ */
+const isActive = (active, key) => (Array.isArray(active)
+  ? active.some((k) => String(k) === String(key))
+  : active !== null && String(active) === String(key));
+
 function drawBars(into, rows, { onPick = null, active = null } = {}) {
   const el = $(into);
   if (!rows.length) { el.replaceChildren(); return; }
+  const picked = Array.isArray(active) && active.length > 0;
   el.replaceChildren(...bars(rows).map((r) => {
     const col = document.createElement(onPick ? 'button' : 'div');
     col.className = 'hx-col';
     if (onPick) {
       col.type = 'button';
       col.onclick = () => onPick(r);
+      col.setAttribute('aria-pressed', isActive(active, r.key) ? 'true' : 'false');
       col.setAttribute('aria-label', `${r.label}, ${mins(r.value)}${r.days ? `, ${r.days} days` : ''}`);
     }
-    if (r.key === active) col.dataset.on = 'yes';
+    if (isActive(active, r.key)) col.dataset.on = 'yes';
+    // Something is selected and this is not it: dim rather than hide, so the
+    // comparison the chart exists for is still readable.
+    else if (picked) col.dataset.off = 'yes';
     if (r.value === null) col.dataset.empty = 'yes';
 
     const bar = document.createElement('i');
@@ -279,14 +305,52 @@ function drawRides() {
     row.onclick = () => {
       const opening = openRide !== ride.id;
       openRide = opening ? ride.id : null;
+      // A different ride is a different table, so the old selection means
+      // nothing against it and carrying it over would silently filter the
+      // new ride by last ride's October.
+      sel = noSelection();
+      rideCube = null;
       render();
       if (opening) {
+        loadRideGrid(ride.id);
         const panel = $('hx-ride-detail');
         if (panel.scrollIntoView) panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     };
     return row;
   }));
+}
+
+/* Fetch one ride's per-day grid, which is what makes its charts filterable.
+ *
+ * Its own document and its own request, because all of a park's grids come
+ * to about 566KB: too much to send to draw one ride, and it grows with every
+ * day collected. The panel draws immediately from the profiles it already
+ * has and redraws when this lands, rather than showing nothing until it
+ * does.
+ *
+ * A missing grid is normal, not an error: a park whose hourly backfill has
+ * not reached it yet, or a ride added since the last rollup. The panel falls
+ * back to the collapsed profiles and says the detail is not collected.
+ */
+async function loadRideGrid(id) {
+  if (rideBusy) return;
+  rideBusy = true;
+  try {
+    const got = await rideHours(park, id);
+    // The ride may have been closed or swapped while this was in flight.
+    if (openRide !== id) return;
+    const grid = got && got.data ? decodeGrid(got.data.h) : [];
+    if (!grid.length) { rideCube = null; return; }
+    const built = cube(got.data.from, grid);
+    rideCube = { id, cube: built, span: openHours(viewHours(built, noSelection())) };
+  } catch {
+    // Offline or blocked: the profiles already drawn are still true.
+    if (openRide === id) rideCube = null;
+  } finally {
+    rideBusy = false;
+    if (openRide === id) drawRide();
+  }
 }
 
 function drawRide() {
@@ -325,11 +389,94 @@ function drawRide() {
 
   drawRideHours();
 
-  drawBars('hx-ride-months', byMonth(s, rides.from), {
-    onPick: (row) => pickMonth(row),
-    active: range && range.key && range.key.startsWith('m:') ? range.key.slice(2) : null,
-  });
-  drawBars('hx-ride-days', byWeekday(s, rides.from));
+  /* With a grid, every chart below comes from the same table and they filter
+   * each other. Without one, they fall back to the daily series and are
+   * read-only: there is nothing to cross-filter against, and a chart that
+   * looks clickable and does nothing is worse than one that does not.
+   */
+  if (rideCube && rideCube.id === openRide) {
+    drawBars('hx-ride-months', viewMonths(rideCube.cube, sel), {
+      onPick: (row) => pick('months', row.key),
+      active: sel.months,
+    });
+    drawBars('hx-ride-days', viewWeekdays(rideCube.cube, sel), {
+      onPick: (row) => pick('dows', row.key),
+      active: sel.dows,
+    });
+  } else {
+    drawBars('hx-ride-months', byMonth(s, rides.from), {
+      onPick: (row) => pickMonth(row),
+      active: range && range.key && range.key.startsWith('m:') ? range.key.slice(2) : null,
+    });
+    drawBars('hx-ride-days', byWeekday(s, rides.from));
+  }
+  drawFilters();
+}
+
+/* A click on any bar. Toggling rather than replacing, so two months can be
+ * compared against each other, and a second click on the same bar clears it.
+ */
+function pick(dim, key) {
+  sel = toggle(sel, dim, key);
+  drawRide();
+}
+
+function clearFilters() {
+  sel = noSelection();
+  drawRide();
+}
+
+/* What is selected, written out and removable.
+ *
+ * Without this a filtered chart is indistinguishable from a quiet ride: the
+ * numbers are simply smaller and nothing says why. The day count matters for
+ * the same reason, because a median of two afternoons should not read like a
+ * fact about October.
+ */
+function drawFilters() {
+  const box = $('hx-ride-filters');
+  if (!rideCube || rideCube.id !== openRide || isEmptySelection(sel)) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  box.hidden = false;
+
+  const chip = (label, onClick) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hx-chip';
+    b.textContent = label;
+    b.onclick = onClick;
+    b.setAttribute('aria-label', `Remove filter ${label}`);
+    return b;
+  };
+
+  const kids = [];
+  const months = viewMonths(rideCube.cube, noSelection());
+  for (const key of sel.months) {
+    const row = months.find((m) => m.key === key);
+    kids.push(chip(row ? row.label : key, () => pick('months', key)));
+  }
+  for (const d of sel.dows) kids.push(chip(WEEKDAYS[Number(d)], () => pick('dows', d)));
+  for (const h of sel.hours) kids.push(chip(hourLabel(Number(h)), () => pick('hours', h)));
+
+  const scope = viewScope(rideCube.cube, sel);
+  const note = document.createElement('span');
+  note.className = 'hx-scope';
+  note.textContent = scope.cells
+    ? `${scope.days} day${scope.days === 1 ? '' : 's'}, median ${scope.value} min`
+    : 'nothing matches';
+  kids.push(note);
+
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.className = 'hx-chip hx-chip-clear';
+  clear.textContent = 'Clear';
+  clear.onclick = clearFilters;
+  kids.push(clear);
+
+  box.replaceChildren(...kids);
 }
 
 /* A ride's own hours, and its week as a grid.
@@ -341,28 +488,61 @@ function drawRide() {
  */
 function drawRideHours() {
   const wrap = $('hx-ride-hourly');
+  const live = rideCube && rideCube.id === openRide ? rideCube : null;
   const ride = hours && openRide ? hours.rides[openRide] : null;
-  if (!ride) { wrap.hidden = true; return; }
+  if (!live && !ride) { wrap.hidden = true; return; }
   wrap.hidden = false;
 
-  const series = hourSeries(ride);
+  /* The hour axis is fixed from the unfiltered data, not recomputed per
+   * filter. Let it follow the selection and the chart changes width on every
+   * click, which makes two selections impossible to compare by eye: the
+   * whole point of filtering is that the thing either side of it holds
+   * still.
+   */
+  const span = live ? live.span : openHours(hourSeries(ride));
+  const series = live ? viewHours(live.cube, sel) : hourSeries(ride);
+
   const { best, worst } = bestHour(series);
   $('hx-ride-hours-says').textContent = best && worst && best.hour !== worst.hour
     ? `Quietest around ${hourLabel(best.hour)} at ${best.value} min, busiest around ${hourLabel(worst.hour)} at ${worst.value} min.`
     : 'Not enough hours recorded to tell them apart.';
-  drawBars('hx-ride-hours', hourRows(series, openHours(series)));
 
-  const grid = heatGrid(ride.dow || []);
-  const span = openHours(decodeSeries(ride.all));
+  drawBars('hx-ride-hours', hourRows(series, span), live ? {
+    onPick: (row) => pick('hours', row.hour),
+    active: sel.hours,
+  } : {});
+
+  const heat = live
+    ? viewHeat(live.cube, sel)
+    : { top: 0, rows: heatGrid(ride.dow || []) };
+  if (!live) {
+    heat.top = Math.max(0, ...heat.rows.flatMap((r) => r.cells.map((c) => (c.value === null ? 0 : c.value))));
+  }
+
   const cells = [];
-  for (const row of grid) {
+  for (const row of heat.rows) {
     const tag = document.createElement('b');
     tag.textContent = row.label;
     const line = document.createElement('div');
     line.className = 'hx-row';
     for (let h = span.from; h <= span.to; h++) {
       const cell = row.cells[h];
-      const i = document.createElement('i');
+      /* A cell is a control when there is a table behind it: clicking one
+       * selects its weekday and its hour together, which is the "what is
+       * this ride like on a Saturday at two" question the grid is for.
+       */
+      const i = document.createElement(live ? 'button' : 'i');
+      if (live) {
+        i.type = 'button';
+        i.onclick = () => {
+          sel = toggle(toggle(sel, 'dows', row.key), 'hours', h);
+          drawRide();
+        };
+      }
+      const on = live
+        && sel.dows.some((d) => String(d) === row.key)
+        && sel.hours.some((x) => String(x) === String(h));
+      if (on) i.dataset.on = 'yes';
       if (cell && cell.pct !== null) {
         i.dataset.v = '';
         i.style.setProperty('--v', String(Math.max(cell.pct, 8)));
@@ -387,10 +567,25 @@ function drawRideHours() {
   cells.push(spacer, hourLine);
   $('hx-ride-heat').replaceChildren(...cells);
 
-  const top = Math.max(0, ...grid.flatMap((r) => r.cells.map((c) => (c.value === null ? 0 : c.value))));
-  $('hx-heat-key').textContent = top
-    ? `Darkest cell is ${top} min. Every cell is scaled against that, so a quiet day reads quiet.`
+  $('hx-heat-key').textContent = heat.top
+    ? `Darkest cell is ${heat.top} min. Every cell is scaled against that, so a quiet day reads quiet.`
     : '';
+  /* When the hourly window is shorter than the archive, say so. All four
+   * charts come from the hourly grid now, so on a park whose backfill has
+   * not finished they cover less than the months chart used to, and a chart
+   * that quietly narrowed is worse than one that says what it covers.
+   * Nothing to say once the backfill catches up, which is the normal case.
+   */
+  const narrow = live && rides && live.cube.from > rides.from;
+  $('hx-ride-hint').textContent = live
+    ? 'Tap any bar or cell to filter. Everything else follows; the chart you tapped'
+      + ' stays whole so you can keep comparing.'
+      + (narrow
+        ? ` These four charts cover ${fmtDate(live.cube.from)} onwards, where hour-by-hour`
+          + ` detail has been collected. The archive itself goes back to ${fmtDate(rides.from)}.`
+        : '')
+    : 'Hour-by-hour detail for this ride has not been collected yet, so these charts'
+      + ' cannot be filtered against each other.';
 }
 
 function pickMonth(row) {
@@ -497,7 +692,12 @@ async function load() {
 }
 
 export async function init() {
-  $('hx-ride-close').onclick = () => { openRide = null; render(); };
+  $('hx-ride-close').onclick = () => {
+    openRide = null;
+    sel = noSelection();
+    rideCube = null;
+    render();
+  };
   await load();
 }
 

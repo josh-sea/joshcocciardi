@@ -118,14 +118,50 @@ async function hourlyFor(park, id, days) {
     const body = await res.json();
     out.push({ park, ...hoursLib.reduceDay(body.entities, date, 'America/New_York') });
   }
-  return hoursLib.buildHours(park, out);
+  return out;   // reduced days; the caller builds, so they can be added to
 }
 
 const mkDays = [...new Set(docs.filter((d) => d.park === 'mk').map((d) => d.date))].sort().slice(-6);
 console.log(`building an hourly rollup from ${mkDays.length} raw days (${mkDays[0]} to ${mkDays.at(-1)})…`);
-const mkHours = await hourlyFor('mk', '75ea578a-adc8-4116-a54d-dccb60765ef9', mkDays);
+
+/* The raw history endpoint reaches back seven days without a key, so every
+ * real day available here lands in one month. That is enough to draw the
+ * charts and not enough to filter them: selecting the only month selects
+ * everything, and a month filter that changes nothing proves nothing.
+ *
+ * So the real days are also copied back five and ten weeks, scaled, to give
+ * the cube three months to tell apart. Shapes and ride names are real; the
+ * dates and the scaling are not, and nothing here is asserted as a fact
+ * about the parks. The arithmetic is covered against designed fixtures in
+ * hist.test.mjs; what this file is for is the wiring.
+ */
+function shiftDays(days, backWeeks, factor) {
+  const back = (date) => {
+    const d = new Date(`${date}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - backWeeks * 7);
+    return d.toISOString().slice(0, 10);
+  };
+  const scale = (text) => hoursLib.encode(
+    hoursLib.decode(text).map((v) => (v === null ? null : Math.round(v * factor * 2) / 2)));
+  return days.map((day) => ({
+    ...day,
+    date: back(day.date),
+    index: scale(day.index),
+    rides: Object.fromEntries(Object.entries(day.rides || {})
+      .map(([id, r]) => [id, { ...r, h: scale(r.h) }])),
+  }));
+}
+
+const mkReal = await hourlyFor('mk', '75ea578a-adc8-4116-a54d-dccb60765ef9', mkDays);
+const mkHours = hoursLib.buildHours('mk', [
+  ...shiftDays(mkReal, 10, 0.55),
+  ...shiftDays(mkReal, 5, 1.45),
+  ...mkReal,
+]);
 console.log(mkHours
   ? `  ${Object.keys(mkHours.rides).length} rides with an hourly profile`
+    + `, ${mkReal.length} real days spread over ${mkHours.span} to give the filters`
+    + ' three months to tell apart'
   : '  no hourly data available');
 
 const server = await serve();
@@ -176,6 +212,21 @@ await page.route('**/firestore.googleapis.com/**/park_rollups/**', (route) => {
   const url = route.request().url();
   const name = decodeURIComponent(url.split('/park_rollups/')[1].split('?')[0]);
   served.push(name);
+  /* One ride's per-day grid: `mk_hours_<uuid>`. Matched before the suffix
+   * strip below, because `_hours_<id>` ends with neither `_rides` nor
+   * `_hours` and would otherwise be read as a park named `mk_hours_<id>`.
+   */
+  const perRide = /^([a-z]+)_hours_(.+)$/.exec(name);
+  if (perRide) {
+    const [, pk, id] = perRide;
+    const grid = pk === 'mk' && mkHours && mkHours.grids ? mkHours.grids[id] : null;
+    if (!grid) return route.fulfill({ status: 404, body: '{}' });
+    return route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ fields: wrapFields({
+        park: pk, ride: id, n: grid.n, from: mkHours.from, to: mkHours.to,
+        span: mkHours.span, h: grid.h,
+      }) }) });
+  }
   // Strip either suffix: mk, mk_rides and mk_hours are all Magic Kingdom.
   const park = name.replace(/_(rides|hours)$/, '');
   const r = rollups[park];
@@ -336,7 +387,13 @@ ok('the detail panel comes before the ride list', order === 'detail first', orde
 ok('and says something about it', ride.says.length > 20, ride.says);
 ok('and names its quietest and busiest day with dates',
   ride.extremes.length === 2 && ride.extremes.every((t) => /\d{4}/.test(t)), ride.extremes);
-ok('and draws its own month chart', ride.months > 6, ride.months);
+/* The month chart is driven by the hourly grid now, so it covers the window
+ * where hour-by-hour detail exists rather than the whole daily archive. In
+ * production those are the same for a park whose backfill has finished; here
+ * the fixture is three months, and the screen says what it covers when the
+ * two differ.
+ */
+ok('and draws its own month chart', ride.months >= 3, ride.months);
 ok('and its own weekday chart', ride.days === 7, ride.days);
 console.log('   ride:', ride.name);
 for (const e of ride.extremes) console.log('     ' + e);
@@ -355,7 +412,9 @@ ok('with width', rideHourBars.every((w) => w > 0), rideHourBars.slice(0, 3));
 const heat = await page.evaluate(() => {
   const rows = [...document.querySelectorAll('#hx-ride-heat .hx-row')];
   const labels = [...document.querySelectorAll('#hx-ride-heat b')].map((b) => b.textContent).filter(Boolean);
-  const cells = rows.map((r) => [...r.querySelectorAll('i')].map((i) => ({
+  // A cell is a <button> when the ride has a grid behind it and an <i> when
+  // it does not, so match on position in the row rather than on tag.
+  const cells = rows.map((r) => [...r.children].map((i) => ({
     on: i.hasAttribute('data-v'),
     w: Math.round(i.getBoundingClientRect().width),
     h: Math.round(i.getBoundingClientRect().height),
@@ -370,6 +429,127 @@ ok('and some cells carry a value', heat.cells.some((c) => c.on), heat.cells.filt
 const key = await page.textContent('#hx-heat-key');
 ok('the grid says what its darkest cell means', /Darkest cell is \d+ min/.test(key), key);
 console.log('   ' + key.trim());
+
+/* --- cross-filtering
+ *
+ * The four charts share one fact table, which is the only reason they can
+ * filter each other. What has to hold, and what a screenshot cannot show:
+ *
+ *   clicking a month narrows the other three and leaves the months chart
+ *   whole, so there is still something to compare against and somewhere to
+ *   click next;
+ *
+ *   the hour axis does not move, or two selections cannot be compared by
+ *   eye, which is the entire point of filtering;
+ *
+ *   a second click clears, so a chart that is also a control is not a trap.
+ */
+await page.waitForSelector('#hx-ride-months button.hx-col', { timeout: 15000 });
+
+const monthsNow = () => page.$$eval('#hx-ride-months .hx-col',
+  (els) => els.map((e) => ({
+    label: e.querySelector('span').textContent,
+    value: e.querySelector('em').textContent,
+    on: e.dataset.on === 'yes',
+    off: e.dataset.off === 'yes',
+  })));
+const hourCount = () => page.$$eval('#hx-ride-hours .hx-col', (els) => els.length);
+const hourVals = () => page.$$eval('#hx-ride-hours .hx-col em', (els) => els.map((e) => e.textContent));
+
+const before = await monthsNow();
+const hoursBefore = await hourCount();
+const hourValsBefore = await hourVals();
+ok(`the ride's months are clickable (${before.length})`, before.length > 1, before.length);
+ok('and none is selected to start with', before.every((m) => !m.on && !m.off), before.slice(0, 3));
+
+// Pick a month that actually has data, so the comparison below is real.
+const pickIdx = before.findIndex((m) => m.value !== '');
+await page.click(`#hx-ride-months .hx-col:nth-child(${pickIdx + 1})`);
+await page.waitForSelector('#hx-ride-filters:not([hidden])', { timeout: 5000 });
+
+const after = await monthsNow();
+ok('the months chart still shows every month after picking one',
+  after.length === before.length, { before: before.length, after: after.length });
+ok('with the picked one marked', after[pickIdx].on, after[pickIdx]);
+ok('and the others dimmed rather than removed',
+  after.filter((m) => m.off).length === after.length - 1, after.filter((m) => m.off).length);
+ok('their values unchanged, so they can still be compared',
+  after.map((m) => m.value).join('|') === before.map((m) => m.value).join('|'),
+  { before: before.map((m) => m.value).slice(0, 4), after: after.map((m) => m.value).slice(0, 4) });
+
+ok('the hour axis keeps its width so two selections can be compared',
+  (await hourCount()) === hoursBefore, { before: hoursBefore, after: await hourCount() });
+ok('while the hour values actually changed',
+  (await hourVals()).join('|') !== hourValsBefore.join('|'), {
+    before: hourValsBefore.slice(0, 6), after: (await hourVals()).slice(0, 6),
+  });
+
+const chips = await page.$$eval('#hx-ride-filters .hx-chip', (els) => els.map((e) => e.textContent));
+ok('a chip names what is filtered', chips.length >= 1 && chips[0].includes(before[pickIdx].label),
+  { chips, expected: before[pickIdx].label });
+const scope = await page.$eval('#hx-ride-filters .hx-scope', (e) => e.textContent);
+ok('and the day count is stated, so a thin slice is not read as a fact',
+  /\d+ days?, median \d/.test(scope), scope);
+console.log('   filtered to ' + before[pickIdx].label + ': ' + scope);
+
+// The heatmap keeps all seven rows: it groups by weekday, so the weekday
+// filter is not its own to apply. This is the bug mutation testing found.
+const heatRows = await page.$$eval('#hx-ride-heat .hx-row', (els) => els.length);
+ok('the heatmap keeps its seven rows while a month is selected', heatRows === 7, heatRows);
+
+// A weekday selection must not collapse it either.
+await page.click('#hx-ride-days .hx-col:nth-child(1)');
+const heatAfterDow = await page.$$eval('#hx-ride-heat .hx-row', (els) => els.length);
+ok('nor when a weekday is selected too', heatAfterDow === 7, heatAfterDow);
+const dowOn = await page.$$eval('#hx-ride-days .hx-col',
+  (els) => els.filter((e) => e.dataset.on === 'yes').length);
+ok('with the weekday marked', dowOn === 1, dowOn);
+
+// A second shot in the filtered state: the unfiltered one above cannot show
+// what a selection does to the other three charts.
+await page.$eval('#hx-ride-detail', (e) => e.scrollIntoView());
+await page.screenshot({
+  path: new URL('./history-filtered.png', import.meta.url).pathname, fullPage: true,
+});
+
+// Clear puts it all back.
+await page.click('#hx-ride-filters .hx-chip-clear');
+await page.waitForFunction(
+  () => document.getElementById('hx-ride-filters').hidden, null, { timeout: 5000 });
+const cleared = await monthsNow();
+ok('Clear removes every filter', cleared.every((m) => !m.on && !m.off), cleared.slice(0, 3));
+ok('and the hour values return to what they were',
+  (await hourVals()).join('|') === hourValsBefore.join('|'), {
+    expected: hourValsBefore.slice(0, 6), got: (await hourVals()).slice(0, 6),
+  });
+
+// A heat cell is a control: it selects its weekday and its hour together.
+const heatCells = await page.$$('#hx-ride-heat .hx-row button');
+ok(`heat cells are buttons when there is a table behind them (${heatCells.length})`,
+  heatCells.length > 0, heatCells.length);
+if (heatCells.length) {
+  await page.$$eval('#hx-ride-heat .hx-row button',
+    (els) => { const hit = els.find((e) => e.dataset.v !== undefined); if (hit) hit.click(); });
+  await page.waitForSelector('#hx-ride-filters:not([hidden])', { timeout: 5000 });
+  const cellChips = await page.$$eval('#hx-ride-filters .hx-chip:not(.hx-chip-clear)',
+    (els) => els.map((e) => e.textContent));
+  ok('clicking a cell filters by its weekday and its hour', cellChips.length === 2, cellChips);
+  const marked = await page.$$eval('#hx-ride-heat .hx-row button',
+    (els) => els.filter((e) => e.dataset.on === 'yes').length);
+  ok('and that cell is marked', marked === 1, marked);
+  await page.click('#hx-ride-filters .hx-chip-clear');
+}
+
+// A narrowed window has to be stated, not just silently drawn.
+const hint = await page.$eval('#hx-ride-hint', (e) => e.textContent);
+ok('the page says what the filterable charts cover when it is less than the archive',
+  /Tap any bar/.test(hint) && /archive itself goes back to/.test(hint), hint);
+
+// Still no horizontal overflow once chips and dimming are in play: this
+// screen is read on a phone.
+const overflow = await page.evaluate(() =>
+  document.documentElement.scrollWidth - document.documentElement.clientWidth);
+ok('no horizontal overflow with filters shown', overflow <= 1, overflow);
 
 await page.screenshot({ path: new URL('./history.png', import.meta.url).pathname, fullPage: true });
 

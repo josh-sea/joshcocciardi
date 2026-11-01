@@ -181,6 +181,66 @@ if (gapDoc) {
     { was: r.left, now: again.left, stored: again.stored });
 }
 
+/* ---- a ride's per-day grid lands in its own document
+ *
+ * The charts cross-filter each other, which needs the values per day rather
+ * than the collapsed profiles: a median cannot be re-aggregated, so a stored
+ * per-month profile could not answer "October Saturdays" correctly.
+ *
+ * Per ride and per document because all of a park's grids together are about
+ * 566KB against a 1MB limit and grow with every day collected. The park
+ * document must not carry them, or splitting them out bought nothing.
+ */
+{
+  const head = await db.collection('park_rollups').doc('mk_hours').get();
+  ok('the hourly rollup exists', head.exists, null);
+  const h = head.data();
+  ok('it carries no grids of its own', !h.grids, Object.keys(h));
+  ok('and no park grid either, which nothing reads yet', !h.grid, Object.keys(h));
+  ok('while still carrying the profiles the list is drawn from',
+    !!h.index && !!h.index.all && Array.isArray(h.index.dow), null);
+  ok('and the span of the window', typeof h.span === 'number' && h.span > 0, h.span);
+
+  const rideIds = Object.keys(h.rides || {});
+  ok(`the rollup names its rides (${rideIds.length})`, rideIds.length > 0, null);
+
+  // By document id, not by a query: an equality and an inequality on
+  // different fields needs a composite index, which the emulator does not
+  // enforce and production does. A test is a bad place to teach that.
+  const grids = await db.collection('park_rollups').get();
+  const got = grids.docs.filter((d) => d.id.startsWith('mk_hours_'));
+  ok(`one grid document per ride (${got.length})`, got.length === rideIds.length,
+    { rides: rideIds.length, grids: got.length });
+
+  const one = got[0].data();
+  ok('filed under the park and the ride', one.park === 'mk' && !!one.ride, one.ride);
+  ok('with the ride name, so the document stands alone',
+    typeof one.n === 'string' && one.n.length > 0, one.n);
+  ok('and the window it is positional against', one.from === h.from && one.span === h.span,
+    { grid: one.from, head: h.from });
+
+  const days = one.h.split(';');
+  ok(`the grid is a series per day (${days.length})`, days.length > 0 && days.length <= h.span,
+    { days: days.length, span: h.span });
+  const filled = days.filter(Boolean);
+  ok('with at least one day carrying values', filled.length > 0, filled.length);
+  ok('each of which is 24 slots wide',
+    filled.every((d) => d.split(',').length === 24), filled[0]);
+
+  // The grid and the profile have to be the same ride, or the chart and the
+  // chart it filters describe two different attractions.
+  ok('the grid document matches the rollup entry for that ride',
+    h.rides[one.ride] && h.rides[one.ride].n === one.n,
+    { grid: one.n, head: h.rides[one.ride] && h.rides[one.ride].n });
+
+  // Size is the reason for the split, so it is worth measuring rather than
+  // assuming.
+  const bytes = (o) => Buffer.byteLength(JSON.stringify(o));
+  const biggest = Math.max(...got.map((d) => bytes(d.data())));
+  ok(`the biggest grid is well inside the 1MB limit (${biggest} bytes)`,
+    biggest < 900000, biggest);
+}
+
 /* ---- the hourly pass respects a floor, so `left` can reach zero
  *
  * The count of outstanding park-days is what decides whether the catch-up
