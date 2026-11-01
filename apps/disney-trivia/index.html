@@ -709,6 +709,11 @@
   <h3 class="hx-head">By day of the week</h3>
   <div class="hx-bars" id="hx-days" role="group" aria-label="Median wait by day of the week"></div>
 
+  <h3 class="hx-head">Hour by hour</h3>
+  <div class="hx-dow" id="hx-dow" role="radiogroup" aria-label="Which day of the week"></div>
+  <p class="hx-says" id="hx-hours-says"></p>
+  <div class="hx-bars" id="hx-hours" role="group" aria-label="Median wait by hour of the day"></div>
+
   <h3 class="hx-head">Rides, busiest first</h3>
   <div class="hx-detail" id="hx-ride-detail" hidden>
     <div class="hx-detail-top">
@@ -721,6 +726,14 @@
     <div class="hx-bars" id="hx-ride-months" role="group" aria-label="This ride by month"></div>
     <h3 class="hx-head">Its days of the week</h3>
     <div class="hx-bars" id="hx-ride-days" role="group" aria-label="This ride by day of the week"></div>
+    <div id="hx-ride-hourly" hidden>
+      <h3 class="hx-head">Its hours</h3>
+      <p class="hx-says" id="hx-ride-hours-says"></p>
+      <div class="hx-bars" id="hx-ride-hours" role="group" aria-label="This ride by hour of the day"></div>
+      <h3 class="hx-head">Week by hour</h3>
+      <div class="hx-heat" id="hx-ride-heat" role="group" aria-label="This ride by day of the week and hour"></div>
+      <p class="hx-quiet" id="hx-heat-key"></p>
+    </div>
   </div>
 
   <div class="hx-rides" id="hx-rides"></div>

@@ -1036,6 +1036,14 @@ service cloud.firestore {
     // Derived, never authoritative: it is rebuilt from park_history, so a
     // client that could write it could make the charts disagree with the
     // archive they claim to summarise while leaving the archive intact.
+    // park_hours is the same archive at hour resolution: what each ride's
+    // board actually said at each half hour, reduced from the raw change
+    // feed before anything is stored. Public to read like the rest of it,
+    // and written only by parkArchive through the Admin SDK.
+    match /park_hours/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
     match /park_rollups/{docId} {
       allow read: if true;
       allow write: if false;

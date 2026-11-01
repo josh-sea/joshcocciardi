@@ -25,7 +25,7 @@ const admin = require('firebase-admin/app');
 const fs = require('firebase-admin/firestore');
 admin.initializeApp({ projectId: 'josh-cocciardi' });
 
-const { archive, _internal } = require('./parkhistory.js');
+const { archive, archiveHours, _internal } = require('./parkhistory.js');
 const db = fs.getFirestore();
 const { addDays: nextDayRaw } = require('./parkdaily.js');
 const nextDay = (d) => nextDayRaw(d, 1);
@@ -34,9 +34,18 @@ const nextDay = (d) => nextDayRaw(d, 1);
 // wrapper's pid is not the jar's), so a suite that assumes a fresh database
 // is a suite that passes or fails on whether the last one shut down.
 {
-  const old = await db.collection('park_history').get();
-  await Promise.all(old.docs.map((d) => d.ref.delete()));
-  console.log(`cleared ${old.size} documents from a previous run`);
+  // Every collection this suite writes, not just the first one it grew.
+  // park_hours was added later and not cleared, so a second run found the
+  // hourly days already stored and reported "up to date" for work it had
+  // not done. A suite that only half-resets is a suite that passes on
+  // yesterday's state.
+  let cleared = 0;
+  for (const name of ['park_history', 'park_hours', 'park_rollups']) {
+    const old = await db.collection(name).get();
+    await Promise.all(old.docs.map((d) => d.ref.delete()));
+    cleared += old.size;
+  }
+  console.log(`cleared ${cleared} documents from a previous run`);
 }
 
 let bad = 0;
@@ -114,6 +123,62 @@ if (gapDoc) {
   const back = await db.collection('park_history').doc(gapDoc.id).get();
   ok('a hole punched in the middle is re-fetched', back.exists, gapDoc.id);
   ok('and only that day', r4.stored === 1, r4.stored);
+}
+
+// ---- the hourly pass, which is a separate and far more expensive job
+//
+// One API call per park-day against a real 1.66MB response, so this does two
+// days rather than the window. What it has to prove is the write path: that
+// a profile lands, that it is 24 slots, that it agrees with what the reducer
+// produced, and that the rollup is built from it.
+{
+  const r = await archiveHours({ limit: 2, budgetMs: 60000 });
+  console.log('   hours:', JSON.stringify(r.report));
+  ok('the hourly pass stored something', r.stored > 0, r.stored);
+  ok('and reports how many park-days are still missing', typeof r.left === 'number', r.left);
+
+  const stored = await db.collection('park_hours').get();
+  ok(`park_hours has documents (${stored.size})`, stored.size > 0, stored.size);
+
+  const one = stored.docs[0].data();
+  ok('a day is filed under its park and date', one.park && /^\d{4}-\d{2}-\d{2}$/.test(one.date), one.date);
+  const idx = one.index.split(',');
+  ok('the park profile has 24 slots', idx.length === 24, idx.length);
+  const ride = Object.values(one.rides)[0];
+  ok('and so does a ride', ride && ride.h.split(',').length === 24, ride && ride.h);
+  ok('rides carry their names', ride && typeof ride.n === 'string' && ride.n.length > 0, ride && ride.n);
+  ok('an hour with no observation is empty, not zero',
+    idx.some((v) => v === ''), idx.join(','));
+
+  // The rollup is a projection of what was just written, not a second copy.
+  const roll = await db.collection('park_rollups').doc(`${one.park}_hours`).get();
+  ok('an hourly rollup was built', roll.exists, null);
+  if (roll.exists) {
+    const d = roll.data();
+    ok('with seven weekday profiles', Array.isArray(d.index.dow) && d.index.dow.length === 7, d.index.dow && d.index.dow.length);
+    ok('and an overall one of 24 slots', d.index.all.split(',').length === 24, d.index.all);
+    const names = Object.values(d.rides).map((x) => x.n);
+    ok(`naming its rides (${names.length})`, names.length > 0 && names.every(Boolean), names.slice(0, 2));
+    ok('each ride having seven weekday profiles',
+      Object.values(d.rides).every((x) => Array.isArray(x.dow) && x.dow.length === 7), null);
+  }
+
+  /* Asking again must move forward, not re-spend calls on days already
+   * held. Counting what a pass stored proves nothing: a pass that re-fetched
+   * the same two days would report the same number and overwrite in place.
+   * What matters is that the documents are distinct and the backlog shrank.
+   */
+  const firstIds = (await db.collection('park_hours').get()).docs.map((d) => d.id).sort();
+  const again = await archiveHours({ limit: 2, budgetMs: 60000 });
+  const secondIds = (await db.collection('park_hours').get()).docs.map((d) => d.id).sort();
+
+  ok('a second pass adds new park-days rather than redoing the same ones',
+    secondIds.length === firstIds.length + again.stored,
+    { before: firstIds.length, stored: again.stored, after: secondIds.length });
+  ok('none of the first pass\'s days were fetched again',
+    firstIds.every((id) => secondIds.includes(id)), null);
+  ok('and the backlog shrank by what was stored', again.left === r.left - again.stored,
+    { was: r.left, now: again.left, stored: again.stored });
 }
 
 // ---- a missing rollup is built even when nothing was stored

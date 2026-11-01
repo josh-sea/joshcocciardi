@@ -90,6 +90,9 @@ async function doc(name, { force = false, fetchImpl = fetch } = {}) {
 
 export const parkRollup = (park, opts) => doc(park, opts);
 export const ridesRollup = (park, opts) => doc(`${park}_rides`, opts);
+// The hourly rollup. Missing until the hourly backfill has run, which is why
+// every caller has to cope with `data` being null rather than assume it.
+export const hoursRollup = (park, opts) => doc(`${park}_hours`, opts);
 
 /* How old, in words. Deliberately vague past a point: "3 days ago" is the
  * honest answer and "73 hours" pretends to a precision nobody needs.
