@@ -59,12 +59,17 @@ jobs:
 
           # www, and follow redirects: the bare host answers 301 and a 301 is
           # not a 2xx. The daily backfill died on exactly that.
-          BASE="${DIRECT:-https://www.joshcocciardi.com/api/park/archive}"
-          QS="mode=hours"
-          if [ -n "$FROM" ]; then QS="$QS&from=$FROM"; fi
-          if [ -n "$TO" ]; then QS="$QS&to=$TO"; fi
-          URL="$BASE?$QS"
-          echo "Calling $BASE with $QS"
+          # Its own endpoint, not a mode on the daily one. The hourly job
+          # needs 2GiB: reducing park-days settles at about 917MB resident,
+          # because each response is 1.66MB of JSON. The first run of this
+          # workflow died with HTTP 500 and Cloud Run's own plain-text body,
+          # which is a killed container, not a handler returning an error.
+          BASE="${DIRECT:-https://www.joshcocciardi.com/api/park/hours}"
+          QS=""
+          if [ -n "$FROM" ]; then QS="from=$FROM"; fi
+          if [ -n "$TO" ]; then QS="${QS:+$QS&}to=$TO"; fi
+          URL="$BASE${QS:+?$QS}"
+          echo "Calling $BASE ${QS:+with $QS}"
 
           LEFT=""
           for pass in $(seq 1 30); do
@@ -82,6 +87,17 @@ jobs:
             fi
             if [ "$code" -ge 300 ] && [ "$code" -lt 400 ]; then
               echo "HTTP $code: the URL redirected and was not followed. Check the host above."
+              exit 1
+            fi
+            # A 500 whose body is not this handler's JSON is a killed
+            # container rather than a reported failure, and the thing that
+            # kills it is memory. Worth naming, because the two look identical
+            # from here and only one of them is a code change away.
+            if [ "$code" = "500" ] && ! grep -q '"error"' out.json; then
+              echo
+              echo "HTTP 500 with no JSON body: the function was killed rather"
+              echo "than returning an error, which for this job means it ran"
+              echo "out of memory. Check parkArchiveHours still has 2GiB."
               exit 1
             fi
             if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then

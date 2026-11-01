@@ -24,6 +24,13 @@
           }
         },
         {
+          "source": "/api/park/hours",
+          "function": {
+            "functionId": "parkArchiveHours",
+            "region": "us-central1"
+          }
+        },
+        {
           "source": "/projects/moments/**",
           "destination": "/projects/moments/index.html"
         },
