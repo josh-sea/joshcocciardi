@@ -1,0 +1,371 @@
+/* Park Planner: the history screen.
+ *
+ * Draws the archive: a year of medians per park, and per ride inside it.
+ * All the arithmetic lives in hist.js and all the fetching in histdata.js,
+ * so this file is only about what appears and what happens when you tap it.
+ *
+ * Two loads on purpose. The park document is a few KB and the screen opens
+ * on it; the per-ride document is a couple of hundred KB and arrives behind
+ * it, filling the ride list in once it lands. Nothing waits on it: you can
+ * read the month and weekday charts while it is still coming.
+ *
+ * Every class here is prefixed hx-. That is not house style, it is a scar:
+ * the planner's own chart once reused .pl-bar, which was already its status
+ * strip, and inherited `align-items: center` from it. The bars had the right
+ * height, no width, and were invisible. A prefix nobody else uses is cheap.
+ */
+
+import { parkRollup, ridesRollup, ageWords } from './histdata.js';
+import {
+  decodeSeries, median, byMonth, byWeekday, compareRange,
+  rankRides, extremes, bars, dateAt, indexOfDate,
+} from './hist.js';
+
+const $ = (id) => document.getElementById(id);
+
+const PARKS = [
+  ['mk', 'Magic Kingdom'],
+  ['ep', 'EPCOT'],
+  ['hs', 'Hollywood Studios'],
+  ['ak', 'Animal Kingdom'],
+];
+
+let park = 'mk';
+let head = null;      // the park rollup
+let rides = null;     // the per-ride rollup, once it arrives
+let series = [];      // the park's decoded p50
+let range = null;     // { from, to, label } or null for the whole window
+let openRide = null;
+
+// A park can post waits for nearly fifty attractions. Showing all of them
+// makes the page four thousand pixels tall and buries the charts above it,
+// so the list starts at the busiest few and opens on request.
+const FIRST_SHOWN = 12;
+let showAll = false;
+
+/* ── presets ───────────────────────────────────────────────────────────────
+ *
+ * Built from the window the archive actually holds, not hardcoded, so they
+ * cannot quietly point outside it as the window moves. A preset whose dates
+ * fall wholly outside what we hold is not offered at all, which is better
+ * than offering it and drawing nothing.
+ */
+function presets() {
+  if (!head) return [];
+  const { from, to } = head;
+  const out = [{ key: 'all', label: 'Whole window', from, to }];
+
+  const candidates = [
+    { key: 'trip', label: 'Trip week 2025', from: '2025-11-06', to: '2025-11-11' },
+    { key: 'nov', label: 'Nov 2025', from: '2025-11-01', to: '2025-11-30' },
+    { key: 'xmas', label: 'Christmas 2025', from: '2025-12-20', to: '2026-01-02' },
+    { key: 'last30', label: 'Last 30 days', from: dateAt(to, -29), to },
+  ];
+  for (const c of candidates) {
+    // Keep it if it overlaps what we hold at all, clamped to the window.
+    const lo = c.from < from ? from : c.from;
+    const hi = c.to > to ? to : c.to;
+    if (lo <= hi) out.push({ ...c, from: lo, to: hi });
+  }
+  return out;
+}
+
+/* ── drawing ──────────────────────────────────────────────────────────── */
+
+const fmtDate = (d) => {
+  const [y, m, day] = d.split('-');
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${Number(day)} ${names[Number(m) - 1]} ${y}`;
+};
+
+const mins = (v) => (v === null || v === undefined ? '–' : `${v} min`);
+
+function drawParks() {
+  const box = $('hx-parks');
+  box.replaceChildren(...PARKS.map(([key, name]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(key === park));
+    b.textContent = name;
+    b.onclick = () => { if (key !== park) { park = key; openRide = null; load(); } };
+    return b;
+  }));
+}
+
+function drawRanges() {
+  const box = $('hx-ranges');
+  const active = range ? range.key : 'all';
+  box.replaceChildren(...presets().map((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(p.key === active));
+    b.textContent = p.label;
+    b.onclick = () => {
+      range = p.key === 'all' ? null : p;
+      render();
+    };
+    return b;
+  }));
+}
+
+/* A bar chart. `rows` come from hist.js already scaled; this only turns them
+ * into elements. Each bar is a real button when `onPick` is given, because a
+ * chart you can tap has to be reachable without a pointer too.
+ */
+function drawBars(into, rows, { onPick = null, active = null } = {}) {
+  const el = $(into);
+  if (!rows.length) { el.replaceChildren(); return; }
+  el.replaceChildren(...bars(rows).map((r) => {
+    const col = document.createElement(onPick ? 'button' : 'div');
+    col.className = 'hx-col';
+    if (onPick) {
+      col.type = 'button';
+      col.onclick = () => onPick(r);
+      col.setAttribute('aria-label', `${r.label}, ${mins(r.value)}${r.days ? `, ${r.days} days` : ''}`);
+    }
+    if (r.key === active) col.dataset.on = 'yes';
+    if (r.value === null) col.dataset.empty = 'yes';
+
+    const bar = document.createElement('i');
+    bar.style.setProperty('--h', `${r.pct}%`);
+    const tag = document.createElement('span');
+    tag.textContent = r.label;
+
+    /* The number, under the label. Bars alone cannot carry this: a park
+     * whose weekdays run 15 to 20 draws seven bars between 75% and 100%,
+     * which is an honest shape and an unreadable one. The figure is the
+     * thing being asked for, so it is written down.
+     */
+    const val = document.createElement('em');
+    val.textContent = r.value === null ? '' : String(r.value);
+    col.append(bar, tag, val);
+    return col;
+  }));
+}
+
+function drawSummary() {
+  const r = range || { from: head.from, to: head.to, label: 'the whole window' };
+  const cmp = compareRange(series, head.from, r.from, r.to);
+
+  const parts = [];
+  if (cmp.median === null) {
+    parts.push('No data in this range.');
+  } else {
+    parts.push(`Median ${cmp.median} min across ${cmp.days} day${cmp.days === 1 ? '' : 's'}.`);
+    if (range && cmp.pct !== null) {
+      const word = cmp.pct === 0 ? 'exactly average'
+        : cmp.pct > 0 ? `${cmp.pct}% busier than usual`
+        : `${Math.abs(cmp.pct)}% quieter than usual`;
+      parts.push(`That is ${word} for this park (${cmp.overall} min over the whole window).`);
+    }
+  }
+  $('hx-summary').textContent = parts.join(' ');
+  $('hx-range-when').textContent = range
+    ? `${fmtDate(r.from)} to ${fmtDate(r.to)}`
+    : `${fmtDate(head.from)} to ${fmtDate(head.to)} · ${head.days} days`;
+}
+
+function drawRides() {
+  const box = $('hx-rides');
+  if (!rides) {
+    box.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'hx-quiet', textContent: 'Loading the rides…',
+    }));
+    return;
+  }
+  const r = range || { from: head.from, to: head.to };
+  const ranked = rankRides(rides.rides, rides.from, r.from, r.to);
+  if (!ranked.length) {
+    box.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'hx-quiet', textContent: 'No ride posted a wait in this range.',
+    }));
+    return;
+  }
+
+  const shown = showAll ? ranked : ranked.slice(0, FIRST_SHOWN);
+  const more = $('hx-more');
+  if (ranked.length > FIRST_SHOWN) {
+    more.hidden = false;
+    more.textContent = showAll
+      ? `Show the busiest ${FIRST_SHOWN} only`
+      : `Show all ${ranked.length} rides`;
+    more.onclick = () => { showAll = !showAll; render(); };
+  } else {
+    more.hidden = true;
+  }
+
+  box.replaceChildren(...shown.map((ride) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'hx-ride';
+    if (openRide === ride.id) row.dataset.on = 'yes';
+
+    const name = document.createElement('strong');
+    name.textContent = ride.name;
+    const big = document.createElement('b');
+    big.textContent = `${ride.median}`;
+    const unit = document.createElement('em');
+    unit.textContent = 'min';
+
+    const vs = document.createElement('span');
+    if (range && ride.delta !== null && ride.delta !== 0) {
+      vs.textContent = `${ride.delta > 0 ? '+' : ''}${ride.delta} vs usual`;
+      vs.dataset.sign = ride.delta > 0 ? 'up' : 'down';
+    } else {
+      vs.textContent = `${ride.days} day${ride.days === 1 ? '' : 's'}`;
+    }
+
+    row.append(name, big, unit, vs);
+    row.onclick = () => {
+      const opening = openRide !== ride.id;
+      openRide = opening ? ride.id : null;
+      render();
+      if (opening) {
+        const panel = $('hx-ride-detail');
+        if (panel.scrollIntoView) panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    };
+    return row;
+  }));
+}
+
+function drawRide() {
+  const panel = $('hx-ride-detail');
+  if (!openRide || !rides || !rides.rides[openRide]) { panel.hidden = true; return; }
+
+  const ride = rides.rides[openRide];
+  const s = decodeSeries(ride.p50);
+  const p90 = decodeSeries(ride.p90);
+  panel.hidden = false;
+  $('hx-ride-name').textContent = ride.n;
+
+  const r = range || { from: rides.from, to: rides.to };
+  const cmp = compareRange(s, rides.from, r.from, r.to);
+  const ex = extremes(s, rides.from);
+
+  const lines = [];
+  if (cmp.median !== null) {
+    lines.push(`${cmp.median} min median in this range, against ${cmp.overall} min overall.`);
+    if (cmp.pct !== null && cmp.pct !== 0 && range) {
+      lines.push(`${Math.abs(cmp.pct)}% ${cmp.pct > 0 ? 'busier' : 'quieter'} than its usual.`);
+    }
+  }
+  const worstP90 = median(p90);
+  if (worstP90 !== null) lines.push(`Nine days in ten it stays under about ${worstP90} min.`);
+  $('hx-ride-says').textContent = lines.join(' ');
+
+  $('hx-ride-extremes').replaceChildren(...[
+    ex.best && `Quietest: ${ex.best.value} min on ${fmtDate(ex.best.date)}`,
+    ex.worst && `Busiest: ${ex.worst.value} min on ${fmtDate(ex.worst.date)}`,
+  ].filter(Boolean).map((t) => {
+    const li = document.createElement('li');
+    li.textContent = t;
+    return li;
+  }));
+
+  drawBars('hx-ride-months', byMonth(s, rides.from), {
+    onPick: (row) => pickMonth(row),
+    active: range && range.key && range.key.startsWith('m:') ? range.key.slice(2) : null,
+  });
+  drawBars('hx-ride-days', byWeekday(s, rides.from));
+}
+
+function pickMonth(row) {
+  if (row.value === null) return;
+  const first = `${row.key}-01`;
+  // The last day of that month, found by stepping back from the first of the
+  // next one rather than by a table of month lengths.
+  const [y, m] = row.key.split('-').map(Number);
+  const nextFirst = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  range = { key: `m:${row.key}`, label: row.label, from: first, to: dateAt(nextFirst, -1) };
+  render();
+}
+
+function render() {
+  if (!head) return;
+  drawRanges();
+  drawSummary();
+  drawBars('hx-months', byMonth(series, head.from), {
+    onPick: pickMonth,
+    active: range && range.key && range.key.startsWith('m:') ? range.key.slice(2) : null,
+  });
+  drawBars('hx-days', byWeekday(series, head.from));
+  drawRides();
+  drawRide();
+}
+
+/* ── loading ──────────────────────────────────────────────────────────── */
+
+/* Wipe the screen before fetching the next park.
+ *
+ * Without this the previous park's charts and ride list sit there until the
+ * new data lands, so tapping Hollywood Studios shows you Magic Kingdom's
+ * rides with nothing to say they are the wrong park's. Stale data presented
+ * as current is worse than an empty panel, and this panel is specifically
+ * for comparing parks, so it is the mistake someone would actually make.
+ */
+function clear() {
+  for (const id of ['hx-months', 'hx-days', 'hx-rides', 'hx-ride-months', 'hx-ride-days', 'hx-ride-extremes']) {
+    $(id).replaceChildren();
+  }
+  $('hx-ride-detail').hidden = true;
+  $('hx-more').hidden = true;
+  showAll = false;
+  $('hx-range-when').textContent = '';
+  $('hx-age').textContent = '';
+}
+
+async function load() {
+  drawParks();
+  clear();
+  $('hx-error').textContent = '';
+  $('hx-summary').textContent = 'Loading…';
+  head = null; rides = null; series = [];
+
+  let got;
+  try {
+    got = await parkRollup(park);
+  } catch (err) {
+    $('hx-error').textContent = `Could not load the history: ${err.message || err}`;
+    $('hx-summary').textContent = '';
+    return;
+  }
+  if (!got.data) {
+    $('hx-summary').textContent = '';
+    $('hx-error').textContent = 'No history has been rolled up for this park yet.';
+    $('hx-rides').replaceChildren();
+    return;
+  }
+
+  head = got.data;
+  series = decodeSeries(head.index && head.index.p50);
+  $('hx-age').textContent = got.from === 'network' ? '' : `· ${ageWords(got.age)}`;
+  render();
+
+  // The ride document is the big one. Fetched after the screen is already
+  // usable, and its failure costs the ride list and nothing else.
+  const want = park;
+  try {
+    const more = await ridesRollup(park);
+    if (want !== park) return;  // they switched parks while it was in flight
+    rides = more.data;
+  } catch {
+    rides = null;
+    $('hx-rides').replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'hx-quiet', textContent: 'Could not load the per-ride history.',
+    }));
+    return;
+  }
+  render();
+}
+
+export async function init() {
+  $('hx-ride-close').onclick = () => { openRide = null; render(); };
+  await load();
+}
+
+// Re-entering the tab should not re-download a year of history.
+export function onShow() {
+  if (!head) load();
+}

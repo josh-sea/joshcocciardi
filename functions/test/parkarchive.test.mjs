@@ -116,6 +116,69 @@ if (gapDoc) {
   ok('and only that day', r4.stored === 1, r4.stored);
 }
 
+// ---- a missing rollup is built even when nothing was stored
+//
+// The case this gets wrong exactly once: the first run after the feature
+// ships. The archive is already complete, so nothing is stored, nothing is
+// marked stale, and a rollup triggered only by storing would never be built.
+// The history screen would report no data for a complete archive.
+{
+  await db.collection('park_rollups').doc('mk').delete();
+  await db.collection('park_rollups').doc('mk_rides').delete();
+  const before = await db.collection('park_rollups').doc('mk').get();
+  ok('the rollup is gone to start with', !before.exists, null);
+
+  const r = await archive({ limit: 8 });
+  ok('and the run stores nothing, because the archive is complete', r.stored === 0, r.stored);
+  const after = await db.collection('park_rollups').doc('mk').get();
+  ok('yet the missing rollup is rebuilt anyway', after.exists, r.rollups);
+  ok('and its rides document with it',
+    (await db.collection('park_rollups').doc('mk_rides').get()).exists, null);
+}
+
+// ---- the rollups, which are what the history screen actually reads
+//
+// The archive is written per day and read per ride, so everything on screen
+// comes from these derived documents rather than from park_history. An
+// archive that is perfect and a rollup that is empty looks, to a reader,
+// exactly like having no data at all.
+{
+  const parkDoc = await db.collection('park_rollups').doc('mk').get();
+  const rideDoc = await db.collection('park_rollups').doc('mk_rides').get();
+  ok('a park rollup was written', parkDoc.exists, null);
+  ok('and a rides rollup beside it', rideDoc.exists, null);
+
+  if (parkDoc.exists && rideDoc.exists) {
+    const head = parkDoc.data();
+    const series = head.index.p50.split(',').map((t) => (t === '' ? null : Number(t)));
+    ok('the park series has one slot per day in the window',
+      series.length === head.days, { series: series.length, days: head.days });
+    ok('and its first day matches the window start',
+      typeof head.from === 'string' && head.from <= head.to, { from: head.from, to: head.to });
+
+    // The rollup must agree with the archive it claims to summarise, which
+    // is the whole reason it is rebuilt rather than patched.
+    const day = await db.collection('park_history').doc(`mk_${head.from}`).get();
+    ok('and day zero equals that day in the archive',
+      day.exists && series[0] === day.data().index.p50,
+      { rollup: series[0], archive: day.exists ? day.data().index.p50 : null });
+
+    const rides = rideDoc.data().rides || {};
+    const names = Object.values(rides).map((r) => r.n);
+    ok(`the rides rollup names its rides (${names.length})`,
+      names.length > 0 && names.every((n) => typeof n === 'string' && n), names.slice(0, 2));
+    ok('every ride series is a string, not an array',
+      Object.values(rides).every((r) => typeof r.p50 === 'string'), null);
+    ok('and stays well inside the 1MB document limit',
+      JSON.stringify(rides).length < 900000, JSON.stringify(rides).length);
+  }
+
+  // The stale marker has to be cleared, or every later run rebuilds forever.
+  const cur = (await db.collection('park_history').doc('_cursor').get()).data() || {};
+  ok('no park is left marked stale once its rollup is built',
+    !(cur.stale || []).length, cur.stale);
+}
+
 // ---- the time budget stops cleanly rather than being killed mid-write
 {
   const wipe = await db.collection('park_history').get();

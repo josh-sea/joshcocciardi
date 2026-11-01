@@ -1028,6 +1028,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    // park_rollups is park_history turned on its side: the same numbers, as
+    // one document per park instead of one per day, so a phone can draw a
+    // year of charts without 399 reads. Public to read for the same reason
+    // the archive is, and written only by parkArchive through the Admin SDK.
+    //
+    // Derived, never authoritative: it is rebuilt from park_history, so a
+    // client that could write it could make the charts disagree with the
+    // archive they claim to summarise while leaving the archive intact.
+    match /park_rollups/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
     // A day plan belongs to the person who made it: must-dos, Lightning Lane
     // windows, what they have ridden and where they walked.
     match /park_plans/{uid}/days/{date} {
