@@ -52,6 +52,7 @@ exports.parkCollect = parks.parkCollect;
 
 const parkHistory = require('./parkhistory');
 exports.parkArchive = parkHistory.parkArchive;
+exports.parkArchiveHours = parkHistory.parkArchiveHours;
 
 // Recompute a place's aggregates from all of its reviews whenever any
 // review is created or updated. Full recount (not incremental): reviews per

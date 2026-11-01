@@ -105,9 +105,10 @@ const OPEN_LIMIT = 8;
 // and wall clock rather than by the history budget. The job is resumable,
 // so overshooting costs a second run and never a lost day.
 const BACKFILL_LIMIT = 400;
-// Hourly is one call per park-day and each response is over a megabyte, so
-// a pass takes far fewer of them than the daily archive does.
-const HOURS_LIMIT = 400;
+// Hourly is one call per park-day at about 615ms each, so the 40s budget
+// stops a pass long before this does. It is a backstop against asking for a
+// window far larger than the budget, not the thing that sizes a pass.
+const HOURS_LIMIT = 200;
 
 /* The budget that matters is Firebase Hosting's, not the function's.
  *
@@ -700,18 +701,56 @@ exports.parkArchive = onRequest(
     }
 
     try {
-      /* The hourly pass is authenticated only. It is the expensive half of
-       * the archive, so an open endpoint that could start it would be a way
-       * for a stranger to spend the API budget. */
-      if (authed && req.query.mode === 'hours') {
-        res.json(await archiveHours({ apiKey, from: asDate(req.query.from), to: asDate(req.query.to) }));
-        return;
-      }
       res.json(await archive(authed
         ? { apiKey, from: asDate(req.query.from), to: asDate(req.query.to), limit: BACKFILL_LIMIT }
         : { limit: OPEN_LIMIT }));
     } catch (err) {
       console.error('[parkArchive] failed', err);
+      res.status(500).json({ error: String(err.message || err) });
+    }
+  }
+);
+
+/* ── the hourly endpoint ───────────────────────────────────────────────────
+ *
+ * Its own function, not a mode on the one above, because it needs memory the
+ * other one has no use for.
+ *
+ * Measured on real data: reducing park-days sequentially settles at about
+ * 917MB resident. The heap stays under 30MB, so this is not objects being
+ * retained; it is the response buffers, 1.66MB of JSON a day, and the
+ * allocator not handing pages back. At 256MiB the container is killed, which
+ * is exactly what happened: HTTP 500 with Cloud Run's own plain-text body
+ * rather than this handler's JSON.
+ *
+ * Giving parkArchive 2GiB instead would have put that footprint on the path
+ * the app hits on every open, which runs in about a second and needs none of
+ * it. So the expensive job is its own function and pays for itself alone.
+ *
+ * Still authenticated only: an open endpoint that could start this would be
+ * a way for a stranger to spend the API budget.
+ */
+exports.parkArchiveHours = onRequest(
+  { cors: false, timeoutSeconds: 300, memory: '2GiB', maxInstances: 1 },
+  async (req, res) => {
+    const header = req.get('Authorization') || '';
+    const token = req.get('X-Park-Token')
+      || (header.startsWith('Bearer ') ? header.slice(7) : '')
+      || '';
+    if (!token) { res.status(403).json({ error: 'forbidden' }); return; }
+
+    const snap = await db().collection('park_secrets').doc('collector').get();
+    const secrets = snap.exists ? snap.data() : {};
+    if (!sameSecret(token, secrets.token)) { res.status(403).json({ error: 'forbidden' }); return; }
+
+    try {
+      res.json(await archiveHours({
+        apiKey: secrets.apiKey || null,
+        from: asDate(req.query.from),
+        to: asDate(req.query.to),
+      }));
+    } catch (err) {
+      console.error('[parkArchiveHours] failed', err);
       res.status(500).json({ error: String(err.message || err) });
     }
   }
