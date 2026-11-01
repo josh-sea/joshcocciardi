@@ -191,7 +191,13 @@ npx --yes firebase-tools@13 emulators:start --only firestore --project josh-cocc
 node functions/test/parkarchive.test.mjs
 ```
 
-It also covers the rollups, the two derived documents per park that the
+It also covers the hourly pass, which is a separate and far more expensive
+job: one API call per park-day against a 1.66MB response, reduced to 24
+numbers a ride before anything is stored. The suite does two days rather than
+the window, and checks the write path, the 24-slot shape, and that a second
+pass moves forward rather than re-fetching days it holds.
+
+It also covers the rollups, the derived documents per park that the
 history screen actually reads. The archive is written per day and read per
 ride, so an archive that is perfect and a rollup that is empty looks, to a
 reader, exactly like having no data at all.

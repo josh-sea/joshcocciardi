@@ -1,0 +1,123 @@
+# Park Planner: backfill the hour-by-hour archive.
+#
+# Run by hand from the Actions tab. Separate from "Backfill park waits"
+# because this is the expensive half and behaves differently.
+#
+# The daily archive takes one API call per 31 park-days. This takes one call
+# per park-day, because the raw history endpoint refuses a park range longer
+# than a day, and each response is about 1.66MB. For the window we hold that
+# is roughly 1,600 calls against a Pro budget of 1,200 an hour, so it will
+# not finish in one hour and is not meant to.
+#
+# It stops cleanly when the budget runs out and says how many days are left,
+# rather than holding a runner open for forty minutes waiting for an hourly
+# window to roll over. Run it again an hour later and it carries on; it walks
+# newest-first and skips what it holds, so a profile of last month exists
+# while you wait for one of last September.
+#
+# Needs the same two things as the daily backfill: PARK_COLLECT_TOKEN as a
+# repo secret, and the ThemeParks API key in Firestore at
+# park_secrets/collector { apiKey: "..." }. Without the key this refuses to
+# do anything, because the no-key window is seven days and spending 28 calls
+# to get a week of hourly data is not worth the run.
+
+name: Backfill park hours
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Earliest day (YYYY-MM-DD). Blank = everything the daily archive holds.'
+        required: false
+        type: string
+      to:
+        description: 'Latest day (YYYY-MM-DD). Blank = yesterday.'
+        required: false
+        type: string
+
+concurrency:
+  group: park-archive
+  cancel-in-progress: false
+
+jobs:
+  hours:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Backfill hours
+        env:
+          TOKEN: ${{ secrets.PARK_COLLECT_TOKEN }}
+          DIRECT: ${{ secrets.PARK_ARCHIVE_URL }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+        run: |
+          set -u
+          if [ -z "$TOKEN" ]; then
+            echo "PARK_COLLECT_TOKEN is not set. Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          # www, and follow redirects: the bare host answers 301 and a 301 is
+          # not a 2xx. The daily backfill died on exactly that.
+          BASE="${DIRECT:-https://www.joshcocciardi.com/api/park/archive}"
+          QS="mode=hours"
+          if [ -n "$FROM" ]; then QS="$QS&from=$FROM"; fi
+          if [ -n "$TO" ]; then QS="$QS&to=$TO"; fi
+          URL="$BASE?$QS"
+          echo "Calling $BASE with $QS"
+
+          LEFT=""
+          for pass in $(seq 1 30); do
+            echo "--- pass $pass"
+            code=$(curl -sS -L -o out.json -w '%{http_code}' \
+              --max-time 75 --retry 2 --retry-delay 5 \
+              -H "X-Park-Token: $TOKEN" \
+              "$URL")
+            echo "HTTP $code"
+            cat out.json; echo
+
+            if [ "$code" = "403" ]; then
+              echo "403: the token does not match park_secrets/collector.token."
+              exit 1
+            fi
+            if [ "$code" -ge 300 ] && [ "$code" -lt 400 ]; then
+              echo "HTTP $code: the URL redirected and was not followed. Check the host above."
+              exit 1
+            fi
+            if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+              echo "HTTP $code from the archive endpoint. Body above, if any."
+              exit 1
+            fi
+
+            if [ "$pass" = "1" ] && ! grep -q '"keyed":true' out.json; then
+              echo
+              echo "The run was NOT using the ThemeParks API key, so it can only"
+              echo "reach back seven days, which is not worth the calls."
+              echo
+              echo "Add the key in the Firebase console under Firestore ->"
+              echo "park_secrets -> collector, as a field named apiKey."
+              exit 1
+            fi
+
+            LEFT=$(grep -o '"left":[0-9]*' out.json | head -1 | cut -d: -f2)
+
+            # The hourly budget is the thing that ends a run, not an error.
+            if grep -q '"rateLimited":true' out.json; then
+              echo
+              echo "Out of hourly API budget. ${LEFT:-some} park-days still to do."
+              echo "Run this again in about an hour and it will carry on from here."
+              exit 0
+            fi
+
+            if ! grep -q '"incomplete"' out.json; then
+              echo "Nothing left to fetch."
+              break
+            fi
+          done
+
+          echo
+          if [ "${LEFT:-0}" -gt 0 ] 2>/dev/null; then
+            echo "Stopped with ${LEFT} park-days still to do. Run again to continue."
+          else
+            echo "The hourly archive is complete."
+          fi

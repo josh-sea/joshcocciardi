@@ -108,6 +108,16 @@ jobs:
       - name: Test the history screen
         run: node apps/portfolio/test/hist.test.mjs
 
+      # Reducing a day of raw change rows to 24 numbers. The raw feed returns
+      # changes, not readings, and most of a ride's rows move a Lightning Lane
+      # return time while the standby wait sits still. Count rows instead of
+      # replaying them and a quiet hour with ten Lightning Lane updates reads
+      # as the busiest of the day. Re-run in four timezones, because the
+      # weekday split is silently rotated by a day in any negative-offset zone
+      # and CI is UTC.
+      - name: Test the hourly reducer
+        run: node apps/portfolio/test/parkhours.test.mjs
+
       # The topic builder composes the line you read out loud, which is
       # exactly the sort of thing that rots into "Desserts in in any park"
       # unless something checks every subject against every place.

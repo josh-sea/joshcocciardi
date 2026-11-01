@@ -15,10 +15,11 @@
  * height, no width, and were invisible. A prefix nobody else uses is cheap.
  */
 
-import { parkRollup, ridesRollup, ageWords } from './histdata.js';
+import { parkRollup, ridesRollup, hoursRollup, ageWords } from './histdata.js';
 import {
   decodeSeries, median, byMonth, byWeekday, compareRange,
   rankRides, extremes, bars, dateAt, indexOfDate,
+  hourRows, openHours, bestHour, heatGrid, hourLabel, WEEKDAYS, DOW_ORDER,
 } from './hist.js';
 
 const $ = (id) => document.getElementById(id);
@@ -42,6 +43,8 @@ let openRide = null;
 // so the list starts at the busiest few and opens on request.
 const FIRST_SHOWN = 12;
 let showAll = false;
+let hours = null;      // the hourly rollup, if the backfill has run
+let dow = 'all';       // which day of the week the hourly charts show
 
 /* ── presets ───────────────────────────────────────────────────────────────
  *
@@ -166,6 +169,62 @@ function drawSummary() {
     : `${fmtDate(head.from)} to ${fmtDate(head.to)} · ${head.days} days`;
 }
 
+/* ── hour by hour ─────────────────────────────────────────────────────────
+ *
+ * Only appears once the hourly backfill has run. Until then the section says
+ * so rather than drawing an empty chart, because an empty chart reads as
+ * "this park has no queues" and a sentence does not.
+ */
+function drawHours() {
+  const chips = $('hx-dow');
+  const box = $('hx-hours');
+  const says = $('hx-hours-says');
+
+  if (!hours) {
+    chips.replaceChildren();
+    box.replaceChildren();
+    says.textContent = hours === null
+      ? 'Hour-by-hour data has not been collected for this park yet.'
+      : '';
+    return;
+  }
+
+  const options = [{ key: 'all', label: 'Any day' },
+    ...DOW_ORDER.map((d) => ({ key: String(d), label: WEEKDAYS[d] }))];
+  chips.replaceChildren(...options.map((o) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(o.key === dow));
+    b.textContent = o.label;
+    b.onclick = () => { dow = o.key; render(); };
+    return b;
+  }));
+
+  const series = hourSeries(hours.index);
+  if (!series.some((v) => v !== null)) {
+    box.replaceChildren();
+    says.textContent = 'Nothing recorded for that day of the week yet.';
+    return;
+  }
+
+  const { best, worst } = bestHour(series);
+  says.textContent = best && worst && best.hour !== worst.hour
+    ? `Quietest around ${hourLabel(best.hour)} at ${best.value} min, busiest around ${hourLabel(worst.hour)} at ${worst.value} min.`
+    : '';
+  drawBars('hx-hours', hourRows(series, openHours(series)));
+}
+
+/* `all` or one weekday, decoded. The rollup indexes weekdays Sunday-first
+ * because that is how it was built; the chips are Monday-first for reading.
+ * Mixing those up rotates every chart by a day and still looks fine.
+ */
+function hourSeries(block) {
+  if (!block) return [];
+  if (dow === 'all') return decodeSeries(block.all);
+  return decodeSeries((block.dow || [])[Number(dow)]);
+}
+
 function drawRides() {
   const box = $('hx-rides');
   if (!rides) {
@@ -264,11 +323,74 @@ function drawRide() {
     return li;
   }));
 
+  drawRideHours();
+
   drawBars('hx-ride-months', byMonth(s, rides.from), {
     onPick: (row) => pickMonth(row),
     active: range && range.key && range.key.startsWith('m:') ? range.key.slice(2) : null,
   });
   drawBars('hx-ride-days', byWeekday(s, rides.from));
+}
+
+/* A ride's own hours, and its week as a grid.
+ *
+ * The grid is where the hourly data stops being trivia: a single profile
+ * says a ride peaks at two, the grid says it peaks at two on a Saturday and
+ * hardly at all on a Thursday, which is the difference between a fact and a
+ * plan.
+ */
+function drawRideHours() {
+  const wrap = $('hx-ride-hourly');
+  const ride = hours && openRide ? hours.rides[openRide] : null;
+  if (!ride) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+
+  const series = hourSeries(ride);
+  const { best, worst } = bestHour(series);
+  $('hx-ride-hours-says').textContent = best && worst && best.hour !== worst.hour
+    ? `Quietest around ${hourLabel(best.hour)} at ${best.value} min, busiest around ${hourLabel(worst.hour)} at ${worst.value} min.`
+    : 'Not enough hours recorded to tell them apart.';
+  drawBars('hx-ride-hours', hourRows(series, openHours(series)));
+
+  const grid = heatGrid(ride.dow || []);
+  const span = openHours(decodeSeries(ride.all));
+  const cells = [];
+  for (const row of grid) {
+    const tag = document.createElement('b');
+    tag.textContent = row.label;
+    const line = document.createElement('div');
+    line.className = 'hx-row';
+    for (let h = span.from; h <= span.to; h++) {
+      const cell = row.cells[h];
+      const i = document.createElement('i');
+      if (cell && cell.pct !== null) {
+        i.dataset.v = '';
+        i.style.setProperty('--v', String(Math.max(cell.pct, 8)));
+        i.title = `${row.label} ${hourLabel(h)}: ${cell.value} min`;
+        i.setAttribute('aria-label', i.title);
+      } else {
+        i.setAttribute('aria-label', `${row.label} ${hourLabel(h)}: no data`);
+      }
+      line.append(i);
+    }
+    cells.push(tag, line);
+  }
+  // One row of hour labels under the grid rather than one per row.
+  const spacer = document.createElement('b');
+  const hourLine = document.createElement('div');
+  hourLine.className = 'hx-hourline';
+  for (let h = span.from; h <= span.to; h++) {
+    const sp = document.createElement('span');
+    sp.textContent = h % 3 === 0 ? hourLabel(h) : '';
+    hourLine.append(sp);
+  }
+  cells.push(spacer, hourLine);
+  $('hx-ride-heat').replaceChildren(...cells);
+
+  const top = Math.max(0, ...grid.flatMap((r) => r.cells.map((c) => (c.value === null ? 0 : c.value))));
+  $('hx-heat-key').textContent = top
+    ? `Darkest cell is ${top} min. Every cell is scaled against that, so a quiet day reads quiet.`
+    : '';
 }
 
 function pickMonth(row) {
@@ -291,6 +413,7 @@ function render() {
     active: range && range.key && range.key.startsWith('m:') ? range.key.slice(2) : null,
   });
   drawBars('hx-days', byWeekday(series, head.from));
+  drawHours();
   drawRides();
   drawRide();
 }
@@ -310,7 +433,10 @@ function clear() {
     $(id).replaceChildren();
   }
   $('hx-ride-detail').hidden = true;
+  $('hx-ride-hourly').hidden = true;
   $('hx-more').hidden = true;
+  for (const id of ['hx-dow', 'hx-hours', 'hx-ride-heat']) $(id).replaceChildren();
+  $('hx-hours-says').textContent = '';
   showAll = false;
   $('hx-range-when').textContent = '';
   $('hx-age').textContent = '';
@@ -321,7 +447,7 @@ async function load() {
   clear();
   $('hx-error').textContent = '';
   $('hx-summary').textContent = 'Loading…';
-  head = null; rides = null; series = [];
+  head = null; rides = null; hours = null; series = []; dow = 'all';
 
   let got;
   try {
@@ -346,6 +472,16 @@ async function load() {
   // The ride document is the big one. Fetched after the screen is already
   // usable, and its failure costs the ride list and nothing else.
   const want = park;
+  /* The hourly rollup rides along with the per-ride one. It may not exist:
+   * the hourly backfill is a separate, far more expensive job, so the screen
+   * has to be useful without it rather than broken until it has run.
+   */
+  hoursRollup(park).then((got2) => {
+    if (want !== park) return;
+    hours = got2.data;
+    render();
+  }).catch(() => { hours = null; });
+
   try {
     const more = await ridesRollup(park);
     if (want !== park) return;  // they switched parks while it was in flight

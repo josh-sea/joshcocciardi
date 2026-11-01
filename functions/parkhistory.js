@@ -16,8 +16,15 @@
 //   GET  (no auth)                catch up on days inside the no-key window.
 //                                 The app calls this when it notices the
 //                                 archive is behind. Takes no input at all.
-//   GET  Bearer <collector token> backfill ?from=&to=, using the stored API
-//                                 key, so it reaches the full 30 days.
+//   GET  X-Park-Token             backfill ?from=&to=, using the stored API
+//                                 key, so it reaches the plan's full window.
+//   GET  X-Park-Token &mode=hours the hourly archive: one call per park-day
+//                                 against the raw change feed, reduced to 24
+//                                 numbers a ride before anything is stored.
+//                                 Authenticated only, because it is the
+//                                 expensive half and an open endpoint that
+//                                 could start it would be a way for a
+//                                 stranger to spend the API budget.
 //
 // The open path is safe because nothing the caller sends is ever stored: the
 // request carries no parameters, the dates come from the park's own clock,
@@ -78,9 +85,13 @@ const { timingSafeEqual } = require('node:crypto');
 
 const { leanDay, daysInWindow, pick, addDays } = require('./parkdaily');
 const rollup = require('./parkrollup');
+const hours = require('./parkhours');
 const { _internal: live } = require('./parks');
 
 const { PARKS, localDate } = live;
+// The parks' own clock. Every park here is Walt Disney World, so one zone
+// covers all four; parks.js owns the same constant for the live collector.
+const TZ = 'America/New_York';
 
 const db = () => getFirestore();
 const API = 'https://api.themeparks.wiki/v1';
@@ -94,6 +105,9 @@ const OPEN_LIMIT = 8;
 // and wall clock rather than by the history budget. The job is resumable,
 // so overshooting costs a second run and never a lost day.
 const BACKFILL_LIMIT = 400;
+// Hourly is one call per park-day and each response is over a megabyte, so
+// a pass takes far fewer of them than the daily archive does.
+const HOURS_LIMIT = 400;
 
 /* The budget that matters is Firebase Hosting's, not the function's.
  *
@@ -374,6 +388,61 @@ async function archive({ now = new Date(), apiKey = null, from = null, to = null
   };
 }
 
+/* ── hourly ────────────────────────────────────────────────────────────────
+ *
+ * The daily summary answers "was that week busy". It cannot answer "when
+ * should I walk over", which needs the raw endpoint: every change, 1.66MB and
+ * 3,186 rows for one park-day. That is reduced to 24 numbers per ride before
+ * anything is stored, 428 times smaller, by parkhours.js.
+ *
+ * One call per park-day, because a park range on this endpoint is refused
+ * with RANGE_TOO_LONG. So this is the expensive half of the archive: 1,596
+ * calls for the window we hold, against a Pro budget of 1,200 an hour. It is
+ * built to stop cleanly when the budget runs out and say so, rather than to
+ * hold a runner open waiting for an hour to pass.
+ */
+async function fillHours(key, park, todo, apiKey, deadline) {
+  const stored = [];
+  for (const date of todo) {
+    if (Date.now() > deadline) return { stored, ranOut: true };
+    const url = `${API}/entity/${park.id}/history?date=${date}`;
+    const page = await getPage(url, apiKey);
+    if (page.windowExceeded) return { stored, note: `out of window before ${page.earliest || '?'}` };
+
+    const day = hours.reduceDay(page.data.entities, date, TZ);
+    if (!day.counted) { stored.push(date); continue; }  // a real day with nothing open
+
+    await db().collection('park_hours').doc(`${key}_${date}`).set({
+      park: key, date, rides: day.rides, index: day.index, counted: day.counted,
+      source: 'themeparks.history',
+      fetchedAt: FieldValue.serverTimestamp(),
+    });
+    stored.push(date);
+  }
+  return { stored };
+}
+
+async function heldHours(park, dates) {
+  if (!dates.length) return new Set();
+  const out = new Set();
+  for (let i = 0; i < dates.length; i += LOOKUP_CHUNK) {
+    const slice = dates.slice(i, i + LOOKUP_CHUNK);
+    const refs = slice.map((d) => db().collection('park_hours').doc(`${park}_${d}`));
+    const snaps = await db().getAll(...refs);
+    for (const snap of snaps) if (snap.exists) out.add(snap.data().date);
+  }
+  return out;
+}
+
+/* Only days the daily archive already holds are worth asking for: it is the
+ * record of which days exist at all, and asking for an hourly profile of a
+ * day we have no daily row for would spend a call to learn nothing.
+ */
+async function hourlyWindow(key) {
+  const snap = await db().collection('park_history').where('park', '==', key).get();
+  return snap.docs.map((d) => d.data().date).sort();
+}
+
 /* ── rollups ───────────────────────────────────────────────────────────────
  *
  * The archive is one document per park-day, which is right for writing and
@@ -408,6 +477,19 @@ async function rebuildRollup(key) {
     }),
   ]);
   return { days: built.days, rides: Object.keys(rides).length };
+}
+
+/* The hourly rollup, built from park_hours exactly as the daily one is built
+ * from park_history: a projection, never a second copy that can drift.
+ */
+async function rebuildHoursRollup(key) {
+  const snap = await db().collection('park_hours').where('park', '==', key).get();
+  const built = hours.buildHours(key, snap.docs.map((d) => d.data()));
+  if (!built) return null;
+  await db().collection('park_rollups').doc(`${key}_hours`).set({
+    ...built, builtAt: FieldValue.serverTimestamp(),
+  });
+  return { days: built.days, rides: Object.keys(built.rides).length };
 }
 
 async function markStale(parks) {
@@ -469,6 +551,107 @@ async function writeCursor(storedByPark) {
   return newest;
 }
 
+/* ── the hourly job ────────────────────────────────────────────────────────
+ *
+ * Deliberately a separate pass from the daily archive rather than part of it.
+ * The daily side finishes in seconds and runs on every app open; this costs
+ * one API call per park-day and will not finish inside one hourly budget. Tie
+ * them together and the cheap job inherits the expensive one's problems.
+ */
+async function archiveHours({ now = new Date(), apiKey = null, from = null, to = null,
+                              limit = HOURS_LIMIT, budgetMs = BUDGET_MS } = {}) {
+  const today = localDate(now);
+  const deadline = Date.now() + budgetMs;
+  const report = {};
+  let stored = 0;
+  let ranOut = false;
+  let rateLimited = false;
+
+  for (const [key, park] of Object.entries(PARKS)) {
+    if (Date.now() > deadline) { ranOut = true; report[key] = 'out of time, run again'; continue; }
+
+    let window;
+    try {
+      window = (await hourlyWindow(key)).filter((d) => d < today
+        && (!from || d >= from) && (!to || d <= to));
+    } catch (err) {
+      report[key] = `lookup failed: ${err.message || err}`;
+      continue;
+    }
+    if (!window.length) { report[key] = 'no daily archive to match'; continue; }
+
+    let have;
+    try {
+      have = await heldHours(key, window);
+    } catch (err) {
+      report[key] = `lookup failed: ${err.message || err}`;
+      continue;
+    }
+
+    // Newest first here, unlike the daily archive. The hourly backfill may
+    // take more than one run, and a profile of last month is worth more
+    // while you wait than a profile of last September.
+    const todo = window.filter((d) => !have.has(d)).reverse().slice(0, limit);
+    if (!todo.length) { report[key] = 'up to date'; continue; }
+
+    try {
+      const res = await fillHours(key, park, todo, apiKey, deadline);
+      stored += res.stored.length;
+      if (res.ranOut) ranOut = true;
+      report[key] = `${res.stored.length} days${res.note ? `, ${res.note}` : ''}, ${window.length - have.size - res.stored.length} left`;
+    } catch (err) {
+      if (err.rateLimited) {
+        rateLimited = true;
+        report[key] = `rate limited, retry after ${err.retryAfter || '?'}s`;
+      } else {
+        console.error(`[parkArchive] hours ${key} failed`, err);
+        report[key] = `failed: ${err.message || err}`;
+      }
+    }
+  }
+
+  /* Rebuild the hourly rollups for whatever this pass touched. Unlike the
+   * daily side this is not deferred to a stale list: an hourly backfill can
+   * take several runs, and a chart that only appears at the very end is a
+   * chart nobody can use to tell whether the backfill is working.
+   */
+  const rolled = {};
+  for (const key of Object.keys(PARKS)) {
+    if (!String(report[key] || '').startsWith('0 days') && /days/.test(String(report[key] || ''))) {
+      try {
+        const out = await rebuildHoursRollup(key);
+        rolled[key] = out ? `${out.rides} rides over ${out.days} days` : 'nothing yet';
+      } catch (err) {
+        console.error(`[parkArchive] hours rollup ${key} failed`, err);
+        rolled[key] = `failed: ${err.message || err}`;
+      }
+    }
+  }
+
+  const left = await hoursLeft(today);
+  return {
+    today, mode: 'hours', stored, keyed: !!apiKey, report, left,
+    ...(Object.keys(rolled).length ? { rollups: rolled } : {}),
+    ...(rateLimited ? { rateLimited: true } : {}),
+    ...(ranOut || left ? { incomplete: true } : {}),
+  };
+}
+
+/* How many park-days of hourly profile are still missing, so a caller can
+ * say "stop" rather than guess from a report that only describes this pass.
+ */
+async function hoursLeft(today) {
+  let left = 0;
+  for (const key of Object.keys(PARKS)) {
+    try {
+      const window = (await hourlyWindow(key)).filter((d) => d < today);
+      const have = await heldHours(key, window);
+      left += window.length - have.size;
+    } catch { /* counted as zero rather than failing the run over a count */ }
+  }
+  return left;
+}
+
 /* ── the endpoint ────────────────────────────────────────────────────────── */
 
 const sameSecret = (a, b) => {
@@ -517,6 +700,13 @@ exports.parkArchive = onRequest(
     }
 
     try {
+      /* The hourly pass is authenticated only. It is the expensive half of
+       * the archive, so an open endpoint that could start it would be a way
+       * for a stranger to spend the API budget. */
+      if (authed && req.query.mode === 'hours') {
+        res.json(await archiveHours({ apiKey, from: asDate(req.query.from), to: asDate(req.query.to) }));
+        return;
+      }
       res.json(await archive(authed
         ? { apiKey, from: asDate(req.query.from), to: asDate(req.query.to), limit: BACKFILL_LIMIT }
         : { limit: OPEN_LIMIT }));
@@ -528,8 +718,10 @@ exports.parkArchive = onRequest(
 );
 
 exports.archive = archive;
+exports.archiveHours = archiveHours;
 exports._internal = {
   getPage, planFloor, held, fillRange, writeCursor,
   rebuildRollup, markStale, clearStale, staleParks, missingRollups,
-  OPEN_LIMIT, BACKFILL_LIMIT, BUDGET_MS, FETCH_SHARE_MS, HOSTING_CAP_MS, LOOKUP_CHUNK,
+  fillHours, heldHours, hourlyWindow, hoursLeft, archiveHours, rebuildHoursRollup,
+  OPEN_LIMIT, BACKFILL_LIMIT, HOURS_LIMIT, BUDGET_MS, FETCH_SHARE_MS, HOSTING_CAP_MS, LOOKUP_CHUNK,
 };

@@ -186,5 +186,85 @@ export function bars(rows) {
   });
 }
 
+/* ── hours ─────────────────────────────────────────────────────────────────
+ *
+ * The hourly rollup gives every ride a 24-slot profile over the whole window
+ * and seven more split by day of the week. `dow` is indexed by JavaScript's
+ * own weekday numbering, Sunday first, because that is what produced it; the
+ * UI reorders for display and must not reorder the data.
+ */
+export const HOURS = 24;
+
+// Monday first for reading, Sunday first in the data. Keeping the mapping in
+// one place is the difference between a chart that is rotated by a day and
+// one that is not.
+export const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+export const hourLabel = (h) => {
+  if (h === 0) return '12a';
+  if (h === 12) return '12p';
+  return h < 12 ? `${h}a` : `${h - 12}p`;
+};
+
+/* The hours a park is actually open, so a chart does not spend a third of
+ * its width on empty pre-dawn slots. Falls back to the whole day when there
+ * is nothing to go on, rather than showing nothing.
+ */
+export function openHours(series) {
+  let first = -1;
+  let last = -1;
+  series.forEach((v, h) => {
+    if (v === null) return;
+    if (first < 0) first = h;
+    last = h;
+  });
+  if (first < 0) return { from: 0, to: HOURS - 1 };
+  return { from: first, to: last };
+}
+
+export function hourRows(series, { from = 0, to = HOURS - 1 } = {}) {
+  const rows = [];
+  for (let h = from; h <= to && h < HOURS; h++) {
+    rows.push({ key: String(h), label: hourLabel(h), value: series[h] ?? null, hour: h });
+  }
+  return rows;
+}
+
+/* The quietest and busiest hour a ride is open. The point of the hourly data
+ * is a decision, and the decision is which hour to walk over.
+ */
+export function bestHour(series) {
+  let best = null;
+  let worst = null;
+  series.forEach((v, h) => {
+    if (v === null) return;
+    if (!best || v < best.value) best = { hour: h, value: v };
+    if (!worst || v > worst.value) worst = { hour: h, value: v };
+  });
+  return { best, worst };
+}
+
+/* A weekday-by-hour grid: seven rows of 24, each cell scaled against the
+ * busiest cell in the whole grid rather than against its own row. A per-row
+ * scale would make a quiet Tuesday look exactly as red as a heaving
+ * Saturday, which is the opposite of what a heatmap is for.
+ */
+export function heatGrid(dowSeries) {
+  const decoded = dowSeries.map((t) => decodeSeries(t));
+  let top = 0;
+  for (const row of decoded) for (const v of row) if (v !== null && v > top) top = v;
+
+  return DOW_ORDER.map((d) => ({
+    key: String(d),
+    label: WEEKDAYS_SHORT[d],
+    cells: Array.from({ length: HOURS }, (_, h) => {
+      const v = decoded[d] ? decoded[d][h] ?? null : null;
+      return { hour: h, value: v, pct: top > 0 && v !== null ? Math.round((v / top) * 100) : null };
+    }),
+  }));
+}
+
+const WEEKDAYS_SHORT = DOW;
+
 export const WEEKDAYS = DOW;
 export const MONTH_NAMES = MONTHS;
