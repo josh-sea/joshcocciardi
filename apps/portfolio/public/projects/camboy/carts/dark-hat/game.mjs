@@ -384,6 +384,7 @@ export function boot(hw) {
 
   function useAttack() {
     if (P.cd.a > 0) return;
+    if (R.attack.id === "wand" && P.wands.length) return; // still out: wait for it to come back
     const st = attackStats(R);
     const f = P.face;
     const fa = Math.atan2(f.y, f.x);
@@ -571,7 +572,7 @@ export function boot(hw) {
           const d = Math.max(1, dist(w.x, w.y, t.x, t.y));
           w.vx += (((t.x - w.x) / d) * st.speed - w.vx) * Math.min(1, dt * 5);
           w.vy += (((t.y - w.y) / d) * st.speed - w.vy) * Math.min(1, dt * 5);
-        }
+        } else w.back = true; // nothing left to hunt: home it comes
       }
       w.x += w.vx * dt; w.y += w.vy * dt;
       w.x = Math.max(2, Math.min(S.rw - 2, w.x)); w.y = Math.max(2, Math.min(RH - 2, w.y));
@@ -2111,7 +2112,8 @@ export function boot(hw) {
       text(slot.toUpperCase(), x + 1, 3, 1);
       const k = slot === "a" ? ATTACK_ICON[R.attack.id] : R.defense && DEFENSE_ICON[R.defense.id];
       if (k) {
-        sprite(ICONS[k], x + 10, 12, false, { 3: P.cd[slot] > 0 ? 1 : 0 });
+        const busy = P.cd[slot] > 0 || (slot === "a" && P.wands.length > 0);
+        sprite(ICONS[k], x + 10, 12, false, { 3: busy ? 1 : 0 });
         if (P.cd[slot] > 0) rect(x, 13, Math.round(15 * (1 - P.cd[slot] / P.cdMax[slot])), 1, 0);
         // Shield cards still circling, and blinks left.
         if (slot === "b" && P.shield) P.shield.cards.forEach((left, i) => left > 0 && rect(x + 1 + i * 2, 13, 1, 1, 0));
