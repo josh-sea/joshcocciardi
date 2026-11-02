@@ -12,6 +12,7 @@ import {
   COLS, ROWS, TILE, NAME_LEN, LINE_CHARS, SOUL_MAX, SOUL_DRAIN, STORY, TRICKS, LAYERS, BOSSES, ENEMIES, TEMPLATES,
   DOOR_COLS, DOOR_ROWS, cleanName, say, trickStats, knows, choosePath, usable, layoutLayer, neighbor, roomTiles,
   moveBox, reachable, drainSoul, gainSoul, newRun, validRun, beatBoss, descend, faceFrom, roomEnemies,
+  SPEED, RABBIT, SHIELD_CARDS, rabbitLanding,
 } from '../public/projects/camboy/carts/dark-hat/rules.mjs';
 import { SONGS } from '../public/projects/camboy/carts/dark-hat/sound.mjs';
 import { compile, midi } from '../public/projects/camboy/js/chip.mjs';
@@ -106,6 +107,23 @@ console.log('\nthe hat');
   const r = newRun('bo', 42);
   ok('the same room fills the same way each visit', JSON.stringify(roomEnemies(r, 1, 4)) === JSON.stringify(roomEnemies(r, 1, 4)));
   ok('deeper layers bring more enemies', roomEnemies(r, 2, 0).length >= 5);
+}
+
+console.log('\nthe giant rabbit');
+{
+  const far = rabbitLanding({ x: 20, y: 20 }, { x: 140, y: 100 });
+  ok('he never hops more than one hop toward you', Math.abs(Math.hypot(far.x - 20, far.y - 20) - RABBIT.hop) < 1e-9);
+  const near = rabbitLanding({ x: 20, y: 20 }, { x: 40, y: 30 });
+  ok('when you are close he lands right where you are', near.x === 40 && near.y === 30);
+  ok('his shadow gives you time to run out of the ring', SPEED * RABBIT.air > RABBIT.ring + 4);
+  ok('even when he is angry and hopping faster', SPEED * RABBIT.airFast > RABBIT.ring + 4);
+  ok('the ring stops well short of the walls', RABBIT.ring < 50);
+}
+
+console.log('\nthe card shield');
+{
+  ok('three cards', SHIELD_CARDS === 3);
+  ok('its description says the cards last until used', /EACH ONE/.test(TRICKS.tornado.paths.shield.desc));
 }
 
 console.log('\nthe soul and the run');

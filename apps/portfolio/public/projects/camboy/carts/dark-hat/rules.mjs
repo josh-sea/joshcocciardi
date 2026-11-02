@@ -103,7 +103,7 @@ export const TRICKS = {
   tornado: {
     name: "CARD TORNADO",
     paths: {
-      shield: { name: "CARD SHIELD", desc: "CARDS CIRCLE YOU. THEY BLOCK SPARKS AND DRINK THEIR MAGIC.", cd: 9, dmg: 1 },
+      shield: { name: "CARD SHIELD", desc: "THREE CARDS CIRCLE YOU, EVEN ROOM TO ROOM. EACH ONE BLOCKS OR HITS ONCE.", cd: 8, dmg: 1 },
       storm: { name: "CARD STORM", desc: "CARDS BURST OUT IN A RING ALL AROUND YOU.", cd: 2.6, dmg: 1 },
     },
   },
