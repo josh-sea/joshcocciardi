@@ -27,7 +27,7 @@ export const TOP = 16;               // the room sits under a 16 px status bar
 export const SPEED = 50;             // pixels per second
 export const MAX_HEARTS = 3;         // in whole hearts; health counts halves
 export const SOUL_MAX = 100;
-export const SOUL_DRAIN = 0.45;      // per second: a full soul lasts about four minutes
+export const SOUL_DRAIN = 0.75;      // per second: a full soul lasts a bit over two minutes
 export const NAME_LEN = 4;
 export const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
 export const LINE_CHARS = 38;        // characters in a line of a text box
@@ -83,12 +83,19 @@ export const STORY = {
     "UP JUMPS, CLIMBS LADDERS AND OPENS DOORS. DOWN DROPS THROUGH LEDGES. A AND B STILL WORK!",
   ],
   castleBoss: "MALVADO: MEET MY RABBIT. HE'S FLAT NOW TOO!",
-  castleDoor: "A DOOR APPEARS AT THE END OF THE THRONE ROOM. THE WAY OUT OF THE CASTLE!",
+  castleNext: "THE FAR DOOR OF THE THRONE ROOM CREAKS OPEN. SOMETHING IN THERE IS SHUFFLING CARDS...",
+  castleKing: "MALVADO: MY CARD KING IS BACK, AND FLATTER THAN EVER!",
+  castleDoor: "A DOOR APPEARS AT THE END OF THE CARD HALL. THE WAY OUT OF THE CASTLE!",
   castleExit: [
     "MALVADO: WHAT?! NOBODY GETS OUT OF MY CASTLE!",
     "MALVADO: FINE. BACK INTO THE HAT WITH YOU!",
   ],
   castleBack: "{N}: THAT WAS WEIRD. I WAS FLAT.",
+  fallIntro: "...AND NOW {N} IS FALLING! DOWN, DOWN, TO THE VERY BOTTOM OF THE HAT!",
+  fallHelp: "LEFT AND RIGHT TO STEER. A SHOOTS CARDS DOWN AND SLOWS YOUR FALL. STOMP GLOVES AND BUNNIES. SHOOT THE SPARKS!",
+  slideIntro: "THE LADDER ENDS AT THE TOP OF A LONG VELVET SLOPE. MALVADO'S DARK MAGIC POURS IN BEHIND {N}!",
+  slideHelp: "SLIDE ON YOUR HAT! HOLD A OR DOWN TO DIVE INTO THE HILLS. LET GO TO FLY OFF THE TOPS. OUTRUN THE DARK!",
+  slideCaught: "THE DARK MAGIC CAUGHT {N}! IT COSTS A HEART. BACK TO THE TOP OF THE SLOPE!",
   flightIntro: [
     "MALVADO'S HAT SHAKES. THE DARK MAGIC IS BREAKING!",
     "A MAGIC SCARF UNROLLS FROM THE TOP OF THE HAT. {N} GRABS ON, AND IT FLIES!",
@@ -351,7 +358,7 @@ export function applyPick(run, pick, i) {
     return true;
   }
   if (pick.type === "bonus") {
-    if (id === "heart") { run.maxHp = Math.min(12, run.maxHp + 2); run.hp = run.maxHp; }
+    if (id === "heart") { run.maxHp = Math.min(12, run.maxHp + 2); run.hp = run.maxHp; run.hearts = (run.hearts || 0) + 1; }
     else run.deep = Math.min(3, (run.deep || 0) + 1);
     return true;
   }
@@ -421,6 +428,7 @@ export const LAYERS = [
     enemies: ["spark", "glove", "bunny"],
     boss: "rabbit",
     look: 0, depth: 0,
+    down: "slide", // its ladder drops you onto the hat slide
   },
   {
     name: "CARD CATACOMBS",
@@ -435,7 +443,7 @@ export const LAYERS = [
     ground: ["bunny", "soldier"],
     air: ["spark", "spark", "glove", "wisp"],
     enemies: ["bunny", "soldier", "spark", "glove", "wisp"],
-    boss: "flatrabbit",
+    boss: "flatking", // and the flat rabbit before him: see CASTLE
     depth: 2,
   },
   {
@@ -458,7 +466,7 @@ export const CASTLE_LAYER = LAYERS.findIndex((L) => L.side);
  *   H  ladder      ^  spikes
  *   s  where you start          P  a trapped spirit      F  a soul fountain
  *   1  a walker (bunny or soldier)    2  a flier (spark, glove or wisp)
- *   a to e  a door: the letter is its bottom-left tile, and it is two
+ *   a to h  a door: the letter is its bottom-left tile, and it is two
  *           tiles wide and three tall. Each letter joins two rooms.
  *   x  the way out, which opens once the boss is beaten
  */
@@ -585,9 +593,32 @@ export const CASTLE = [
       "#..===........===..#",
       "#..................#",
       "#..................#",
-      "#.e.............x..#",
+      "#.e.............f..#",
       "####################",
     ],
+    boss: "flatrabbit",
+  },
+  {
+    name: "THE CARD HALL", kind: "boss",
+    map: [
+      "####################",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..===........===..#",
+      "#..................#",
+      "#..................#",
+      "#.f.............x..#",
+      "####################",
+    ],
+    boss: "flatking",
   },
 ];
 
@@ -603,10 +634,10 @@ export function castleTiles(room) {
 /** Read the castle's maps into rooms, with doors joined up by letter. */
 function layoutCastle() {
   const rooms = CASTLE.map((c, id) => {
-    const room = { id, name: c.name, kind: c.kind, side: true, map: c.map, cols: c.map[0].length, doors: [], spots: [], start: null, spirit: null, fountain: null };
+    const room = { id, name: c.name, kind: c.kind, boss: c.boss || null, side: true, map: c.map, cols: c.map[0].length, doors: [], spots: [], start: null, spirit: null, fountain: null };
     c.map.forEach((row, ty) => [...row].forEach((ch, tx) => {
       const x = tx * TILE + TILE / 2, foot = (ty + 1) * TILE;
-      if (/[a-ex]/.test(ch)) room.doors.push({ id: ch, tx, ty, x: tx * TILE + TILE, foot });
+      if (/[a-hx]/.test(ch)) room.doors.push({ id: ch, tx, ty, x: tx * TILE + TILE, foot });
       else if (ch === "s") room.start = { x, y: foot - 5 };
       else if (ch === "P") room.spirit = { x, y: foot - 4 };
       else if (ch === "F") room.fountain = { x, y: foot - 4 };
@@ -620,7 +651,9 @@ function layoutCastle() {
     const other = rooms.find((r) => r !== room && r.doors.some((k) => k.id === d.id));
     d.to = other ? other.id : null;
   }
-  return { side: true, cols: rooms.length, rows: 1, rooms, start: rooms.find((r) => r.kind === "start").id, boss: rooms.find((r) => r.kind === "boss").id };
+  // The castle's last boss is the one with the way out.
+  const last = rooms.find((r) => r.doors.some((d) => d.id === "x"));
+  return { side: true, cols: rooms.length, rows: 1, rooms, start: rooms.find((r) => r.kind === "start").id, boss: last.id };
 }
 
 /** Which walkers and fliers fill a castle room, the same every visit. */
@@ -779,7 +812,8 @@ export function rabbitLanding(from, toward, hop = RABBIT.hop) {
 export const BOSSES = {
   rabbit: { name: "THE GIANT RABBIT", hp: 20 },
   king: { name: "THE CARD KING", hp: 26 },
-  flatrabbit: { name: "THE FLAT RABBIT", hp: 26 },
+  flatrabbit: { name: "THE FLAT RABBIT", hp: 24 },
+  flatking: { name: "THE FLAT CARD KING", hp: 26 },
   malvado: { name: "THE GREAT MALVADO", hp: 40 },
 };
 
@@ -895,11 +929,106 @@ export function reachable(tiles, sx, sy) {
   return seen;
 }
 
+/* ---------- the hat slide: a velvet hillside, with the dark behind you ---------- */
+
+/**
+ * After the Velvet Brim, the ladder drops you at the top of a long slope
+ * of hat lining. You ride your hat down it. Holding dive pulls you into
+ * the ground: do it going downhill to pick up speed, let go going uphill
+ * to fly off the tops. Land lined up with a downslope for a boost, land
+ * badly and you lose speed. The dark magic behind you speeds up.
+ */
+export const SLIDE = {
+  length: 2800,        // pixels to the bottom
+  gravity: 320, dive: 3.2,
+  minSpeed: 30, maxSpeed: 250, drag: 0.1,
+  nice: 1.15, oof: 0.72,
+  darkStart: -120, darkSpeed: 58, darkGain: 36, // the dark's speed at the top, and how much it gains by the bottom
+};
+
+/** Height of the ground (in room pixels, down is bigger) at x. Hills get bigger further down. */
+export function slideGround(x) {
+  if (x < 0) return slideGround(0);
+  const amp = 18 + 10 * Math.min(1, x / 1600) + 4 * Math.sin(x / 530);
+  const phase = (x / 150 + 0.12 * Math.sin(x / 700)) * Math.PI * 2;
+  return 84 - amp * Math.cos(phase);
+}
+export const slideSlope = (x) => slideGround(x + 0.5) - slideGround(x - 0.5);
+
+/** One step of the hat sled. b has x, y, vx, vy, ground. Returns what happened. */
+export function slideStep(b, dive, dt) {
+  const ev = { landed: false, nice: false, oof: false };
+  const was = b.ground;
+  b.vy += SLIDE.gravity * (dive ? SLIDE.dive : 1) * dt;
+  b.x += b.vx * dt;
+  b.y += b.vy * dt;
+  const gy = slideGround(b.x);
+  if (b.y >= gy) {
+    const m = slideSlope(b.x), len = Math.hypot(1, m), tx = 1 / len, ty = m / len;
+    let along = b.vx * tx + b.vy * ty;
+    if (!was) {
+      // How well did the fall line up with the hill?
+      const sp = Math.hypot(b.vx, b.vy) || 1;
+      const align = along / sp;
+      if (m > 0.15 && align > 0.93) { along *= SLIDE.nice; ev.nice = true; }
+      else if (align < 0.75) { along *= SLIDE.oof; ev.oof = true; }
+      ev.landed = true;
+    }
+    along *= 1 - SLIDE.drag * dt;
+    const v = Math.max(SLIDE.minSpeed, Math.min(SLIDE.maxSpeed, along));
+    b.vx = v * tx; b.vy = v * ty; b.y = gy; b.ground = true;
+  } else if (b.y < gy - 1) b.ground = false;
+  return ev;
+}
+
+/** How fast the dark comes on, by how far down the hero is. */
+export const darkSpeed = (x) => SLIDE.darkSpeed + SLIDE.darkGain * Math.min(1, Math.max(0, x / SLIDE.length));
+
+/* ---------- the freefall: down the well to the bottom of the hat ---------- */
+
+/**
+ * Out of Malvado's castle, he tosses you back into the hat and you fall.
+ * The well is 20 tiles wide with stone ledges sticking out of its walls
+ * and blocks floating in the middle, seeded per run. A shoots cards
+ * straight down: they hit what's below and slow your fall, and the
+ * cards come back when you land on something.
+ */
+export const WELL = { cols: 20, rows: 200, gravity: 420, fall: 150, walk: 64, shot: 230, kick: 55, ammo: 6 };
+
+export function makeWell(seed) {
+  const rng = makeRng(seed >>> 0);
+  const { cols, rows } = WELL;
+  const tiles = Array.from({ length: rows }, (_, y) => Array.from({ length: cols }, (_, x) => (x < 2 || x >= cols - 2 || y === rows - 1 ? T_WALL : T_AIR)));
+  const foes = [], gems = [];
+  let side = rng() < 0.5 ? 0 : 1;
+  for (let y = 14; y < rows - 10; y += 4 + Math.floor(rng() * 4)) {
+    if (rng() < 0.72) {
+      // A ledge out of one wall, never more than half way across.
+      const len = 3 + Math.floor(rng() * 5);
+      for (let k = 0; k < len; k++) tiles[y][side ? cols - 3 - k : 2 + k] = T_WALL;
+      if (rng() < 0.4) foes.push({ kind: "bunny", x: ((side ? cols - 2 - len / 2 : 2 + len / 2)) * TILE, y: y * TILE - 3 });
+      side = 1 - side;
+    } else {
+      const w = 2 + Math.floor(rng() * 3), x0 = 5 + Math.floor(rng() * (cols - 10 - w));
+      for (let k = 0; k < w; k++) tiles[y][x0 + k] = T_WALL;
+    }
+    const r = rng();
+    const fx = (4 + rng() * (cols - 8)) * TILE, fy = (y - 2) * TILE;
+    if (r < 0.3) foes.push({ kind: "spark", x: fx, y: fy });
+    else if (r < 0.55) foes.push({ kind: "glove", x: fx, y: fy });
+    else if (r < 0.85) gems.push({ x: fx, y: fy });
+  }
+  return { tiles, foes, gems };
+}
+
 /* ---------- the soul ---------- */
 
 /** deep is how many Deep Soul bonuses you have: each makes the soul drain a fifth slower. */
 export const drainSoul = (soul, dt, deep = 0) => Math.max(0, soul - SOUL_DRAIN * 0.8 ** deep * dt);
-export const SOUL_GAIN = { sparkle: 4, spirit: 40, boss: 50, block: 2 };
+// Kept small on purpose: the soul is a clock, so dawdling costs you.
+export const SOUL_GAIN = { sparkle: 3, spirit: 30, boss: 35, block: 1 };
+/** How often a beaten enemy drops a sparkle. */
+export const SPARKLE_DROP = 0.35;
 export const gainSoul = (soul, why) => Math.min(SOUL_MAX, soul + (SOUL_GAIN[why] ?? 0));
 
 /* ---------- runs ---------- */
@@ -975,6 +1104,19 @@ export function beatBoss(run) {
   run.hp = run.maxHp;
   run.soul = gainSoul(run.soul, "boss");
   return run.layer === LAYERS.length - 1;
+}
+
+/**
+ * Beat one of the castle's bosses. Each gives a heart and some soul and
+ * marks its room done; only the last one ends the layer.
+ */
+export function beatRoomBoss(run, roomKey, last) {
+  if (!run.cleared.includes(roomKey)) run.cleared.push(roomKey);
+  if (last) return beatBoss(run);
+  run.maxHp = Math.min(12, run.maxHp + 2);
+  run.hp = run.maxHp;
+  run.soul = gainSoul(run.soul, "boss");
+  return false;
 }
 
 /** Take the ladder down to the next layer's start room. */

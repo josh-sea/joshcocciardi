@@ -16,6 +16,7 @@ import {
   moveBox, reachable, drainSoul, gainSoul, newRun, validRun, upgradeRun, beatBoss, descend, faceFrom, roomEnemies,
   SPEED, RABBIT, rabbitLanding,
   CASTLE, CASTLE_LAYER, castleTiles, castleEnemies, SIDE, sideStep, sideMove, tileAt, standsOn, T_WALL, T_LEDGE, T_LADDER,
+  SOUL_GAIN, SPARKLE_DROP, beatRoomBoss, SLIDE, slideGround, slideSlope, slideStep, darkSpeed, WELL, makeWell,
 } from '../public/projects/camboy/carts/dark-hat/rules.mjs';
 import { SONGS } from '../public/projects/camboy/carts/dark-hat/sound.mjs';
 import { compile, midi } from '../public/projects/camboy/js/chip.mjs';
@@ -34,7 +35,8 @@ console.log('\nnames and words');
   ok('trailing blanks are dropped', cleanName('BO  ') === 'BO');
   ok('the name goes into the story', say('{N} FELL IN!', 'cam').join(' ') === 'CAM FELL IN!');
   const all = [...STORY.intro, ...STORY.escape, STORY.spiritIntro, STORY.spiritAttack, STORY.spiritDefense, STORY.spiritUpgrade, STORY.spiritBonus, STORY.bossGift, STORY.fountain, STORY.caught, STORY.ladder,
-    ...STORY.castleIntro, ...STORY.castleLand, STORY.castleBoss, STORY.castleDoor, ...STORY.castleExit, STORY.castleBack,
+    ...STORY.castleIntro, ...STORY.castleLand, STORY.castleBoss, STORY.castleNext, STORY.castleKing, STORY.castleDoor, ...STORY.castleExit, STORY.castleBack,
+    STORY.fallIntro, STORY.fallHelp, STORY.slideIntro, STORY.slideHelp, STORY.slideCaught,
     ...STORY.flightIntro, STORY.flightHelp, STORY.flightCaught];
   const longest = Math.max(...all.flatMap((t) => say(t, 'WWWW')).map((l) => l.length));
   ok('every line of story fits the text box, even with a four letter name', longest <= LINE_CHARS, `longest ${longest}`);
@@ -227,7 +229,8 @@ console.log('\nthe card shield');
 
 console.log('\nthe soul and the run');
 {
-  ok('a full soul lasts about four minutes', SOUL_MAX / SOUL_DRAIN > 200 && SOUL_MAX / SOUL_DRAIN < 260);
+  ok('a full soul lasts a bit over two minutes', SOUL_MAX / SOUL_DRAIN > 120 && SOUL_MAX / SOUL_DRAIN < 150);
+  ok('sparkles are a trickle, not a flood', SOUL_GAIN.sparkle * SPARKLE_DROP <= 1.2 && SOUL_GAIN.spirit <= 30 && SOUL_GAIN.boss <= 35);
   ok('the soul drains and stops at empty', drainSoul(10, 5) < 10 && drainSoul(1, 100) === 0);
   ok('freeing a spirit refills a lot, a sparkle a little', gainSoul(10, 'spirit') - 10 > gainSoul(10, 'sparkle') - 10);
   ok('the soul never overflows', gainSoul(SOUL_MAX - 1, 'spirit') === SOUL_MAX);
@@ -257,7 +260,10 @@ console.log('\nthe soul and the run');
 console.log('\nmalvado\'s castle');
 {
   const lay = layoutLayer(CASTLE_LAYER);
-  ok('six rooms, a start and a boss', lay.rooms.length === 6 && lay.rooms[lay.start].kind === 'start' && lay.rooms[lay.boss].kind === 'boss');
+  ok('seven rooms, a start, and two bosses', lay.rooms.length === 7 && lay.rooms[lay.start].kind === 'start' && lay.rooms.filter((r) => r.kind === 'boss').map((r) => r.boss).join() === 'flatrabbit,flatking');
+  ok('the flat card king is last, with the way out', lay.rooms[lay.boss].boss === 'flatking' && lay.rooms[lay.boss].doors.some((d) => d.id === 'x'));
+  ok('the rabbit\'s throne room leads on to him', lay.rooms.find((r) => r.boss === 'flatrabbit').doors.some((d) => d.to === lay.boss));
+  ok('both flat bosses are real bosses', BOSSES.flatrabbit && BOSSES.flatking);
   ok('every room is sixteen tiles tall, at least a screen wide, and square-edged', CASTLE.every((c) => c.map.length === ROWS && c.map[0].length >= COLS && c.map.every((row) => row.length === c.map[0].length)));
   ok('every room is walled in', CASTLE.every((c) => /^#+$/.test(c.map[0]) && /^#+$/.test(c.map[ROWS - 1]) && c.map.every((row) => row[0] === '#' && row.at(-1) === '#')));
   const letters = lay.rooms.flatMap((r) => r.doors.map((d) => d.id)).filter((l) => l !== 'x');
@@ -354,7 +360,11 @@ console.log('\nmalvado\'s castle');
   const foes = castleEnemies(r, CASTLE_LAYER, lay.rooms[4]);
   ok('the castle fills its rooms the same way each visit', JSON.stringify(foes) === JSON.stringify(castleEnemies(r, CASTLE_LAYER, lay.rooms[4])));
   ok('walkers stand on the floor, fliers fly', foes.every((e) => (LAYERS[CASTLE_LAYER].ground.includes(e.kind) ? standsOn(castleTiles(lay.rooms[4]), Math.floor(e.x / TILE), Math.floor((e.y + 4) / TILE)) : LAYERS[CASTLE_LAYER].air.includes(e.kind))));
-  ok('the throne room is only the boss', castleEnemies(r, CASTLE_LAYER, lay.rooms[lay.boss]).length === 0 && BOSSES[LAYERS[CASTLE_LAYER].boss]);
+  ok('the boss rooms are only their bosses', lay.rooms.filter((x) => x.kind === 'boss').every((x) => castleEnemies(r, CASTLE_LAYER, x).length === 0));
+  const two = newRun('cam', 4); two.layer = CASTLE_LAYER;
+  const hp0 = two.maxHp;
+  ok('the flat rabbit gives a heart but the castle goes on', beatRoomBoss(two, `${CASTLE_LAYER}:5`, false) === false && two.maxHp === hp0 + 2 && !two.beaten[CASTLE_LAYER] && two.cleared.includes(`${CASTLE_LAYER}:5`));
+  ok('the flat card king ends the castle', beatRoomBoss(two, `${CASTLE_LAYER}:6`, true) === false && two.beaten[CASTLE_LAYER]);
 
   // Saves from before the castle.
   const old = { ...newRun('bo', 5), beaten: [true, true, false], layer: 2, room: 1, cleared: ['1:3', '2:0'], freed: ['2:1'], fountains: ['2:2'] };
@@ -364,6 +374,46 @@ console.log('\nmalvado\'s castle');
   const early = upgradeRun({ ...newRun('bo', 5), beaten: [true, false, false], layer: 1 });
   ok('an old save higher up still has the castle ahead', early.layer === 1 && early.beaten.join() === 'true,false,false,false' && validRun(early));
   ok('a new save is left alone', upgradeRun(r) === r && !validRun(old));
+}
+
+console.log('\nthe hat slide');
+{
+  ok('the velvet brim\'s ladder leads to the slide', LAYERS[0].down === 'slide');
+  let smooth = true;
+  for (let x = 0; x < SLIDE.length; x += 3) if (Math.abs(slideGround(x + 3) - slideGround(x)) > 4) smooth = false;
+  ok('the hills are smooth, and stay on screen', smooth && [...Array(SLIDE.length / 10).keys()].every((i) => slideGround(i * 10) > 40 && slideGround(i * 10) < 120));
+  const ride = (policy) => {
+    const b = { x: 0, y: slideGround(0), vx: 50, vy: 0, ground: true };
+    let dark = SLIDE.darkStart, t = 0;
+    while (b.x < SLIDE.length && t < 120) { slideStep(b, policy(b, t), 1 / 60); dark += darkSpeed(b.x) / 60; t += 1 / 60; if (dark >= b.x - 6) return { caught: true, t }; }
+    return { caught: false, t };
+  };
+  const smart = (b) => (b.ground ? slideSlope(b.x) > 0 : b.vy > 0 && slideSlope(b.x + 20) > 0);
+  const sloppy = (b, t) => (b.ground ? slideSlope(b.x) > 0.2 : false) && Math.floor(t * 3) % 3 !== 0;
+  ok('diving down the hills outruns the dark', !ride(smart).caught && ride(smart).t < 30, ride(smart).t.toFixed(1));
+  ok('even a sloppy diver can make it', !ride(sloppy).caught);
+  ok('never diving gets you caught', ride(() => false).caught);
+  ok('holding dive the whole way gets you caught too', ride(() => true).caught);
+  const b = { x: 300, y: 0, vx: 60, vy: 0, ground: false };
+  for (let i = 0; i < 300 && !b.ground; i++) slideStep(b, false, 1 / 60);
+  ok('you always land on the ground, never through it', b.ground && Math.abs(b.y - slideGround(b.x)) < 0.01);
+  ok('you never stop dead', (() => { const c = { x: 70, y: slideGround(70), vx: 0, vy: 0, ground: true }; for (let i = 0; i < 120; i++) slideStep(c, false, 1 / 60); return c.vx > 0; })());
+}
+
+console.log('\nthe freefall');
+{
+  const w = makeWell(42);
+  ok('the well is the same for the same run', JSON.stringify(makeWell(42)) === JSON.stringify(w));
+  ok('walls down both sides and a floor at the bottom', w.tiles.every((row, y) => row[0] === T_WALL && row[WELL.cols - 1] === T_WALL) && w.tiles[w.tiles.length - 1].every((t) => t === T_WALL));
+  let open = true;
+  for (const seed of [1, 2, 3, 42, 99, 12345]) {
+    const t = makeWell(seed).tiles;
+    for (let y = 0; y < t.length - 1; y++) if (Math.max(...t[y].map((c) => (c === T_WALL ? '#' : '.')).join('').split('#').map((r) => r.length)) < 3) open = false;
+  }
+  ok('no ledge ever closes the well: every row has a gap to fall through', open);
+  ok('things to stomp, shoot and collect on the way down', ['spark', 'glove', 'bunny'].every((k) => w.foes.some((f) => f.kind === k)) && w.gems.length > 3);
+  ok('bunnies wait on top of ledges', w.foes.filter((f) => f.kind === 'bunny').every((f) => w.tiles[Math.floor((f.y + 4) / TILE)][Math.floor(f.x / TILE)] === T_WALL));
+  ok('nothing starts inside the stone', [...w.foes, ...w.gems].every((f) => w.tiles[Math.floor(f.y / TILE)][Math.floor(f.x / TILE)] !== T_WALL));
 }
 
 console.log('\nmusic');
