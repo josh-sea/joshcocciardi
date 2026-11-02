@@ -8,6 +8,7 @@
 import {
   W, H, TILE, COLS, ROWS, TOP, SPEED, SOUL_MAX, NAME_LEN, ALPHABET, STORY, LAYERS, BOSSES, ENEMIES, RABBIT, rabbitLanding,
   ATTACKS, DEFENSES, TIERS, attackStats, defenseStats, upgradeNames, nextPick, describePick, applyPick,
+  SHOW_ALL, bookPaths, nodeKey, allNodeKeys, demoBuild, keysForPick,
   cleanName, say, layoutLayer, neighbor, roomTiles, solidAt, moveBox,
   drainSoul, gainSoul, newRun, validRun, beatBoss, descend, dist, faceFrom, makeRng, roomEnemies,
 } from "./rules.mjs";
@@ -65,6 +66,7 @@ const GLOVE = ["..333..", ".30003.", "3000003", "3000003", "3000033", ".30003.",
 const BUNNY = [".3...3.", ".30.03.", ".30003.", "3000003", "3030303", "3000003", ".33333."];
 const SOLDIER = ["..333..", ".30003.", ".30303.", "3333333", "3000003", "3030303", "3000003", "3333333", ".3...3.", ".33.33."];
 const WISP = ["..111..", ".11111.", "1131311", "1111111", "1111111", "1.1.1.1"];
+const DUMMY = ["..333..", ".30003.", "3033303", "3030303", "3033303", ".30003.", "..333..", "...3...", "..333.."];
 const SPIRIT = ["..000..", ".00000.", "0030300", "0000000", "0000000", ".0.0.0."];
 const RABBIT_ROWS = [
   ".33....33...",
@@ -109,6 +111,14 @@ export function boot(hw) {
   let saved = hw.load("darkhat.run", null);
   if (!validRun(saved)) saved = null;
   let wins = hw.load("darkhat.wins", 0);
+  // Book keys you've unlocked by picking them in any run. The plain card toss starts known.
+  const seen = new Set(hw.load("darkhat.seen", [nodeKey("a", "cards")]));
+  function discover(keys) {
+    let changed = false;
+    for (const k of keys) if (!seen.has(k)) { seen.add(k); changed = true; }
+    if (changed) hw.save("darkhat.seen", [...seen]);
+  }
+  const unlocked = (k) => SHOW_ALL || seen.has(k);
 
   let R = null;          // the run
   let layout = null;     // the current layer's rooms
@@ -299,6 +309,7 @@ export function boot(hw) {
       e.dead = true;
       sfx.pop();
       puff(e.x, e.y, 6);
+      if (S.practice) return;
       if (Math.random() < 0.6) S.pickups.push({ kind: "sparkle", x: e.x, y: e.y, t: 0 });
       else if (Math.random() < 0.12) S.pickups.push({ kind: "heart", x: e.x, y: e.y, t: 0 });
     } else sfx.hit();
@@ -516,10 +527,11 @@ export function boot(hw) {
     S.decoys = S.decoys.filter((d) => !d.dead);
 
     const st = P.wandSt;
-    P.frozen = !!(st && st.steer && held.a && P.wands.some((w) => !w.back));
+    const holdA = held.a || !!S.practice?.auto;
+    P.frozen = !!(st && st.steer && holdA && P.wands.some((w) => !w.back));
     for (const w of P.wands) {
       w.life -= dt;
-      if (w.back || w.life <= 0 || w.hits <= 0 || (st.steer && !held.a)) {
+      if (w.back || w.life <= 0 || w.hits <= 0 || (st.steer && !holdA)) {
         w.back = true;
         const d = dist(w.x, w.y, P.x, P.y - 4);
         if (d < 6) w.done = true;
@@ -640,8 +652,10 @@ export function boot(hw) {
     if (!(pressed.has("a") || pressed.has("start"))) return;
     const { pick } = c;
     const id = pick.options[c.sel];
+    const keys = keysForPick(R, pick, c.sel);
     const took = applyPick(R, pick, c.sel);
     if (!took) return;
+    discover(keys);
     sfx.choose();
     haptic(25);
     S.choice = null;
@@ -725,6 +739,7 @@ export function boot(hw) {
         const m = moveBox(S.tiles, { x: e.x - 3, y: e.y - 3, w: 6, h: 6 }, vx * dt, vy * dt);
         e.x = m.x + 3; e.y = m.y + 3;
       };
+      if (e.kind === "dummy") continue;
       if (e.kind === "spark") {
         // Dark magic drifts at you, wobbling, right through the furniture.
         e.x += ((dx / d) * sp + Math.sin(e.t * 6) * 14) * dt;
@@ -1023,7 +1038,7 @@ export function boot(hw) {
   function titleItems() {
     const items = [];
     if (saved) items.push("CONTINUE");
-    items.push("NEW RUN", "CHANGE NAME");
+    items.push("NEW RUN", "SPELL BOOK", "CHANGE NAME");
     return items;
   }
 
@@ -1073,9 +1088,12 @@ export function boot(hw) {
         if (!hasName) startNameEntry(startRun);
         else if (saved) { S.confirm = true; S.sel = 0; }
         else startRun();
-      } else if (pick === "CHANGE NAME") startNameEntry(() => { setPhase("title"); S.sel = 0; });
+      } else if (pick === "SPELL BOOK") openBook("title");
+      else if (pick === "CHANGE NAME") startNameEntry(() => { setPhase("title"); S.sel = 0; });
       return;
     }
+    if (S.phase === "book") { updateBook(); return; }
+    if (S.phase === "practice") { updatePractice(dt); return; }
     if (S.phase === "name") { updateName(); return; }
     if (S.dialog) { updateDialog(dt); return; }
     if (S.phase === "story") return;
@@ -1111,7 +1129,7 @@ export function boot(hw) {
 
   /* ---------- the trick book (pause): your build ---------- */
 
-  const PAUSE_ITEMS = ["RESUME", "SAVE AND QUIT"];
+  const PAUSE_ITEMS = ["RESUME", "SPELL BOOK", "SAVE AND QUIT"];
 
   function updatePause() {
     const n = PAUSE_ITEMS.length;
@@ -1121,7 +1139,8 @@ export function boot(hw) {
     if (pressed.has("b") || pressed.has("start") || (go && S.sel === 0)) {
       S.paused = false; if (S.song?.name) snd.play(S.song.name, S.song.at); return;
     }
-    if (go && S.sel === 1) { save(); S.paused = false; snd.play("title"); setPhase("title"); S.sel = 0; saved = R; R = null; }
+    if (go && S.sel === 1) { openBook("pause"); return; }
+    if (go && S.sel === 2) { save(); S.paused = false; snd.play("title"); setPhase("title"); S.sel = 0; saved = R; R = null; }
   }
 
   function drawPause() {
@@ -1141,13 +1160,189 @@ export function boot(hw) {
     // Hearts from bonuses: whatever is above the three you start with and one per boss beaten.
     const extra = Math.max(0, (R.maxHp - 6 - R.beaten.filter(Boolean).length * 2) / 2);
     const bonus = [extra && `BIG HEART X${extra}`, R.deep && `DEEP SOUL X${R.deep}`].filter(Boolean).join("  ");
-    if (bonus) text(`BONUS: ${bonus}`, 8, 94, 1);
+    if (bonus) text(`BONUS: ${bonus}`, 8, 93, 1);
     PAUSE_ITEMS.forEach((it, i) => {
       const on = S.sel === i;
-      if (on) rect(30, 106 + i * 10, 100, 9, 0);
-      ctext(it, 108 + i * 10, on ? 3 : 1);
+      if (on) rect(30, 103 + i * 9, 100, 8, 0);
+      ctext(it, 104 + i * 9, on ? 3 : 1);
     });
     ctext("B: BACK TO THE HAT", 136, 2);
+  }
+
+  /* ---------- the spell book ---------- */
+
+  const PATHS = bookPaths();
+
+  function openBook(from) {
+    S.book = S.book || { path: 0, row: 0, col: 0 };
+    S.book.from = from;
+    S.bookPhase = S.phase;
+    setPhase("book");
+  }
+
+  function closeBook() {
+    if (S.book.from === "title") { setPhase("title"); S.sel = 0; }
+    else { setPhase(S.bookPhase); S.paused = true; S.sel = 1; }
+  }
+
+  /** The node the cursor is on: row 0 is the path itself, rows 1-3 its tiers. */
+  function bookNode() {
+    const b = S.book, path = PATHS[b.path];
+    if (b.row === 0) return { path, key: nodeKey(path.kind, path.id), name: path.name, desc: path.desc, tier: -1 };
+    const up = path.tiers[b.row - 1][b.col];
+    return { path, key: nodeKey(path.kind, path.id, up.id), name: up.name, desc: up.desc, tier: b.row - 1 };
+  }
+
+  function updateBook() {
+    const b = S.book;
+    if (pressed.has("up") && b.row > 0) { b.row--; sfx.blip(); }
+    if (pressed.has("down") && b.row < TIERS) { b.row++; sfx.blip(); }
+    if (pressed.has("left") || pressed.has("right")) {
+      const d = pressed.has("left") ? -1 : 1;
+      if (b.row === 0) b.path = (b.path + d + PATHS.length) % PATHS.length;
+      else b.col = 1 - b.col;
+      sfx.blip(); haptic(5);
+    }
+    if (pressed.has("b") || pressed.has("start")) { closeBook(); return; }
+    if (pressed.has("a")) {
+      const n = bookNode();
+      if (unlocked(n.key)) enterPractice(n);
+      else { sfx.door(); haptic(20); }
+    }
+  }
+
+  function drawBook() {
+    const b = S.book, path = PATHS[b.path];
+    rect(0, 0, W, H, 3);
+    rect(0, 0, W, 11, 2);
+    text("SPELL BOOK", 3, 3, 0);
+    const found = allNodeKeys().filter(unlocked).length;
+    const cnt = `FOUND ${found}/${allNodeKeys().length}`;
+    text(cnt, W - 3 - textW(cnt), 3, 1);
+    // Path names always show so you know what's out there; upgrades hide until taken.
+    const node = (x, y, w, label, key, on, always = false) => {
+      const open = unlocked(key);
+      rect(x, y, w, 11, on ? 0 : open ? 1 : 2);
+      rect(x + 1, y + 1, w - 2, 9, on ? 0 : 3);
+      ctext(open || always ? label : "???", y + 3, on ? 3 : open ? 0 : 2, 1, x + w / 2);
+    };
+    // The path, with arrows to flip to the others.
+    const tag = path.kind === "a" ? "ATTACK (A)" : "DEFENSE (B)";
+    ctext(tag, 14, path.kind === "a" ? 1 : 2);
+    node(34, 21, 92, path.name, nodeKey(path.kind, path.id), b.row === 0, true);
+    if (b.row === 0 || Math.floor(S.t * 2) % 2) { text("<", 26, 24, 1); text(">", 131, 24, 1); }
+    // Its three tiers, each a choice of two. Any upgrade can follow any other.
+    for (let t = 0; t < TIERS; t++) {
+      const y = 40 + t * 18;
+      const ya = t === 0 ? 32 : y - 7;
+      if (t === 0) { line(80, ya, 40, y, 2); line(80, ya, 120, y, 2); }
+      else { line(40, ya, 40, y, 2); line(120, ya, 120, y, 2); line(40, ya, 120, y, 2); line(120, ya, 40, y, 2); }
+      path.tiers[t].forEach((u, c) => node(4 + c * 78, y, 74, u.name, nodeKey(path.kind, path.id, u.id), b.row === t + 1 && b.col === c));
+    }
+    // What the cursor is on.
+    const n = bookNode();
+    const open = unlocked(n.key);
+    rect(3, 96, W - 6, 32, 2);
+    rect(4, 97, W - 8, 30, 3);
+    if (open) {
+      ctext(n.tier < 0 ? n.name : `TIER ${n.tier + 1}: ${n.name}`, 100, 0);
+      say(n.desc, name, 37).slice(0, 3).forEach((l, i) => ctext(l, 108 + i * 7, 1));
+    } else {
+      ctext(n.tier < 0 ? `${n.name}: LOCKED` : "LOCKED", 100, 2);
+      ctext(n.tier < 0 ? "PICK IT FROM A SPIRIT IN A RUN" : "TAKE THIS UPGRADE IN A RUN", 110, 2);
+      ctext("TO UNLOCK IT HERE.", 117, 2);
+    }
+    ctext(open ? "A: TRY IT   < > PATHS   B: BACK" : "< > PATHS   B: BACK", 134, open ? 1 : 2);
+  }
+
+  /** Copy the room and hero so the practice room can borrow them and give them back. */
+  const ROOM_KEYS = ["room", "tiles", "sealed", "enemies", "shots", "foes", "pickups", "fx", "boss", "spirit", "ladder", "fountain", "decoys", "bossIn", "endT", "toast"];
+
+  function enterPractice(n) {
+    const snap = { R, layout, S: {}, P: { ...P, cd: { ...P.cd }, cdMax: { ...P.cdMax }, face: { ...P.face } } };
+    for (const k of ROOM_KEYS) snap.S[k] = S[k];
+    // A pretend run with just this build: the path up to the chosen upgrade.
+    const run = newRun(name, 1);
+    const build = n.tier < 0 ? { id: n.path.id, ups: [], picked: true } : demoBuild(n.path, n.tier, S.book.col);
+    if (n.path.kind === "a") run.attack = build;
+    else { run.defense = { id: build.id, ups: build.ups }; }
+    run.hp = run.maxHp = 6;
+    R = run;
+    S.practice = { snap, n, idle: 0, auto: false, sparkT: 1, homes: [[112, 40], [126, 64], [112, 88], [140, 52], [140, 76]], respawn: [] };
+    S.room = { id: -1, kind: "practice", template: 0, doors: { up: false, down: false, left: false, right: false } };
+    S.tiles = roomTiles(S.room);
+    S.sealed = false; S.enemies = []; S.shots = []; S.foes = []; S.pickups = []; S.fx = [];
+    S.boss = null; S.spirit = null; S.ladder = null; S.fountain = null; S.decoys = []; S.bossIn = null; S.endT = null; S.toast = null;
+    Object.assign(P, { x: 44, y: 64, face: { x: 1, y: 0 }, cd: { a: 0, b: 0 }, cdMax: { a: 1, b: 1 }, inv: 0, shield: null, wands: [], wandSt: null, blinks: 0, blinkGap: 0, whipT: 0, frozen: false });
+    for (const [x, y] of S.practice.homes) addEnemy("dummy", x, y);
+    setPhase("practice");
+  }
+
+  function exitPractice() {
+    const { snap } = S.practice;
+    R = snap.R; layout = snap.layout;
+    for (const k of ROOM_KEYS) S[k] = snap.S[k];
+    Object.assign(P, snap.P);
+    S.practice = null;
+    setPhase("book");
+  }
+
+  function updatePractice(dt) {
+    const pr = S.practice;
+    if (pressed.has("start")) { exitPractice(); return; }
+    // Hands off for a moment and it shows itself off.
+    const touching = stick.x || stick.y || held.a || held.b;
+    pr.idle = touching ? 0 : pr.idle + dt;
+    pr.auto = pr.idle > 1.2;
+    P.inv = 1; // nothing hurts in practice
+    if (pr.auto) {
+      const t = nearestEnemy(P.x, P.y);
+      if (t) P.face = faceFrom(t.x - P.x, t.y - P.y, P.face);
+      // Drift back toward the middle-left so blinks and hops have room.
+      const hx = 44 - P.x, hy = 64 - P.y;
+      if (Math.hypot(hx, hy) > 12) { const m = moveBox(S.tiles, { x: P.x - 3, y: P.y - 3, w: 6, h: 6 }, Math.sign(hx) * SPEED * 0.6 * dt, Math.sign(hy) * SPEED * 0.6 * dt); P.x = m.x + 3; P.y = m.y + 3; }
+      if (R.defense) useDefense(); else useAttack();
+      if (R.defense && (R.defense.id === "blink" || R.defense.id === "decoy")) P.face = faceFrom(hx || 1, hy, P.face);
+      if (!R.defense) useAttack();
+    } else {
+      P.face = faceFrom(stick.x, stick.y, P.face);
+      P.moving = false;
+      if (!P.frozen && (stick.x || stick.y)) {
+        const m = moveBox(S.tiles, { x: P.x - 3, y: P.y - 3, w: 6, h: 6 }, stick.x * SPEED * dt, stick.y * SPEED * dt);
+        P.x = m.x + 3; P.y = m.y + 3; P.moving = true; P.step += dt * 8;
+      }
+      if (pressed.has("a") || (held.a && (R.attack.id === "cards" || R.attack.id === "scarf"))) useAttack();
+      if (pressed.has("b")) useDefense();
+    }
+    // Dark sparks drift in so the defenses have something to stop.
+    if ((pr.sparkT -= dt) <= 0) {
+      pr.sparkT = R.defense ? 0.9 : 2.2;
+      const a = Math.random() * Math.PI * 2;
+      addEnemy("spark", Math.max(12, Math.min(RW - 12, P.x + Math.cos(a) * 70)), Math.max(12, Math.min(RH - 12, P.y + Math.sin(a) * 50)));
+    }
+    // Knocked-down dummies stand back up.
+    for (const h of pr.homes) {
+      const standing = S.enemies.some((e) => e.kind === "dummy" && e.home === h);
+      if (!standing) {
+        h.wait = (h.wait ?? 1.2) - dt;
+        if (h.wait <= 0) { h.wait = 1.2; const e = addEnemy("dummy", h[0], h[1]); e.home = h; puff(h[0], h[1], 4); }
+      }
+    }
+    for (const e of S.enemies) if (e.kind === "dummy" && !e.home) e.home = pr.homes.find((h) => h[0] === Math.round(e.x) && h[1] === Math.round(e.y)) || pr.homes[0];
+    updateTricks(dt);
+    updateEnemies(dt);
+    updateShots(dt);
+    for (const e of S.enemies) if (e.kind === "spark" && dist(e.x, e.y, P.x, P.y - 2) < 7) { e.dead = true; puff(e.x, e.y, 3); }
+  }
+
+  function drawPracticeBar() {
+    const n = S.practice.n;
+    rect(0, 0, W, TOP, 3);
+    const full = `${n.path.name}: ${n.name}`;
+    const lbl = n.tier < 0 ? n.name : full.length <= 30 ? full : `${n.path.name.split(" ")[0]}: ${n.name}`;
+    text(lbl, 3, 3, 0);
+    text(S.practice.auto ? "DEMO" : n.path.kind === "a" ? "A: TRY" : "B: TRY", W - 30, 3, 1);
+    ctext("START: BACK TO THE BOOK", 10, 2);
   }
 
   /* ---------- the ending ---------- */
@@ -1336,16 +1531,16 @@ export function boot(hw) {
       if (f.kind === "dot") px(Math.round(f.x), Math.round(TOP + f.y), f.t > 0.2 ? 0 : 1);
       else if (f.kind === "word") { rect(Math.round(f.x) - Math.ceil(textW(f.w) / 2) - 1, Math.round(TOP + f.y) - 1, textW(f.w) + 2, 7, 3); ctext(f.w, Math.round(TOP + f.y), 0, 1, Math.round(f.x)); }
     }
-    drawHud();
+    if (S.practice) drawPracticeBar(); else drawHud();
   }
 
   function drawEnemy(e) {
     if (e.flash > 0 && Math.floor(e.flash * 40) % 2) return;
     const x = Math.round(e.x), y = Math.round(TOP + e.y);
     if (e.kind === "spark") { drawSpark(e.x, TOP + e.y); return; }
-    const rows = { glove: GLOVE, bunny: BUNNY, soldier: SOLDIER, wisp: WISP }[e.kind];
+    const rows = { glove: GLOVE, bunny: BUNNY, soldier: SOLDIER, wisp: WISP, dummy: DUMMY }[e.kind];
     const lift = e.kind === "bunny" && e.hop > 0 ? -2 : 0;
-    sprite(rows, x, y + Math.ceil(rows.length / 2) + lift, e.x > P.x);
+    sprite(rows, x, y + Math.ceil(rows.length / 2) + lift, e.kind !== "dummy" && e.x > P.x);
     if (e.kind === "glove" && e.state === "wind" && Math.floor(S.t * 10) % 2) ctext("!", y - 10, 0, 1, x);
     if (e.stun > 0) px(x + Math.round(Math.cos(S.t * 9) * 4), y - 7, 0);
   }
@@ -1455,10 +1650,10 @@ export function boot(hw) {
     items.forEach((it, i) => {
       const on = i === S.sel;
       const label = it === "CHANGE NAME" ? `NAME: ${hasName ? name : "----"}` : it;
-      if (on) rect(30, 98 + i * 10, 100, 9, 0);
-      ctext(label, 100 + i * 10, on ? 3 : 1);
+      if (on) rect(30, 95 + i * 9, 100, 8, 0);
+      ctext(label, 96 + i * 9, on ? 3 : 1);
     });
-    ctext(wins ? `A GAME BY CAMPBELL  -  ESCAPES ${wins}` : "A GAME BY CAMPBELL", 137, 2);
+    ctext(wins ? `A GAME BY CAMPBELL  -  ESCAPES ${wins}` : "A GAME BY CAMPBELL", 138, 2);
   }
 
   function drawName() {
@@ -1500,10 +1695,11 @@ export function boot(hw) {
     if (S.phase === "title") return drawTitle();
     if (S.phase === "name") return drawName();
     if (S.phase === "caught") return drawCaught();
+    if (S.phase === "book") return drawBook();
     if (S.phase === "story" || (S.phase === "escape" && S.dialog)) return drawDialog();
     if (S.phase === "escape") return drawEnding();
     if (S.choice) return drawChoice();
-    if (S.paused) return drawPause();
+    if (S.paused && S.phase !== "practice") return drawPause();
     if (S.phase === "shaft") drawShaft();
     else drawWorld();
     if (S.toast) banner(S.toast.lines, 50);

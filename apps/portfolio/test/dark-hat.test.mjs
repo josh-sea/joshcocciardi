@@ -12,6 +12,7 @@ import {
   COLS, ROWS, TILE, NAME_LEN, LINE_CHARS, SOUL_MAX, SOUL_DRAIN, STORY, LAYERS, BOSSES, ENEMIES, TEMPLATES,
   DOOR_COLS, DOOR_ROWS, cleanName, say, layoutLayer, neighbor, roomTiles,
   ATTACKS, DEFENSES, BONUSES, TIERS, statsOf, attackStats, defenseStats, upgradeNames, nextPick, describePick, applyPick,
+  SHOW_ALL, bookPaths, nodeKey, allNodeKeys, demoBuild, keysForPick,
   moveBox, reachable, drainSoul, gainSoul, newRun, validRun, beatBoss, descend, faceFrom, roomEnemies,
   SPEED, RABBIT, rabbitLanding,
 } from '../public/projects/camboy/carts/dark-hat/rules.mjs';
@@ -105,6 +106,37 @@ console.log('\nattack and defense');
   ok('a boss upgrades your plain cards if you have not met a spirit yet', nextPick(newRun('x', 5), 'boss').options.join() === 'twin,heavy');
   const t = newRun('x', 6); applyPick(t, nextPick(t, 'spirit'), 3);
   ok('the scarf whips hard up close', attackStats(t).dmg === 2 && attackStats(t).reach > 20);
+}
+
+console.log('\nthe spell book');
+{
+  const paths = bookPaths();
+  ok('eight paths in the book, attacks then defenses', paths.length === 8 && paths.slice(0, 4).every((p) => p.kind === 'a') && paths.slice(4).every((p) => p.kind === 'd'));
+  const keys = allNodeKeys();
+  ok('56 entries: 8 paths and 48 upgrades, each with its own key', keys.length === 56 && new Set(keys).size === 56);
+  ok('upgrades start hidden', SHOW_ALL === false);
+  let demos = true;
+  for (const p of paths) {
+    const cat = p.kind === 'a' ? ATTACKS : DEFENSES;
+    for (let t = -1; t < TIERS; t++) for (const col of [0, 1]) {
+      const b = demoBuild(p, t, col);
+      const st = statsOf(b, cat);
+      if (b.ups.length !== t + 1 || !(st.cd > 0)) demos = false;
+      if (t >= 0 && b.ups[t] !== p.tiers[t][col].id) demos = false;
+    }
+  }
+  ok('every entry has a working demo build', demos);
+  const r = newRun('cam', 9);
+  let q = nextPick(r, 'spirit');
+  ok('picking a path unlocks its entry', keysForPick(r, q, 2).join() === 'a:hat');
+  applyPick(r, q, 2);
+  q = nextPick(r, 'spirit');
+  ok('picking a defense unlocks its entry', keysForPick(r, q, 0).join() === 'd:shield');
+  applyPick(r, q, 0);
+  q = nextPick(r, 'boss');
+  ok('taking an upgrade unlocks that upgrade', keysForPick(r, q, 1).join() === 'a:hat:grow' && keys.includes('a:hat:grow'));
+  ok('bonuses are not in the book', keysForPick(r, { type: 'bonus', options: ['heart', 'soul'] }, 0).length === 0);
+  ok('the dummies in the practice room never hurt', ENEMIES.dummy.touch === 0 && ENEMIES.dummy.speed === 0);
 }
 
 console.log('\nthe hat');
