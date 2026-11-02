@@ -78,6 +78,44 @@ export const SONGS = {
     bass: "bounce",
     arp: true,
   },
+  // Malvado's Castle: a jumpy little platformer tune, still in his minor key.
+  castle: {
+    bpm: 140,
+    loop: true,
+    chords: ["Dm", "Dm", "Bb", "C", "Dm", "Gm", "A", "A"],
+    lead: [
+      "D5 . A4 . D5 . F5 . E5 . D5 . C5 . A4 .",
+      "D5 . A4 . D5 . F5 . A5 . G5 . F5 . E5 .",
+      "F5 . . . D5 . F5 . A#5 . . . A5 . F5 .",
+      "E5 . . . C5 . E5 . G5 . . . F5 . E5 .",
+      "D5 . F5 . A5 . D6 . C6 . A5 . F5 . D5 .",
+      "G5 . . . A#5 . . . D6 . . . A#5 . G5 .",
+      "A5 . . . E5 . C#5 . E5 . A5 . G5 . E5 .",
+      "C#5 . . . E5 . . . A5 . . . - - - -",
+    ],
+    drums: ["k...s.k.k...s...", "k...s.k.k...s...", "k...s.k.k...s...", "k...s.k.k.s.s.ss"],
+    bass: "bounce",
+    arp: true,
+  },
+  // Up and out on the magic scarf.
+  flight: {
+    bpm: 172,
+    loop: true,
+    chords: ["Am", "F", "C", "G", "Am", "F", "G", "E"],
+    lead: [
+      "A5 . E5 . A5 . C6 . B5 . A5 . E5 . C5 .",
+      "F5 . A5 . C6 . A5 . E6 . C6 . A5 . F5 .",
+      "E5 . G5 . C6 . E6 . D6 . C6 . G5 . E5 .",
+      "D5 . G5 . B5 . D6 . . . B5 . G5 . D5 .",
+      "A5 . . . C6 . . . E6 . . . D6 . C6 .",
+      "A5 . . . C6 . . . D6 . . . E6 . C6 .",
+      "B5 . . . D6 . . . E6 . . . D6 . B5 .",
+      "E6 . D6 . C6 . B5 . G#5 . . . E5 . . .",
+    ],
+    drums: ["k.h.s.h.k.h.s.hh", "k.h.s.h.k.h.s.hh", "k.h.s.h.k.k.s.hh", "k.h.s.h.k.s.s.ss"],
+    bass: "bounce",
+    arp: true,
+  },
   escape: {
     bpm: 132,
     loop: false,
@@ -158,6 +196,14 @@ export function createSound(hw) {
     ladder: () => { beep(1000, 0.04, { vol: 0.05 }); beep(800, 0.04, { vol: 0.05, at: 0.12 }); },
     blip: () => beep(880, 0.05, { vol: 0.05 }),
     type: () => beep(1300, 0.015, { vol: 0.02 }),
+    jump: () => beep(320, 0.1, { to: 720, vol: 0.05 }),
+    land: () => burst({ dur: 0.05, peak: 0.08, attack: 0.002, f0: 500, type: "lowpass" }),
+    // Malvado's flattening spell: a wobbling fall, then a paper slap.
+    flat: () => {
+      for (let i = 0; i < 6; i++) beep(900 - i * 110, 0.09, { type: "triangle", vol: 0.07, at: i * 0.07, to: 700 - i * 110 });
+      burst({ at: 0.45, dur: 0.12, peak: 0.3, attack: 0.002, f0: 2500, q: 0.8 });
+    },
+    wave: () => burst({ dur: 0.25, peak: 0.12, attack: 0.01, f0: 400, f1: 900, q: 1.2 }),
   };
 
   return {

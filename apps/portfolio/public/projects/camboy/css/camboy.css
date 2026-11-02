@@ -227,6 +227,10 @@ body[data-view="play"] .book { display: none; }
 }
 .drop { position: absolute; left: 0; right: 0; bottom: 0; height: 60vh; overflow: hidden; pointer-events: none; }
 .drop .cart { position: absolute; left: 20%; width: 60%; bottom: 0; transform: translateY(-115%); }
+/* A cartridge the magician's glove is carrying, with the glove on top. */
+.drop .carrier { position: absolute; left: 20%; width: 60%; bottom: 0; }
+.drop .carrier .cart { position: relative; transform: none; }
+.drop .glove { position: absolute; left: 18%; width: 64%; bottom: 70%; filter: drop-shadow(0 3px 2px rgba(0,0,0,.35)); }
 .sticker {
   background: #e7e3da;
   border-radius: 6px;

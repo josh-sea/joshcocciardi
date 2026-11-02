@@ -73,11 +73,33 @@ export const STORY = {
   bossDoor: "THE DOORS SLAM SHUT!",
   ladder: "A LADDER DOWN, DEEPER INTO THE HAT...",
   caught: "THE AMAZING {N}! TONIGHT ONLY! THE KID WHO DISAPPEARED INTO A HAT!",
-  escape: [
+  castleIntro: [
+    "MALVADO: WELL, WELL, WELL. {N} BEAT MY CARD KING! NOBODY BEATS MY CARD KING.",
+    "MALVADO: YOUR SOUL WOULD MAKE A SPECTACULAR TRICK. LET'S SEE HOW YOU DO IN A WHOLE NEW GAME...",
+    "MALVADO: ABRA... KADABRA... FLAT!",
+  ],
+  castleLand: [
+    "{N}: WHY IS EVERYTHING... FLAT?",
+    "UP JUMPS, CLIMBS LADDERS AND OPENS DOORS. DOWN DROPS THROUGH LEDGES. A AND B STILL WORK!",
+  ],
+  castleBoss: "MALVADO: MEET MY RABBIT. HE'S FLAT NOW TOO!",
+  castleDoor: "A DOOR APPEARS AT THE END OF THE THRONE ROOM. THE WAY OUT OF THE CASTLE!",
+  castleExit: [
+    "MALVADO: WHAT?! NOBODY GETS OUT OF MY CASTLE!",
+    "MALVADO: FINE. BACK INTO THE HAT WITH YOU!",
+  ],
+  castleBack: "{N}: THAT WAS WEIRD. I WAS FLAT.",
+  flightIntro: [
     "MALVADO'S HAT SHAKES. THE DARK MAGIC IS BREAKING!",
-    "EVERY SPIRIT {N} MET RISES UP AND LIFTS {N} TOWARD THE LIGHT.",
-    "{N} TUMBLES OUT OF THE HAT ONTO THE STAGE. THE CROWD GOES WILD.",
-    "THE SPIRITS ARE FREE. MALVADO'S SHOW IS OVER. {N} ESCAPED THE DARK HAT!",
+    "A MAGIC SCARF UNROLLS FROM THE TOP OF THE HAT. {N} GRABS ON, AND IT FLIES!",
+    "MALVADO: COME BACK HERE! YOU'RE MY BEST TRICK!",
+  ],
+  flightHelp: "FLY OUT OF THE HAT! STEER TO DODGE. HIT MALVADO TO KNOCK HIM BACK. DON'T LET HIM CATCH YOU!",
+  flightCaught: "MALVADO GRABBED THE END OF THE SCARF! BACK TO THE BOTTOM. TRY AGAIN!",
+  escape: [
+    "{N} SHOOTS OUT OF THE HAT ON THE MAGIC SCARF AND LANDS ON THE STAGE. THE CROWD GOES WILD.",
+    "MALVADO'S HAT CRUMPLES. EVERY SPIRIT INSIDE FLOATS OUT, FREE AT LAST.",
+    "MALVADO'S SHOW IS OVER. {N} ESCAPED THE DARK HAT!",
   ],
 };
 
@@ -387,6 +409,9 @@ export function keysForPick(run, pick, i) {
  * Each layer is a grid of rooms. S start, E enemies, P a trapped spirit,
  * F a soul fountain, B the boss. What a spirit teaches depends on what
  * you already have: see nextPick.
+ *
+ * Malvado's Castle is different: he zaps you into a flat, side-on game of
+ * his own (see CASTLE). depth is how deep a layer counts for enemies.
  */
 export const LAYERS = [
   {
@@ -394,20 +419,347 @@ export const LAYERS = [
     grid: ["S E P", "E F E", "P E B"],
     enemies: ["spark", "glove", "bunny"],
     boss: "rabbit",
+    look: 0, depth: 0,
   },
   {
     name: "CARD CATACOMBS",
     grid: ["S E P", "P E E", "E P B"],
     enemies: ["spark", "soldier", "glove", "wisp"],
     boss: "king",
+    look: 1, depth: 1,
+  },
+  {
+    name: "MALVADO'S CASTLE",
+    side: true,
+    ground: ["bunny", "soldier"],
+    air: ["spark", "spark", "glove", "wisp"],
+    enemies: ["bunny", "soldier", "spark", "glove", "wisp"],
+    boss: "flatrabbit",
+    depth: 2,
   },
   {
     name: "THE BOTTOM",
     grid: ["S P", "F B"],
     enemies: ["spark", "soldier", "wisp"],
     boss: "malvado",
+    look: 2, depth: 2,
   },
 ];
+
+/** Which layer is the castle: the one Malvado swaps cartridges for. */
+export const CASTLE_LAYER = LAYERS.findIndex((L) => L.side);
+
+/**
+ * Malvado's Castle, seen from the side. Every room is 16 tiles tall and
+ * at least a screen wide; the wide ones scroll.
+ *
+ *   #  stone       =  a ledge you can jump up through and stand on
+ *   H  ladder      ^  spikes
+ *   s  where you start          P  a trapped spirit      F  a soul fountain
+ *   1  a walker (bunny or soldier)    2  a flier (spark, glove or wisp)
+ *   a to e  a door: the letter is its bottom-left tile, and it is two
+ *           tiles wide and three tall. Each letter joins two rooms.
+ *   x  the way out, which opens once the boss is beaten
+ */
+export const CASTLE = [
+  {
+    name: "THE GATE", kind: "start",
+    map: [
+      "##############################",
+      "#............................#",
+      "#............................#",
+      "#............................#",
+      "#............................#",
+      "#............................#",
+      "#..................2.........#",
+      "#............................#",
+      "#..............=====.........#",
+      "#............................#",
+      "#.........====...............#",
+      "#....................2.......#",
+      "#.....===...........####.....#",
+      "#...................####.....#",
+      "#.s........1........####..a..#",
+      "##############################",
+    ],
+  },
+  {
+    name: "THE GREAT HALL", kind: "enemy",
+    map: [
+      "##############################",
+      "#............................#",
+      "#............................#",
+      "#.....b......................#",
+      "#....######H.................#",
+      "#..........H.................#",
+      "#..........H.........2.......#",
+      "#..........H.................#",
+      "#..........H......=====......#",
+      "#..........H.................#",
+      "#..........H.............===.#",
+      "#..........H.................#",
+      "#..........H..........2......#",
+      "#..........H.................#",
+      "#.a........H.......1......c..#",
+      "##############################",
+    ],
+  },
+  {
+    name: "THE TOWER", kind: "spirit",
+    map: [
+      "####################",
+      "#..................#",
+      "#..................#",
+      "#...P..............#",
+      "#..====............#",
+      "#..................#",
+      "#........====......#",
+      "#..................#",
+      "#.............====.#",
+      "#..................#",
+      "#........====....2.#",
+      "#..................#",
+      "#....====..........#",
+      "#..................#",
+      "#.b..........1.....#",
+      "####################",
+    ],
+  },
+  {
+    name: "THE LIBRARY", kind: "fountain",
+    map: [
+      "##############################",
+      "#............................#",
+      "#............................#",
+      "#........2...........2.......#",
+      "#............................#",
+      "#............................#",
+      "#...........H####............#",
+      "#...........H####............#",
+      "#...........H####............#",
+      "#...........H####===.........#",
+      "#...........H####............#",
+      "#...........H####............#",
+      "#....===....H####..===.......#",
+      "#...........H####............#",
+      "#.c.....1...H####......F..d..#",
+      "##############################",
+    ],
+  },
+  {
+    name: "THE SPIKE STAIRS", kind: "enemy",
+    map: [
+      "########################################",
+      "#......................................#",
+      "#......................................#",
+      "#......................................#",
+      "#......................................#",
+      "#..........2...........2.........2.....#",
+      "#......................................#",
+      "#......................................#",
+      "#......................................#",
+      "#...........===.............===........#",
+      "#......................................#",
+      "#.......===....===.......===...===.....#",
+      "#......................................#",
+      "#......................................#",
+      "#.d.......^^^^^^....1....^^^^^^....1.e.#",
+      "########################################",
+    ],
+  },
+  {
+    name: "THE THRONE ROOM", kind: "boss",
+    map: [
+      "####################",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..................#",
+      "#..===........===..#",
+      "#..................#",
+      "#..................#",
+      "#.e.............x..#",
+      "####################",
+    ],
+  },
+];
+
+/* Tile codes in a castle room. */
+export const T_AIR = 0, T_WALL = 1, T_LEDGE = 2, T_LADDER = 3, T_SPIKES = 4;
+
+/** A castle room's tiles, as codes. Markers (doors, spots) are open air. */
+export function castleTiles(room) {
+  const code = { "#": T_WALL, "=": T_LEDGE, H: T_LADDER, "^": T_SPIKES };
+  return room.map.map((row) => [...row].map((ch) => code[ch] ?? T_AIR));
+}
+
+/** Read the castle's maps into rooms, with doors joined up by letter. */
+function layoutCastle() {
+  const rooms = CASTLE.map((c, id) => {
+    const room = { id, name: c.name, kind: c.kind, side: true, map: c.map, cols: c.map[0].length, doors: [], spots: [], start: null, spirit: null, fountain: null };
+    c.map.forEach((row, ty) => [...row].forEach((ch, tx) => {
+      const x = tx * TILE + TILE / 2, foot = (ty + 1) * TILE;
+      if (/[a-ex]/.test(ch)) room.doors.push({ id: ch, tx, ty, x: tx * TILE + TILE, foot });
+      else if (ch === "s") room.start = { x, y: foot - 5 };
+      else if (ch === "P") room.spirit = { x, y: foot - 4 };
+      else if (ch === "F") room.fountain = { x, y: foot - 4 };
+      else if (ch === "1") room.spots.push({ type: "ground", x, y: foot - 3 });
+      else if (ch === "2") room.spots.push({ type: "air", x, y: ty * TILE + TILE / 2 });
+    }));
+    return room;
+  });
+  for (const room of rooms) for (const d of room.doors) {
+    if (d.id === "x") { d.to = null; continue; }
+    const other = rooms.find((r) => r !== room && r.doors.some((k) => k.id === d.id));
+    d.to = other ? other.id : null;
+  }
+  return { side: true, cols: rooms.length, rows: 1, rooms, start: rooms.find((r) => r.kind === "start").id, boss: rooms.find((r) => r.kind === "boss").id };
+}
+
+/** Which walkers and fliers fill a castle room, the same every visit. */
+export function castleEnemies(run, layerIx, room) {
+  const L = LAYERS[layerIx];
+  const rng = makeRng((run.seed ^ (layerIx * 977 + room.id * 131)) >>> 0);
+  return room.spots.map((s) => {
+    const pool = s.type === "ground" ? L.ground : L.air;
+    return { kind: pool[Math.floor(rng() * pool.length)], x: s.x, y: s.y };
+  });
+}
+
+/* ---------- moving in the castle: gravity, ledges and ladders ---------- */
+
+/**
+ * Side-on movement, in pixels and seconds. A jump rises about five tiles
+ * and carries about five across; letting go of Up early makes a short hop.
+ */
+export const SIDE = { gravity: 560, jump: 215, cut: 90, walk: 52, climb: 44, fall: 230, coyote: 0.08, buffer: 0.12 };
+
+/** The tile code at (tx, ty). Off the sides and bottom is wall; above the top is air. */
+export function tileAt(tiles, tx, ty) {
+  if (ty < 0) return T_AIR;
+  if (ty >= tiles.length || tx < 0 || tx >= tiles[0].length) return T_WALL;
+  return tiles[ty][tx];
+}
+
+/** Can you stand on top of this tile? Walls, ledges, and the top rung of a ladder. */
+export function standsOn(tiles, tx, ty) {
+  const t = tileAt(tiles, tx, ty);
+  return t === T_WALL || t === T_LEDGE || (t === T_LADDER && tileAt(tiles, tx, ty - 1) !== T_LADDER);
+}
+
+/** The tiles a box (centered at x, y) covers. */
+function span(b, x, y) {
+  return {
+    x0: Math.floor((x - b.w / 2) / TILE), x1: Math.floor((x + b.w / 2 - 0.001) / TILE),
+    y0: Math.floor((y - b.h / 2) / TILE), y1: Math.floor((y + b.h / 2 - 0.001) / TILE),
+  };
+}
+function hitsWall(tiles, b, x, y) {
+  const s = span(b, x, y);
+  for (let ty = s.y0; ty <= s.y1; ty++) for (let tx = s.x0; tx <= s.x1; tx++) if (tileAt(tiles, tx, ty) === T_WALL) return true;
+  return false;
+}
+/** Does the box touch a tile of this kind? */
+export function touches(tiles, b, kind) {
+  const s = span(b, b.x, b.y);
+  for (let ty = s.y0; ty <= s.y1; ty++) for (let tx = s.x0; tx <= s.x1; tx++) if (tileAt(tiles, tx, ty) === kind) return true;
+  return false;
+}
+
+/**
+ * Move a box (centered at b.x, b.y, size b.w by b.h) by (dx, dy) in small
+ * steps. Walls stop it from every side; ledges and ladder tops only stop
+ * it falling onto them, unless it's dropping through.
+ */
+export function sideMove(tiles, b, dx, dy, drop = false) {
+  let { x, y } = b;
+  let hitX = false, landed = false, bonk = false;
+  const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 2));
+  const sx = dx / n, sy = dy / n;
+  for (let i = 0; i < n; i++) {
+    if (sx && !hitX) { if (hitsWall(tiles, b, x + sx, y)) hitX = true; else x += sx; }
+    if (sy < 0 && !bonk) { if (hitsWall(tiles, b, x, y + sy)) bonk = true; else y += sy; }
+    if (sy > 0 && !landed) {
+      const feet = y + b.h / 2, next = feet + sy;
+      if (hitsWall(tiles, b, x, y + sy)) { y = Math.floor(next / TILE) * TILE - b.h / 2; landed = true; continue; }
+      const row = Math.floor(next / TILE);
+      if (!drop && feet <= row * TILE && next > row * TILE) {
+        const s = span(b, x, y);
+        for (let tx = s.x0; tx <= s.x1; tx++) if (standsOn(tiles, tx, row)) { landed = true; break; }
+        if (landed) { y = row * TILE - b.h / 2; continue; }
+      }
+      y += sy;
+    }
+  }
+  return { x, y, hitX, landed, bonk };
+}
+
+/** Is the box on a ladder tile, by its middle? */
+const onLadder = (tiles, x, y) => tileAt(tiles, Math.floor(x / TILE), Math.floor(y / TILE)) === T_LADDER;
+
+/**
+ * One step of the hero in the castle. ctl is { x: -1, 0 or 1, up, down
+ * (held), jump, downPressed (this frame) }. b carries x, y, w, h, vx, vy,
+ * ground, climb and a few timers. Returns what happened this step.
+ */
+export function sideStep(tiles, b, ctl, dt) {
+  const ev = { jumped: false, landed: false, spikes: false };
+  const feet = () => b.y + b.h / 2;
+  b.coyote = b.ground ? SIDE.coyote : Math.max(0, (b.coyote || 0) - dt);
+  b.buffer = ctl.jump ? SIDE.buffer : Math.max(0, (b.buffer || 0) - dt);
+  b.dropT = Math.max(0, (b.dropT || 0) - dt);
+
+  // Grab a ladder: Up in front of one, or Down standing on its top.
+  if (!b.climb) {
+    if (ctl.up && onLadder(tiles, b.x, b.y)) b.climb = true;
+    else if (ctl.down && b.ground && onLadder(tiles, b.x, feet() + 1)) { b.climb = true; b.y += 2; }
+    if (b.climb) { b.x = Math.floor(b.x / TILE) * TILE + TILE / 2; b.vx = 0; b.vy = 0; b.buffer = 0; b.ground = false; }
+  }
+
+  if (b.climb) {
+    const dir = (ctl.down ? 1 : 0) - (ctl.up ? 1 : 0);
+    if (ctl.x && !dir) { b.climb = false; b.vx = ctl.x * SIDE.walk; } // step off sideways
+    else {
+      const m = sideMove(tiles, b, 0, dir * SIDE.climb * dt, true);
+      b.y = m.y;
+      if (dir < 0 && !onLadder(tiles, b.x, feet() - 0.5)) {
+        // Off the top: stand on it.
+        b.y = Math.ceil(feet() / TILE) * TILE - b.h / 2;
+        b.climb = false; b.ground = true; b.vy = 0;
+      } else if (m.landed || (dir > 0 && !onLadder(tiles, b.x, b.y) && !onLadder(tiles, b.x, feet() + 1))) {
+        b.climb = false; b.ground = m.landed;
+      }
+      return ev;
+    }
+  }
+
+  b.vx = ctl.x * SIDE.walk;
+  if (ctl.downPressed && b.ground && !onLadder(tiles, b.x, feet() + 1)) {
+    // Only ledges can be dropped through, not stone.
+    const s = span(b, b.x, b.y);
+    let ledge = true;
+    for (let tx = s.x0; tx <= s.x1; tx++) if (tileAt(tiles, tx, Math.floor((feet() + 1) / TILE)) === T_WALL) ledge = false;
+    if (ledge) { b.dropT = 0.22; b.ground = false; b.coyote = 0; }
+  }
+  if (b.buffer > 0 && b.coyote > 0) {
+    b.vy = -SIDE.jump; b.buffer = 0; b.coyote = 0; b.ground = false; ev.jumped = true;
+  }
+  if (!ctl.up && b.vy < -SIDE.cut) b.vy = -SIDE.cut;
+  b.vy = Math.min(SIDE.fall, b.vy + SIDE.gravity * dt);
+  const m = sideMove(tiles, b, b.vx * dt, b.vy * dt, b.dropT > 0);
+  b.x = m.x; b.y = m.y;
+  if (m.landed) { if (!b.ground) ev.landed = true; b.ground = true; b.vy = 0; }
+  else if (b.vy > 0) b.ground = false;
+  if (m.bonk) b.vy = 0;
+  ev.spikes = touches(tiles, b, T_SPIKES);
+  return ev;
+}
 
 /**
  * The Giant Rabbit's hop and the shockwave ring it makes landing. He hops
@@ -426,6 +778,7 @@ export function rabbitLanding(from, toward, hop = RABBIT.hop) {
 export const BOSSES = {
   rabbit: { name: "THE GIANT RABBIT", hp: 20 },
   king: { name: "THE CARD KING", hp: 26 },
+  flatrabbit: { name: "THE FLAT RABBIT", hp: 26 },
   malvado: { name: "THE GREAT MALVADO", hp: 40 },
 };
 
@@ -454,6 +807,7 @@ export const DOOR_ROWS = [7, 8];
 /** Read a layer's grid into rooms with their neighbors and contents. */
 export function layoutLayer(index) {
   const L = LAYERS[index];
+  if (L.side) return layoutCastle();
   const grid = L.grid.map((r) => r.split(" "));
   const rows = grid.length, cols = grid[0].length;
   const rooms = [];
@@ -502,7 +856,7 @@ export function roomTiles(room, sealed = false) {
 /** Is the pixel (x, y) in room space solid? Outside the room counts as open (that's a door). */
 export function solidAt(tiles, x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
-  if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return false;
+  if (tx < 0 || ty < 0 || tx >= tiles[0].length || ty >= tiles.length) return false;
   return tiles[ty][tx] === 1;
 }
 
@@ -590,7 +944,27 @@ export function validRun(r) {
   if (!validEntry(r.attack, ATTACKS) || typeof r.attack.picked !== "boolean") return false;
   if (r.defense !== null && !validEntry(r.defense, DEFENSES)) return false;
   if (!(Number.isInteger(r.deep) && r.deep >= 0 && r.deep <= 3)) return false;
-  return Array.isArray(r.beaten) && Array.isArray(r.cleared) && Array.isArray(r.freed) && Array.isArray(r.fountains);
+  return Array.isArray(r.beaten) && r.beaten.length === LAYERS.length && Array.isArray(r.cleared) && Array.isArray(r.freed) && Array.isArray(r.fountains);
+}
+
+/**
+ * Runs saved before the castle had three layers. Slot the castle in: a
+ * run already at the bottom counts it as done, one higher up still has it
+ * ahead. Anything else comes back as it was.
+ */
+export function upgradeRun(r) {
+  if (!r || r.v !== 2 || !Array.isArray(r.beaten) || r.beaten.length !== LAYERS.length - 1) return r;
+  const c = CASTLE_LAYER;
+  const shift = (k) => { const [l, room] = String(k).split(":").map(Number); return l >= c ? `${l + 1}:${room}` : k; };
+  const past = r.layer >= c;
+  return {
+    ...r,
+    layer: past ? r.layer + 1 : r.layer,
+    beaten: [...r.beaten.slice(0, c), past, ...r.beaten.slice(c)],
+    cleared: (r.cleared || []).map(shift),
+    freed: (r.freed || []).map(shift),
+    fountains: (r.fountains || []).map(shift),
+  };
 }
 
 /** Beat a layer's boss: a heart container, a soul top-up, and the way down. */
@@ -637,6 +1011,6 @@ export function makeRng(seed) {
 export function roomEnemies(run, layerIx, roomId) {
   const L = LAYERS[layerIx];
   const rng = makeRng((run.seed ^ (layerIx * 977 + roomId * 131)) >>> 0);
-  const n = 3 + layerIx + Math.floor(rng() * 2);
+  const n = 3 + (L.depth ?? layerIx) + Math.floor(rng() * 2);
   return Array.from({ length: n }, () => L.enemies[Math.floor(rng() * L.enemies.length)]);
 }

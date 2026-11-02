@@ -6,6 +6,11 @@
  * { update(dt), draw(), suspend?(), dispose?() }. The hardware runs the
  * frame loop, owns input, audio and storage, and pulls the cartridge out
  * again when the power switch goes off.
+ *
+ * A cartridge can also ask for itself to be swapped mid-game, for a story
+ * that breaks the fourth wall: hw.swapCartridge({ title, label, cover })
+ * fires a "camboy:swap" event for the page to animate, shows static while
+ * the cartridge is out, boots the new title, then resolves.
  */
 
 import { W, H, makeLcd } from "./lcd.mjs";
@@ -311,6 +316,7 @@ export function createHardware(root = document) {
   let bootT = 0;
   let cart = null;
   let game = null;
+  let swap = null; // a cartridge swap in progress: { phase: "out" | "boot", t, title, resolve }
 
   function drawOff() {
     g.fillStyle = "#9aa781";
@@ -318,14 +324,47 @@ export function createHardware(root = document) {
   }
 
   /** The Cambo logo scrolls down, lands with a chime, then the cartridge starts. */
-  function drawBoot(t) {
+  function drawBoot(t, title = cart.meta.title) {
     lcd.rect(0, 0, W, H, 0);
     const y = Math.min(54, -16 + t * 60);
     lcd.ctext("CAMBO", Math.round(y), 3, 3);
     if (y >= 54) {
       lcd.ctext("INDUSTRIES", 76, 2);
-      if (t > 1.9) lcd.ctext(cart.meta.title, 100, 2);
+      if (t > 1.9) lcd.ctext(title, 100, 2);
     }
+  }
+
+  /** No cartridge: the screen shows snow. */
+  let snow = null;
+  function drawStatic() {
+    snow = snow || g.createImageData(W, H);
+    const d = snow.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.random() < 0.5 ? 0x9a : Math.random() < 0.5 ? 0x6a : 0xc8;
+      d[i] = v - 10; d[i + 1] = v + 6; d[i + 2] = v - 30; d[i + 3] = 255;
+    }
+    g.putImageData(snow, 0, 0);
+  }
+
+  /**
+   * Swap the cartridge mid-game. The page animates it (and may skip the
+   * new boot by calling done(true) when nothing changed); without a page
+   * listening, it resolves straight away.
+   */
+  function swapCartridge(spec = {}) {
+    return new Promise((resolve) => {
+      if (state !== "on" || swap) { resolve(); return; }
+      swap = { phase: "out", t: 0, title: spec.title || cart.meta.title, resolve };
+      led?.classList.remove("on");
+      const done = (skip = false) => {
+        if (!swap) return;
+        led?.classList.add("on");
+        if (skip) { const r = swap.resolve; swap = null; r(); }
+        else { swap.phase = "boot"; swap.t = 0; }
+      };
+      const handled = !dispatchEvent(new CustomEvent("camboy:swap", { cancelable: true, detail: { ...spec, done } }));
+      if (!handled) done(true);
+    });
   }
 
   function startGame() {
@@ -335,6 +374,7 @@ export function createHardware(root = document) {
       lcd, W, H, haptic, load, save,
       input: { held, pressed, stick },
       onAudio(fn) { audioSubs.push(fn); if (ac) fn(ac, out); },
+      swapCartridge,
     });
     state = "on";
   }
@@ -350,6 +390,15 @@ export function createHardware(root = document) {
       if (before < 1.17 && bootT >= 1.17) chime();
       drawBoot(bootT);
       if (bootT > 2.6) startGame();
+    } else if (state === "on" && swap) {
+      if (swap.phase === "out") drawStatic();
+      else {
+        const before = swap.t;
+        swap.t += dt;
+        if (before < 1.17 && swap.t >= 1.17) chime();
+        drawBoot(swap.t, swap.title);
+        if (swap.t > 2.6) { const r = swap.resolve; swap = null; r(); }
+      }
     } else if (state === "on" && game) {
       game.update(dt);
       game.draw();
@@ -372,6 +421,7 @@ export function createHardware(root = document) {
   }
 
   function powerOff() {
+    if (swap) { swap = null; }
     game?.dispose?.();
     audioSubs = [];
     game = null;
@@ -390,6 +440,7 @@ export function createHardware(root = document) {
   return {
     lcd, haptic, unlock, chime, clunk, click, powerOn, powerOff, load, save,
     get state() { return state; },
+    get swapping() { return !!swap; },
     get cart() { return cart; },
     setHaptics(on) { haptics = on; save("haptics", on); },
   };
