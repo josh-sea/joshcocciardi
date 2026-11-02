@@ -241,6 +241,53 @@ if (gapDoc) {
     biggest < 900000, biggest);
 }
 
+/* ---- a rollup older than the shape we write is rebuilt without storing
+ *
+ * The hourly rebuild runs for a park that stored days this pass. That is
+ * right while a backfill is working and wrong the moment it finishes: a
+ * complete park reports "up to date" for ever and is never rebuilt again.
+ *
+ * Which is exactly what happened in production. The per-ride grids shipped
+ * after Magic Kingdom, EPCOT and Hollywood Studios were already complete,
+ * so all three reported "up to date", none was ever rebuilt, and their
+ * grids were never written. Three parks out of four with charts that could
+ * not cross-filter, and nothing reporting a fault.
+ */
+{
+  // An old-shape rollup: no `span`, and its grids deleted, for a park whose
+  // hourly archive is complete so nothing will be stored for it.
+  const before = (await db.collection('park_rollups').get()).docs
+    .filter((d) => d.id.startsWith('mk_hours_'));
+  ok(`mk has grids to start with (${before.length})`, before.length > 0, before.length);
+  await Promise.all(before.map((d) => d.ref.delete()));
+
+  const head = await db.collection('park_rollups').doc('mk_hours').get();
+  const { span, ...old } = head.data();
+  ok('and a span to drop', typeof span === 'number', span);
+  await db.collection('park_rollups').doc('mk_hours').set(old);
+
+  // limit: 0 so nothing is fetched or stored: every park reports up to date
+  // or nothing to do, which is the state that used to skip the rebuild.
+  const r = await archiveHours({ limit: 0, budgetMs: 60000 });
+  ok('the pass stored nothing', r.stored === 0, r.stored);
+  ok('and still rebuilt the park whose rollup was out of date',
+    !!(r.rollups && r.rollups.mk), r.rollups);
+
+  const after = (await db.collection('park_rollups').get()).docs
+    .filter((d) => d.id.startsWith('mk_hours_'));
+  ok(`the grids are back (${after.length})`, after.length === before.length,
+    { before: before.length, after: after.length });
+  const again = await db.collection('park_rollups').doc('mk_hours').get();
+  ok('and the rollup carries a span again', typeof again.data().span === 'number',
+    again.data().span);
+
+  // Self-clearing: now that it is current, a second pass must not rebuild it
+  // again on every run for ever.
+  const second = await archiveHours({ limit: 0, budgetMs: 60000 });
+  ok('a park already current is not rebuilt again',
+    !(second.rollups && second.rollups.mk), second.rollups);
+}
+
 /* ---- the hourly pass respects a floor, so `left` can reach zero
  *
  * The count of outstanding park-days is what decides whether the catch-up
