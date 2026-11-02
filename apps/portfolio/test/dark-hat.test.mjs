@@ -9,10 +9,11 @@
  * Run: node apps/portfolio/test/dark-hat.test.mjs
  */
 import {
-  COLS, ROWS, TILE, NAME_LEN, LINE_CHARS, SOUL_MAX, SOUL_DRAIN, STORY, TRICKS, LAYERS, BOSSES, ENEMIES, TEMPLATES,
-  DOOR_COLS, DOOR_ROWS, cleanName, say, trickStats, knows, choosePath, usable, layoutLayer, neighbor, roomTiles,
+  COLS, ROWS, TILE, NAME_LEN, LINE_CHARS, SOUL_MAX, SOUL_DRAIN, STORY, LAYERS, BOSSES, ENEMIES, TEMPLATES,
+  DOOR_COLS, DOOR_ROWS, cleanName, say, layoutLayer, neighbor, roomTiles,
+  ATTACKS, DEFENSES, BONUSES, TIERS, statsOf, attackStats, defenseStats, upgradeNames, nextPick, describePick, applyPick,
   moveBox, reachable, drainSoul, gainSoul, newRun, validRun, beatBoss, descend, faceFrom, roomEnemies,
-  SPEED, RABBIT, SHIELD_CARDS, rabbitLanding,
+  SPEED, RABBIT, rabbitLanding,
 } from '../public/projects/camboy/carts/dark-hat/rules.mjs';
 import { SONGS } from '../public/projects/camboy/carts/dark-hat/sound.mjs';
 import { compile, midi } from '../public/projects/camboy/js/chip.mjs';
@@ -30,40 +31,89 @@ console.log('\nnames and words');
   ok('no name falls back to HERO', cleanName('') === 'HERO' && cleanName('   ') === 'HERO' && cleanName(null) === 'HERO');
   ok('trailing blanks are dropped', cleanName('BO  ') === 'BO');
   ok('the name goes into the story', say('{N} FELL IN!', 'cam').join(' ') === 'CAM FELL IN!');
-  const all = [...STORY.intro, ...STORY.escape, STORY.spiritIntro, STORY.spiritChoose, STORY.fountain, STORY.caught, STORY.ladder];
+  const all = [...STORY.intro, ...STORY.escape, STORY.spiritIntro, STORY.spiritAttack, STORY.spiritDefense, STORY.spiritUpgrade, STORY.spiritBonus, STORY.bossGift, STORY.fountain, STORY.caught, STORY.ladder];
   const longest = Math.max(...all.flatMap((t) => say(t, 'WWWW')).map((l) => l.length));
   ok('every line of story fits the text box, even with a four letter name', longest <= LINE_CHARS, `longest ${longest}`);
   ok('a page of story fits on the screen', all.every((t) => say(t, 'WWWW', 36).length <= 6));
-  const descs = Object.values(TRICKS).flatMap((t) => Object.values(t.paths));
-  ok('every path description fits its box in three lines', descs.every((p) => say(p.desc, 'X', 36).length <= 3 && p.name.length <= 20));
+  const paths = [...Object.values(ATTACKS), ...Object.values(DEFENSES)];
+  ok('every attack and defense fits its box in two lines (four to a screen)', paths.every((p) => say(p.desc, 'X', 37).length <= 2 && p.name.length <= 22));
+  const ups = paths.flatMap((p) => p.tiers.flat());
+  ok('every upgrade fits its box in three lines', ups.every((u) => say(u.desc, 'X', 36).length <= 3 && u.name.length <= 20));
+  ok('the bonuses fit too', BONUSES.every((b) => say(b.desc, 'X', 36).length <= 3));
 }
 
-console.log('\ntricks');
+console.log('\nattack and defense');
 {
-  ok('six tricks', Object.keys(TRICKS).length === 6);
-  ok('every trick has exactly two paths', Object.values(TRICKS).every((t) => Object.keys(t.paths).length === 2));
-  ok('every path has a cooldown and a name', Object.values(TRICKS).every((t) => Object.values(t.paths).every((p) => p.cd > 0 && p.name && p.desc)));
+  ok('four attacks: cards, wand, hat, scarf', Object.keys(ATTACKS).join() === 'cards,wand,hat,scarf');
+  ok('four defenses: shield, vanish, decoy, storm', Object.keys(DEFENSES).join() === 'shield,blink,decoy,storm');
+  const all = [...Object.values(ATTACKS), ...Object.values(DEFENSES)];
+  ok(`every path has ${TIERS} tiers of two upgrades`, all.every((p) => p.tiers.length === TIERS && p.tiers.every((t) => t.length === 2)));
+  ok('every upgrade only touches numbers the path has', all.every((p) => p.tiers.flat().every((u) => [u.add, u.mul, u.set].every((o) => !o || Object.keys(o).every((k) => k in p.base)))));
+  ok('upgrade ids are unique within a path', all.every((p) => new Set(p.tiers.flat().map((u) => u.id)).size === p.tiers.flat().length));
+  // Every combination of upgrades gives sane numbers.
+  let sane = true;
+  for (const [cat, catalog] of [['a', ATTACKS], ['d', DEFENSES]]) for (const [id, p] of Object.entries(catalog)) {
+    for (let mask = 0; mask < 8; mask++) {
+      const st = statsOf({ id, ups: p.tiers.map((t, i) => t[(mask >> i) & 1].id) }, catalog);
+      if (!(st.cd > 0.1 && st.cd < 15) || ('dmg' in st && !(st.dmg >= 1)) || Object.values(st).some((v) => typeof v === 'number' && !Number.isFinite(v))) sane = false;
+    }
+  }
+  ok('every build, all 8 per path, has sane cooldowns and damage', sane);
+  ok('the ace sniper throws one card that pierces and hits hard', (() => { const st = statsOf({ id: 'cards', ups: ['twin', 'wide', 'ace'] }, ATTACKS); return st.count === 1 && st.pierce && st.dmg >= 4 && st.cd > ATTACKS.cards.base.cd; })());
+  ok('more cards versus heavier cards is a real trade', statsOf({ id: 'cards', ups: ['twin'] }, ATTACKS).count === 2 && statsOf({ id: 'cards', ups: ['heavy'] }, ATTACKS).dmg === 2);
+
   const r = newRun('cam', 1);
-  ok('a new run knows only the card toss', usable(r).join() === 'cards' && knows(r, 'cards') && !knows(r, 'wand'));
-  ok('the plain card toss has stats', trickStats('cards', null).dmg === 1);
-  ok('learning a trick takes', choosePath(r, 'wand', 'steer') && r.tricks.wand === 'steer');
-  ok('a new trick lands on an empty button', r.equip.b === 'wand');
-  ok('the path is permanent for the run', !choosePath(r, 'wand', 'homing') && r.tricks.wand === 'steer');
-  ok('the card toss upgrade is a one-time choice too', choosePath(r, 'cards', 'fan') && !choosePath(r, 'cards', 'ace'));
-  ok('made-up tricks and paths are refused', !choosePath(r, 'laser', 'big') && !choosePath(r, 'hat', 'nope'));
-  ok('the steered wand hits harder than the hunting one', trickStats('wand', 'steer').dmg > trickStats('wand', 'homing').dmg);
-  ok('the card shield is slow to come back; the storm is quick', trickStats('tornado', 'shield').cd > trickStats('tornado', 'storm').cd);
-  const v = faceFrom(0.9, 0.95, { x: 0, y: 1 });
-  ok('facing snaps to eight directions', Math.abs(v.x - Math.SQRT1_2) < 0.01 && Math.abs(v.y - Math.SQRT1_2) < 0.01);
-  ok('a resting stick keeps the old facing', faceFrom(0.1, 0, { x: 1, y: 0 }).x === 1);
+  ok('a new run has the plain card toss on A and nothing on B', r.attack.id === 'cards' && !r.attack.picked && r.defense === null && attackStats(r).count === 1 && defenseStats(r) === null);
+  let p = nextPick(r, 'spirit');
+  ok('the first spirit offers the four attacks', p.type === 'attack' && p.options.length === 4);
+  ok('each option has a name and description', describePick(r, p).every((o) => o.name && o.desc));
+  ok('picking the wand puts it on A', applyPick(r, p, 1) === true && r.attack.id === 'wand' && r.attack.picked);
+  ok('an attack is picked only once', applyPick(r, p, 2) === false && r.attack.id === 'wand');
+  p = nextPick(r, 'spirit');
+  ok('the second spirit offers the four defenses', p.type === 'defense' && p.options.join() === 'shield,blink,decoy,storm');
+  ok('picking vanish puts it on B', applyPick(r, p, 1) === true && r.defense.id === 'blink' && applyPick(r, p, 0) === false);
+  p = nextPick(r, 'spirit');
+  ok('after that, spirits upgrade: the attack first', p.type === 'upgrade' && p.tree === 'attack' && p.options.join() === 'steer,hunt');
+  applyPick(r, p, 0);
+  p = nextPick(r, 'boss');
+  ok('then the defense, so they grow together', p.type === 'upgrade' && p.tree === 'defense' && p.options.join() === 'far,quick');
+  applyPick(r, p, 1);
+  ok('upgrades show up in the numbers', attackStats(r).steer === true && defenseStats(r).cd < DEFENSES.blink.base.cd);
+  ok('and in the trick book', upgradeNames(r.attack, ATTACKS).join() === 'STEERED WAND' && upgradeNames(r.defense, DEFENSES).join() === 'QUICK BLINK');
+  for (let i = 0; i < 4; i++) applyPick(r, nextPick(r, 'boss'), 0);
+  ok('both paths max out at three upgrades', r.attack.ups.length === 3 && r.defense.ups.length === 3);
+  p = nextPick(r, 'spirit');
+  ok('a maxed-out run gets a bonus choice instead', p.type === 'bonus' && p.options.join() === 'heart,soul');
+  const hp = r.maxHp;
+  applyPick(r, p, 0);
+  ok('a bigger heart adds a heart and heals', r.maxHp === hp + 2 && r.hp === r.maxHp);
+  applyPick(r, nextPick(r, 'spirit'), 1);
+  ok('a deep soul slows the drain', r.deep === 1 && drainSoul(50, 10, 1) > drainSoul(50, 10, 0));
+  for (let i = 0; i < 9; i++) applyPick(r, nextPick(r, 'spirit'), 1);
+  ok('deep soul stops at three', r.deep === 3);
+
+  const k = newRun('bo', 2);
+  ok('keeping the card toss earns a free upgrade', applyPick(k, nextPick(k, 'spirit'), 0) === 'extra' && k.attack.id === 'cards' && k.attack.picked);
+  ok('and that upgrade is for the cards', (() => { const q = nextPick(k, 'boss'); return q.type === 'upgrade' && q.tree === 'attack' && q.options.join() === 'twin,heavy'; })());
+
+  const s = newRun('cam', 3);
+  applyPick(s, nextPick(s, 'spirit'), 2); // hat, and never a defense
+  let allAttack = true;
+  for (let i = 0; i < 3; i++) { const q = nextPick(s, 'boss'); if (q.tree !== 'attack') allAttack = false; applyPick(s, q, 0); }
+  ok('skip the defense and every upgrade goes to your attack', allAttack && s.attack.ups.length === 3 && s.defense === null);
+  ok('bosses never hand out a new attack or defense, only upgrades', nextPick(newRun('x', 4), 'boss').type === 'upgrade');
+  ok('a boss upgrades your plain cards if you have not met a spirit yet', nextPick(newRun('x', 5), 'boss').options.join() === 'twin,heavy');
+  const t = newRun('x', 6); applyPick(t, nextPick(t, 'spirit'), 3);
+  ok('the scarf whips hard up close', attackStats(t).dmg === 2 && attackStats(t).reach > 20);
 }
 
 console.log('\nthe hat');
 {
   ok('three layers down to Malvado', LAYERS.length === 3 && LAYERS[2].boss === 'malvado');
   ok('every boss and enemy is defined', LAYERS.every((L) => BOSSES[L.boss] && L.enemies.every((e) => ENEMIES[e])));
-  const taught = LAYERS.flatMap((L) => L.spirits);
-  ok('every trick is taught by exactly one spirit', taught.length === 6 && new Set(taught).size === 6 && taught.every((t) => TRICKS[t]));
+  const spirits = LAYERS.map((_, i) => layoutLayer(i).rooms.filter((r) => r.kind === 'spirit').length);
+  ok('two spirits on the first layer (an attack and a defense), more below to upgrade', spirits[0] === 2 && spirits[1] + spirits[2] >= 3);
+  ok('enough spirits and bosses to max out both paths', spirits.reduce((a, b) => a + b, 0) - 2 + (LAYERS.length - 1) >= TIERS * 2);
   LAYERS.forEach((L, i) => {
     const lay = layoutLayer(i);
     const ids = lay.rooms.map((r) => r.id);
@@ -75,7 +125,6 @@ console.log('\nthe hat');
     }
     ok(`${L.name}: every room can be reached from the start`, seen.size === ids.length);
     ok(`${L.name}: one start, one boss`, lay.rooms.filter((r) => r.kind === 'start').length === 1 && lay.rooms.filter((r) => r.kind === 'boss').length === 1);
-    ok(`${L.name}: one spirit room per trick taught here`, lay.rooms.filter((r) => r.kind === 'spirit').length === L.spirits.length);
     const doorsMatch = lay.rooms.every((r) => ['up', 'down', 'left', 'right'].every((d) => {
       const n = neighbor(lay, r.id, d);
       if (n == null) return true;
@@ -122,8 +171,9 @@ console.log('\nthe giant rabbit');
 
 console.log('\nthe card shield');
 {
-  ok('three cards', SHIELD_CARDS === 3);
-  ok('its description says the cards last until used', /EACH ONE/.test(TRICKS.tornado.paths.shield.desc));
+  ok('three cards to start', DEFENSES.shield.base.cards === 3);
+  ok('its description says the cards last until used', /EACH BLOCKS OR HITS ONCE/.test(DEFENSES.shield.desc));
+  ok('steel cards block twice, a fortress adds cards', statsOf({ id: 'shield', ups: ['four', 'steel'] }, DEFENSES).tough === 2 && statsOf({ id: 'shield', ups: ['four', 'wide', 'fortress'] }, DEFENSES).cards === 6);
 }
 
 console.log('\nthe soul and the run');
@@ -135,7 +185,10 @@ console.log('\nthe soul and the run');
   const r = newRun('cam', 7);
   ok('a new run is valid', validRun(r));
   ok('a run survives a trip through the save', validRun(JSON.parse(JSON.stringify(r))));
-  ok('broken saves are refused', !validRun(null) && !validRun({}) && !validRun({ ...r, layer: 9 }) && !validRun({ ...r, hp: 0 }) && !validRun({ ...r, tricks: { cards: null, laser: 'x' } }) && !validRun({ ...r, equip: { a: 'wand', b: null } }));
+  ok('broken saves are refused', !validRun(null) && !validRun({}) && !validRun({ ...r, layer: 9 }) && !validRun({ ...r, hp: 0 }) && !validRun({ ...r, attack: { id: 'laser', ups: [], picked: true } }) && !validRun({ ...r, attack: { id: 'cards', ups: ['ace'], picked: true } }) && !validRun({ ...r, defense: { id: 'blink', ups: ['far', 'nope'] } }));
+  ok('saves from the old trick system start fresh', !validRun({ ...r, v: 1 }));
+  const u = newRun('cam', 8); applyPick(u, nextPick(u, 'spirit'), 0); applyPick(u, nextPick(u, 'boss'), 1); applyPick(u, nextPick(u, 'spirit'), 0);
+  ok('a run with a full build survives a trip through the save', validRun(JSON.parse(JSON.stringify(u))));
   ok('an empty soul is a caught run, not a save', !validRun({ ...r, soul: 0 }));
   const before = r.maxHp;
   ok('beating a boss is not the end until Malvado', beatBoss(r) === false);

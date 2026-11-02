@@ -63,8 +63,12 @@ export const STORY = {
     "INSIDE THE HAT IT IS DARK. SPIRITS FLOAT IN THE GLOOM. ALL OF THEM WERE CAUGHT BY MALVADO.",
     "IF {N}'S SOUL RUNS OUT, {N} BECOMES HIS NEXT TRICK. FIND THE WAY DOWN, BEAT MALVADO, AND ESCAPE!",
   ],
-  spiritIntro: "{N}... I CAN'T LEAVE THIS HAT. BUT I CAN TEACH YOU MY TRICK.",
-  spiritChoose: "CHOOSE ONE PATH. ONCE YOU PICK, THERE'S NO GOING BACK.",
+  spiritIntro: "{N}... I CAN'T LEAVE THIS HAT. BUT I CAN HELP YOU GET OUT.",
+  spiritAttack: "PICK YOUR MAGIC ATTACK. IT GOES ON A, AND IT'S YOURS FOR THE WHOLE RUN.",
+  spiritDefense: "NOW PICK A WAY TO PROTECT YOURSELF. IT GOES ON B, FOR THE WHOLE RUN.",
+  spiritUpgrade: "I CAN MAKE YOUR MAGIC STRONGER. CHOOSE ONE. NO GOING BACK!",
+  spiritBonus: "YOUR MAGIC IS AS STRONG AS IT GETS. LET ME MAKE YOU TOUGHER INSTEAD.",
+  bossGift: "ITS DARK MAGIC SPILLS OUT... {N} CAN USE IT TO UPGRADE!",
   fountain: "A POOL OF STOLEN STARLIGHT. {N}'S SOUL IS FULL AGAIN.",
   bossDoor: "THE DOORS SLAM SHUT!",
   ladder: "A LADDER DOWN, DEEPER INTO THE HAT...",
@@ -77,112 +81,286 @@ export const STORY = {
   ],
 };
 
-/* ---------- tricks ---------- */
+/* ---------- tricks: an attack on A, a defense on B ---------- */
 
 /**
- * The tricks, each with two paths. cards is known from the start in its
- * plain form; its spirit at the bottom of the hat offers the upgrade.
- * For each path: cooldown in seconds and damage per hit.
+ * Like diep.io: you pick one attack and one defense, then grow them.
+ * The first spirit you meet teaches an attack, the second a defense, and
+ * every spirit and boss after that upgrades what you have. Each attack and
+ * defense has three tiers, and every tier is a choice between two
+ * upgrades, so no two runs have to end up alike.
+ *
+ * Upgrades change numbers: add adds, mul multiplies, set replaces. A path
+ * is permanent for the run, until you're caught or start over.
  */
-export const TRICKS = {
+export const ATTACKS = {
   cards: {
     name: "CARD TOSS",
-    basic: { cd: 0.32, dmg: 1 },
-    paths: {
-      fan: { name: "FAN OF THREE", desc: "THROW THREE CARDS IN A SPREAD.", cd: 0.36, dmg: 1 },
-      ace: { name: "ACE THROUGH", desc: "ONE HARD CARD THAT FLIES THROUGH EVERYTHING.", cd: 0.3, dmg: 2 },
-    },
-  },
-  vanish: {
-    name: "VANISH",
-    paths: {
-      blink: { name: "LONG BLINK", desc: "VANISH AND REAPPEAR FAR AHEAD, RIGHT THROUGH ENEMIES.", cd: 1.6, dmg: 0 },
-      decoy: { name: "RABBIT DECOY", desc: "A SHORT HOP THAT LEAVES A RABBIT BEHIND TO FOOL THEM.", cd: 3, dmg: 0 },
-    },
-  },
-  tornado: {
-    name: "CARD TORNADO",
-    paths: {
-      shield: { name: "CARD SHIELD", desc: "THREE CARDS CIRCLE YOU, EVEN ROOM TO ROOM. EACH ONE BLOCKS OR HITS ONCE.", cd: 8, dmg: 1 },
-      storm: { name: "CARD STORM", desc: "CARDS BURST OUT IN A RING ALL AROUND YOU.", cd: 2.6, dmg: 1 },
-    },
+    desc: "THE ALL-ROUNDER. KEEP IT AND GET A FREE UPGRADE NOW.",
+    base: { cd: 0.32, dmg: 1, count: 1, spread: 0.28, speed: 145, pierce: false, burst: false },
+    tiers: [
+      [
+        { id: "twin", name: "TWIN DEAL", desc: "TWO CARDS EVERY THROW.", add: { count: 1 } },
+        { id: "heavy", name: "HEAVY CARD", desc: "EACH CARD HITS TWICE AS HARD, BUT THROWS A BIT SLOWER.", add: { dmg: 1 }, mul: { cd: 1.25 } },
+      ],
+      [
+        { id: "wide", name: "WIDE FAN", desc: "TWO MORE CARDS IN A WIDER SPREAD.", add: { count: 2, spread: 0.06 } },
+        { id: "quick", name: "QUICK HANDS", desc: "THROW CARDS MUCH FASTER.", mul: { cd: 0.6 } },
+      ],
+      [
+        { id: "burst", name: "CARD BURST", desc: "EVERY THROW ALSO FLINGS CARDS IN ALL DIRECTIONS.", set: { burst: true } },
+        { id: "ace", name: "ACE SNIPER", desc: "ONE FAST CARD THAT FLIES THROUGH EVERYTHING AND HITS HUGE. SLOW TO THROW.", set: { count: 1, pierce: true }, add: { dmg: 3 }, mul: { speed: 1.5, cd: 1.6 } },
+      ],
+    ],
   },
   wand: {
     name: "WAND WHISTLE",
-    paths: {
-      homing: { name: "HUNTING WAND", desc: "WHISTLE AND THE WAND FINDS ENEMIES ON ITS OWN.", cd: 2.4, dmg: 2 },
-      steer: { name: "STEERED WAND", desc: "HOLD THE BUTTON AND STEER THE WAND YOURSELF. HITS HARDER.", cd: 2.4, dmg: 3 },
-    },
+    desc: "WHISTLE AND YOUR WAND HUNTS ENEMIES, THEN COMES BACK.",
+    base: { cd: 2.2, dmg: 2, hits: 4, speed: 130, steer: false, wands: 1, stars: false, size: 4 },
+    tiers: [
+      [
+        { id: "steer", name: "STEERED WAND", desc: "HOLD A AND STEER IT YOURSELF. HITS HARDER.", set: { steer: true }, add: { dmg: 1, hits: 96 } },
+        { id: "hunt", name: "HUNTING WAND", desc: "IT KEEPS HUNTING AND HITS MORE ENEMIES EACH TRIP.", add: { hits: 3 } },
+      ],
+      [
+        { id: "twin", name: "TWIN WANDS", desc: "TWO WANDS FLY OUT AT ONCE.", add: { wands: 1 } },
+        { id: "swift", name: "SWIFT WAND", desc: "FLIES FASTER AND COMES BACK SOONER.", mul: { speed: 1.4, cd: 0.65 } },
+      ],
+      [
+        { id: "stars", name: "STAR WAND", desc: "EVERY HIT BURSTS INTO LITTLE STARS.", set: { stars: true } },
+        { id: "giant", name: "GIANT WAND", desc: "A BIG WAND THAT HITS VERY HARD.", add: { dmg: 3, size: 4 } },
+      ],
+    ],
   },
   hat: {
     name: "HAT BOOMERANG",
-    paths: {
-      magnet: { name: "MAGNET HAT", desc: "THE HAT PULLS SPARKLES AND HEARTS BACK TO YOU.", cd: 1.1, dmg: 2 },
-      grow: { name: "GROWING HAT", desc: "THE HAT GETS BIGGER AND STRONGER WITH EVERY HIT.", cd: 1.3, dmg: 2 },
-    },
+    desc: "THROW YOUR HAT. IT HITS GOING OUT AND COMING BACK.",
+    base: { cd: 1.2, dmg: 2, size: 5, out: 0.38, hats: 1, magnet: false, grow: false, speed: 150 },
+    tiers: [
+      [
+        { id: "magnet", name: "MAGNET HAT", desc: "PULLS SPARKLES AND HEARTS BACK TO YOU.", set: { magnet: true } },
+        { id: "grow", name: "GROWING HAT", desc: "GETS BIGGER AND STRONGER WITH EVERY HIT.", set: { grow: true } },
+      ],
+      [
+        { id: "long", name: "LONG THROW", desc: "THE HAT FLIES ALMOST TWICE AS FAR.", mul: { out: 1.8 } },
+        { id: "twin", name: "TWIN HATS", desc: "THROW TWO HATS IN A V.", add: { hats: 1 } },
+      ],
+      [
+        { id: "bigtop", name: "BIG TOP", desc: "A HUGE HAT THAT HITS HARD, BUT IT'S SLOWER TO THROW.", add: { size: 4, dmg: 2 }, mul: { cd: 1.3 } },
+        { id: "rapid", name: "RAPID HATS", desc: "THROW HATS ALMOST TWICE AS OFTEN.", mul: { cd: 0.55 } },
+      ],
+    ],
   },
-  whip: {
+  scarf: {
     name: "SCARF WHIP",
-    paths: {
-      grab: { name: "GRABBING SCARF", desc: "LASH AND PULL ENEMIES IN. THEY'RE DIZZY FOR A MOMENT.", cd: 0.55, dmg: 2 },
-      doves: { name: "DOVE SCARF", desc: "DOVES BURST FROM THE TIP AND CHASE ENEMIES.", cd: 0.65, dmg: 2 },
-    },
+    desc: "A QUICK, STRONG LASH UP CLOSE. HOLD A TO KEEP WHIPPING.",
+    base: { cd: 0.6, dmg: 2, reach: 26, grab: false, doves: 0, spin: false, tip: false },
+    tiers: [
+      [
+        { id: "grab", name: "GRABBING SCARF", desc: "PULLS ENEMIES IN. THEY'RE DIZZY FOR A MOMENT.", set: { grab: true } },
+        { id: "doves", name: "DOVE SCARF", desc: "DOVES BURST FROM THE TIP AND CHASE ENEMIES.", add: { doves: 3 } },
+      ],
+      [
+        { id: "long", name: "LONG SCARF", desc: "REACHES MUCH FARTHER.", add: { reach: 14 } },
+        { id: "quick", name: "QUICK SCARF", desc: "WHIP MUCH FASTER.", mul: { cd: 0.6 } },
+      ],
+      [
+        { id: "spin", name: "SPIN SCARF", desc: "WHIPS ALL THE WAY AROUND YOU.", set: { spin: true } },
+        { id: "tip", name: "MAGIC TIP", desc: "THE TIP SHOOTS A BOLT OF MAGIC STRAIGHT AHEAD.", set: { tip: true } },
+      ],
+    ],
   },
 };
 
-/** Cooldown and damage for a trick as it's known right now. */
-export function trickStats(trick, path) {
-  const t = TRICKS[trick];
-  if (!t) return null;
-  if (path && t.paths[path]) return t.paths[path];
-  return t.basic ?? null;
-}
+export const DEFENSES = {
+  shield: {
+    name: "CARD SHIELD",
+    desc: "CARDS CIRCLE YOU, ROOM TO ROOM. EACH BLOCKS OR HITS ONCE.",
+    base: { cd: 8, cards: 3, radius: 14, dmg: 1, tough: 1, reflect: false },
+    tiers: [
+      [
+        { id: "four", name: "FOURTH CARD", desc: "FOUR CARDS INSTEAD OF THREE.", add: { cards: 1 } },
+        { id: "fast", name: "FAST DEAL", desc: "YOUR CARDS COME BACK MUCH SOONER.", mul: { cd: 0.55 } },
+      ],
+      [
+        { id: "wide", name: "WIDE CIRCLE", desc: "CARDS CIRCLE FARTHER OUT AND HIT HARDER.", add: { radius: 6, dmg: 1 } },
+        { id: "steel", name: "STEEL CARDS", desc: "EACH CARD BLOCKS TWO HITS INSTEAD OF ONE.", add: { tough: 1 } },
+      ],
+      [
+        { id: "fortress", name: "CARD FORTRESS", desc: "TWO MORE CARDS IN THE CIRCLE.", add: { cards: 2 } },
+        { id: "reflect", name: "RETURN TO SENDER", desc: "SHOTS YOUR CARDS BLOCK FLY BACK AT ENEMIES.", set: { reflect: true } },
+      ],
+    ],
+  },
+  blink: {
+    name: "VANISH",
+    desc: "DISAPPEAR AND REAPPEAR AHEAD, RIGHT THROUGH ENEMIES.",
+    base: { cd: 1.6, far: 44, safe: 0.4, charges: 1, trail: false, smoke: false },
+    tiers: [
+      [
+        { id: "far", name: "FAR BLINK", desc: "VANISH HALF AGAIN AS FAR.", mul: { far: 1.5 } },
+        { id: "quick", name: "QUICK BLINK", desc: "VANISH AGAIN MUCH SOONER.", mul: { cd: 0.55 } },
+      ],
+      [
+        { id: "trail", name: "SPARK TRAIL", desc: "HURTS EVERY ENEMY YOU VANISH THROUGH.", set: { trail: true } },
+        { id: "fade", name: "LONG FADE", desc: "STAY SAFE LONGER AFTER YOU REAPPEAR.", add: { safe: 0.6 } },
+      ],
+      [
+        { id: "double", name: "DOUBLE BLINK", desc: "VANISH TWICE IN A ROW BEFORE THE WAIT.", add: { charges: 1 } },
+        { id: "smoke", name: "SMOKE BOMB", desc: "ENEMIES NEAR WHERE YOU LEAVE AND LAND GET DIZZY.", set: { smoke: true } },
+      ],
+    ],
+  },
+  decoy: {
+    name: "RABBIT DECOY",
+    desc: "HOP AWAY AND LEAVE A RABBIT. ENEMIES CHASE IT INSTEAD.",
+    base: { cd: 4, time: 3, hop: 22, bunnies: 1, boom: false, sparkle: false },
+    tiers: [
+      [
+        { id: "lasting", name: "LASTING RABBIT", desc: "THE RABBIT STAYS MUCH LONGER.", add: { time: 2.5 } },
+        { id: "quick", name: "QUICK RABBIT", desc: "MAKE A NEW RABBIT MUCH SOONER.", mul: { cd: 0.55 } },
+      ],
+      [
+        { id: "boom", name: "BOOM BUNNY", desc: "THE RABBIT GOES BOOM WHEN IT'S DONE.", set: { boom: true } },
+        { id: "two", name: "TWO BUNNIES", desc: "LEAVE TWO RABBITS AT ONCE.", add: { bunnies: 1 } },
+      ],
+      [
+        { id: "hop", name: "BIG HOP", desc: "HOP TWICE AS FAR AWAY.", mul: { hop: 2 } },
+        { id: "lucky", name: "LUCKY RABBIT", desc: "EVERY RABBIT LEAVES A SPARKLE BEHIND.", set: { sparkle: true } },
+      ],
+    ],
+  },
+  storm: {
+    name: "CARD STORM",
+    desc: "CARDS BURST OUT IN A RING ALL AROUND YOU.",
+    base: { cd: 2.6, cards: 10, dmg: 1, push: 0, life: 0.55, spin: false, drink: false },
+    tiers: [
+      [
+        { id: "gust", name: "GUST STORM", desc: "THE BURST SHOVES ENEMIES AWAY.", add: { push: 24 } },
+        { id: "thick", name: "THICK STORM", desc: "SIX MORE CARDS IN THE RING.", add: { cards: 6 } },
+      ],
+      [
+        { id: "quick", name: "QUICK STORM", desc: "BURST AGAIN MUCH SOONER.", mul: { cd: 0.6 } },
+        { id: "sharp", name: "SHARP STORM", desc: "EVERY CARD HITS TWICE AS HARD.", add: { dmg: 1 } },
+      ],
+      [
+        { id: "cyclone", name: "CYCLONE", desc: "THE CARDS SPIN AS THEY FLY, TWICE AS FAR.", mul: { life: 2 }, set: { spin: true } },
+        { id: "drink", name: "DRINKING STORM", desc: "CARDS THAT HIT SPARKS FILL YOUR SOUL.", set: { drink: true } },
+      ],
+    ],
+  },
+};
 
-/** A run knows a trick when it has an entry for it (cards: null means plain). */
-export const knows = (run, trick) => Object.prototype.hasOwnProperty.call(run.tricks, trick) && (run.tricks[trick] !== null || TRICKS[trick].basic);
+/** When everything you have is fully upgraded, a spirit makes you tougher instead. */
+export const BONUSES = [
+  { id: "heart", name: "BIGGER HEART", desc: "ONE MORE HEART, AND HEAL ALL THE WAY." },
+  { id: "soul", name: "DEEP SOUL", desc: "YOUR SOUL DRAINS MORE SLOWLY." },
+];
+
+export const TIERS = 3;
+
+/** The numbers for an attack or defense with its upgrades applied, in the order taken. */
+export function statsOf(entry, catalog) {
+  const t = catalog[entry.id];
+  const st = { ...t.base };
+  entry.ups.forEach((upId, tier) => {
+    const up = t.tiers[tier].find((u) => u.id === upId);
+    for (const [k, v] of Object.entries(up.add || {})) st[k] += v;
+    for (const [k, v] of Object.entries(up.mul || {})) st[k] *= v;
+    for (const [k, v] of Object.entries(up.set || {})) st[k] = v;
+  });
+  return st;
+}
+export const attackStats = (run) => statsOf(run.attack, ATTACKS);
+export const defenseStats = (run) => (run.defense ? statsOf(run.defense, DEFENSES) : null);
+
+/** The name of what you have, with its latest upgrade: "CARD TOSS: TWIN DEAL". */
+export function upgradeNames(entry, catalog) {
+  return entry.ups.map((u, tier) => catalog[entry.id].tiers[tier].find((x) => x.id === u).name);
+}
 
 /**
- * Learn a trick down one path. Committed for the run: a trick that already
- * has a path can't change it. Returns true if it took.
+ * What a spirit or a beaten boss offers right now. Spirits teach an attack
+ * first and a defense second. After that, and from every boss, you upgrade
+ * whichever of the two has had fewer upgrades (the attack wins a tie), so
+ * they grow together. Skip the defense spirit and every upgrade goes to
+ * your attack. Once all of it is maxed, the choice is a bigger heart or a
+ * deeper soul.
  */
-export function choosePath(run, trick, path) {
-  const t = TRICKS[trick];
-  if (!t || !t.paths[path]) return false;
-  if (run.tricks[trick]) return false;
-  run.tricks[trick] = path;
-  // A new trick goes straight onto an empty button, so it can be tried at once.
-  if (!run.equip.b && trick !== run.equip.a) run.equip.b = trick;
-  return true;
+export function nextPick(run, source) {
+  if (source === "spirit" && !run.attack.picked) return { type: "attack", options: Object.keys(ATTACKS) };
+  if (source === "spirit" && !run.defense) return { type: "defense", options: Object.keys(DEFENSES) };
+  const trees = [["attack", run.attack, ATTACKS]];
+  if (run.defense) trees.push(["defense", run.defense, DEFENSES]);
+  const open = trees.filter(([, e]) => e.ups.length < TIERS);
+  if (!open.length) return { type: "bonus", options: BONUSES.map((b) => b.id) };
+  open.sort((a, b) => a[1].ups.length - b[1].ups.length);
+  const [tree, entry, cat] = open[0];
+  return { type: "upgrade", tree, options: cat[entry.id].tiers[entry.ups.length].map((u) => u.id) };
 }
 
-/** Tricks you could put on a button: the ones you know. */
-export const usable = (run) => Object.keys(TRICKS).filter((k) => knows(run, k));
+/** The name and description of each option in a pick, for the choice screen. */
+export function describePick(run, pick) {
+  if (pick.type === "attack") return pick.options.map((id) => ({ name: ATTACKS[id].name, desc: ATTACKS[id].desc }));
+  if (pick.type === "defense") return pick.options.map((id) => ({ name: DEFENSES[id].name, desc: DEFENSES[id].desc }));
+  if (pick.type === "bonus") return pick.options.map((id) => BONUSES.find((b) => b.id === id));
+  const entry = run[pick.tree];
+  const cat = pick.tree === "attack" ? ATTACKS : DEFENSES;
+  return cat[entry.id].tiers[entry.ups.length].map((u) => ({ name: u.name, desc: u.desc }));
+}
+
+/**
+ * Take option i of a pick. Returns "extra" when keeping the card toss earns
+ * a free upgrade right away, true when the pick took, false otherwise.
+ */
+export function applyPick(run, pick, i) {
+  const id = pick.options[i];
+  if (id == null) return false;
+  if (pick.type === "attack") {
+    if (run.attack.picked) return false;
+    if (id === "cards") { run.attack.picked = true; return "extra"; }
+    run.attack = { id, ups: [], picked: true };
+    return true;
+  }
+  if (pick.type === "defense") {
+    if (run.defense) return false;
+    run.defense = { id, ups: [] };
+    return true;
+  }
+  if (pick.type === "bonus") {
+    if (id === "heart") { run.maxHp = Math.min(12, run.maxHp + 2); run.hp = run.maxHp; }
+    else run.deep = Math.min(3, (run.deep || 0) + 1);
+    return true;
+  }
+  const entry = run[pick.tree];
+  if (!entry || entry.ups.length >= TIERS) return false;
+  entry.ups.push(id);
+  return true;
+}
 
 /* ---------- the hat's layers ---------- */
 
 /**
  * Each layer is a grid of rooms. S start, E enemies, P a trapped spirit,
- * F a soul fountain, B the boss. Spirits teach their tricks in order.
+ * F a soul fountain, B the boss. What a spirit teaches depends on what
+ * you already have: see nextPick.
  */
 export const LAYERS = [
   {
     name: "THE VELVET BRIM",
     grid: ["S E P", "E F E", "P E B"],
-    spirits: ["vanish", "tornado"],
     enemies: ["spark", "glove", "bunny"],
     boss: "rabbit",
   },
   {
     name: "CARD CATACOMBS",
     grid: ["S E P", "P E E", "E P B"],
-    spirits: ["wand", "hat", "whip"],
     enemies: ["spark", "soldier", "glove", "wisp"],
     boss: "king",
   },
   {
     name: "THE BOTTOM",
     grid: ["S P", "F B"],
-    spirits: ["cards"],
     enemies: ["spark", "soldier", "wisp"],
     boss: "malvado",
   },
@@ -201,9 +379,6 @@ export function rabbitLanding(from, toward, hop = RABBIT.hop) {
   if (d <= hop) return { x: toward.x, y: toward.y };
   return { x: from.x + ((toward.x - from.x) / d) * hop, y: from.y + ((toward.y - from.y) / d) * hop };
 }
-
-/** The card shield: three cards that circle until each one blocks or hits something. */
-export const SHIELD_CARDS = 3;
 
 export const BOSSES = {
   rabbit: { name: "THE GIANT RABBIT", hp: 20 },
@@ -245,7 +420,6 @@ export function layoutLayer(index) {
     const tpl = kind === "boss" || kind === "start" ? 0 : ((id * 7 + index * 3) % (TEMPLATES.length - 1)) + 1;
     rooms.push({
       id, gx, gy, kind, template: tpl,
-      spirit: kind === "spirit" ? L.spirits[spirit++] : null,
       doors: {
         up: gy > 0, down: gy < rows - 1, left: gx > 0, right: gx < cols - 1,
       },
@@ -324,7 +498,8 @@ export function reachable(tiles, sx, sy) {
 
 /* ---------- the soul ---------- */
 
-export const drainSoul = (soul, dt) => Math.max(0, soul - SOUL_DRAIN * dt);
+/** deep is how many Deep Soul bonuses you have: each makes the soul drain a fifth slower. */
+export const drainSoul = (soul, dt, deep = 0) => Math.max(0, soul - SOUL_DRAIN * 0.8 ** deep * dt);
 export const SOUL_GAIN = { sparkle: 4, spirit: 40, boss: 50, block: 2 };
 export const gainSoul = (soul, why) => Math.min(SOUL_MAX, soul + (SOUL_GAIN[why] ?? 0));
 
@@ -333,38 +508,44 @@ export const gainSoul = (soul, why) => Math.min(SOUL_MAX, soul + (SOUL_GAIN[why]
 /** A fresh run: three hearts, a full soul, and a plain card toss. */
 export function newRun(name, seed = Date.now()) {
   return {
-    v: 1,
+    v: 2,
     name: cleanName(name),
     layer: 0,
     room: layoutLayer(0).start,
     hp: MAX_HEARTS * 2,
     maxHp: MAX_HEARTS * 2,
     soul: SOUL_MAX,
-    tricks: { cards: null },
-    equip: { a: "cards", b: null },
+    attack: { id: "cards", ups: [], picked: false }, // A: a plain card toss until a spirit says otherwise
+    defense: null,                                    // B: nothing until the second spirit
+    deep: 0,         // Deep Soul bonuses taken
     beaten: LAYERS.map(() => false),
     cleared: [],     // rooms emptied of enemies, as "layer:room"
-    freed: [],       // spirits that taught their trick, by trick name
+    freed: [],       // spirits already met, as "layer:room"
     fountains: [],   // fountains already drunk, as "layer:room"
     seed,
   };
 }
 
-/** Is a saved run in one piece? A broken save starts fresh instead of crashing. */
+/** Is an attack or defense entry real: a known id, and upgrades that exist in order? */
+function validEntry(e, catalog) {
+  if (!e || !catalog[e.id] || !Array.isArray(e.ups) || e.ups.length > TIERS) return false;
+  return e.ups.every((u, tier) => catalog[e.id].tiers[tier].some((x) => x.id === u));
+}
+
+/**
+ * Is a saved run in one piece? A broken save, or one from before attacks
+ * and defenses, starts fresh instead of crashing.
+ */
 export function validRun(r) {
-  if (!r || r.v !== 1 || typeof r.name !== "string") return false;
+  if (!r || r.v !== 2 || typeof r.name !== "string") return false;
   if (!Number.isInteger(r.layer) || r.layer < 0 || r.layer >= LAYERS.length) return false;
   const layout = layoutLayer(r.layer);
   if (!Number.isInteger(r.room) || r.room < 0 || r.room >= layout.rooms.length) return false;
   if (!(r.hp > 0 && r.hp <= r.maxHp && r.maxHp <= 12)) return false;
   if (!(r.soul > 0 && r.soul <= SOUL_MAX)) return false;
-  if (!r.tricks || typeof r.tricks !== "object" || !("cards" in r.tricks)) return false;
-  for (const [k, v] of Object.entries(r.tricks)) {
-    if (!TRICKS[k]) return false;
-    if (v !== null && !TRICKS[k].paths[v]) return false;
-    if (v === null && !TRICKS[k].basic) return false;
-  }
-  if (!r.equip || !knows(r, r.equip.a) || (r.equip.b && !knows(r, r.equip.b))) return false;
+  if (!validEntry(r.attack, ATTACKS) || typeof r.attack.picked !== "boolean") return false;
+  if (r.defense !== null && !validEntry(r.defense, DEFENSES)) return false;
+  if (!(Number.isInteger(r.deep) && r.deep >= 0 && r.deep <= 3)) return false;
   return Array.isArray(r.beaten) && Array.isArray(r.cleared) && Array.isArray(r.freed) && Array.isArray(r.fountains);
 }
 
