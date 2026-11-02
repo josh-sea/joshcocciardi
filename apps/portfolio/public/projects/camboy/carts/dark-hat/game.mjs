@@ -6,8 +6,9 @@
  */
 
 import {
-  W, H, TILE, COLS, ROWS, TOP, SPEED, SOUL_MAX, NAME_LEN, ALPHABET, STORY, TRICKS, LAYERS, BOSSES, ENEMIES, RABBIT, SHIELD_CARDS, rabbitLanding,
-  cleanName, say, trickStats, knows, choosePath, usable, layoutLayer, neighbor, roomTiles, solidAt, moveBox,
+  W, H, TILE, COLS, ROWS, TOP, SPEED, SOUL_MAX, NAME_LEN, ALPHABET, STORY, LAYERS, BOSSES, ENEMIES, RABBIT, rabbitLanding,
+  ATTACKS, DEFENSES, TIERS, attackStats, defenseStats, upgradeNames, nextPick, describePick, applyPick,
+  cleanName, say, layoutLayer, neighbor, roomTiles, solidAt, moveBox,
   drainSoul, gainSoul, newRun, validRun, beatBoss, descend, dist, faceFrom, makeRng, roomEnemies,
 } from "./rules.mjs";
 import { createSound } from "./sound.mjs";
@@ -87,7 +88,11 @@ const ICONS = {
   wand: ["....3.3", ".....3.", "....3.3", "...3...", "..3....", ".3.....", "3......"],
   hat: ["..333..", "..333..", "..333..", "..333..", ".33333.", "3333333", "......."],
   whip: ["3......", ".3...3.", "..3.3.3", "...3..3", "......3", ".....3.", "....3.."],
+  decoy: [".3...3.", ".30.03.", ".30003.", "3000003", "3030303", "3000003", ".33333."],
+  storm: ["...3...", ".3.3.3.", "..333..", "3333333", "..333..", ".3.3.3.", "...3..."],
 };
+const ATTACK_ICON = { cards: "cards", wand: "wand", hat: "hat", scarf: "whip" };
+const DEFENSE_ICON = { shield: "tornado", blink: "vanish", decoy: "decoy", storm: "storm" };
 
 /* ---------- the cartridge ---------- */
 
@@ -114,7 +119,7 @@ export function boot(hw) {
     toast: null, dialog: null, choice: null, shake: 0, beatT: 0, shaft: null, ending: null,
     entry: null, name: null,
   };
-  const P = { x: 80, y: 64, face: { x: 0, y: 1 }, cd: { a: 0, b: 0 }, inv: 0, step: 0, moving: false, shield: null, wand: null, whipT: 0, frozen: false };
+  const P = { x: 80, y: 64, face: { x: 0, y: 1 }, cd: { a: 0, b: 0 }, cdMax: { a: 1, b: 1 }, inv: 0, step: 0, moving: false, shield: null, wands: [], wandSt: null, blinks: 0, blinkGap: 0, whipT: 0, frozen: false };
 
   function toast(lines, dur = 1.4) { S.toast = { lines: [].concat(lines), t: dur }; }
   function setPhase(p) { S.phase = p; S.t = 0; }
@@ -177,7 +182,7 @@ export function boot(hw) {
   /* ---------- runs and rooms ---------- */
 
   function startRun() {
-    S.endT = null; S.bossIn = null; P.shield = null;
+    S.endT = null; S.bossIn = null; P.shield = null; P.wands = []; P.blinks = 0; P.cd = { a: 0, b: 0 };
     R = newRun(name);
     save();
     saved = R;
@@ -187,7 +192,7 @@ export function boot(hw) {
   }
 
   function continueRun() {
-    S.endT = null; S.bossIn = null; P.shield = null;
+    S.endT = null; S.bossIn = null; P.shield = null; P.wands = []; P.blinks = 0; P.cd = { a: 0, b: 0 };
     R = JSON.parse(JSON.stringify(saved));
     name = R.name;
     layout = layoutLayer(R.layer);
@@ -217,8 +222,8 @@ export function boot(hw) {
     S.room = layout.rooms[id];
     const room = S.room;
     S.enemies = []; S.shots = []; S.foes = []; S.pickups = []; S.fx = [];
-    S.boss = null; S.spirit = null; S.ladder = null; S.fountain = null; S.decoy = null;
-    P.wand = null; P.whipT = 0; P.frozen = false; // the card shield comes along
+    S.boss = null; S.spirit = null; S.ladder = null; S.fountain = null; S.decoys = [];
+    P.wands = []; P.whipT = 0; P.frozen = false; // the card shield comes along
     S.sealed = false;
     // Arriving through a door: stand just inside the matching door.
     if (from === "left") { P.x = RW - 12; P.y = 64; }
@@ -231,7 +236,7 @@ export function boot(hw) {
     if (room.kind === "boss" && !R.beaten[R.layer]) S.sealed = true;
     S.tiles = roomTiles(room, S.sealed);
     if (room.kind === "enemy" && !done) spawnRoom();
-    if (room.kind === "spirit" && !R.freed.includes(room.spirit)) S.spirit = { x: 80, y: 60, t: 0, trick: room.spirit };
+    if (room.kind === "spirit" && !R.freed.includes(key(R.layer, id))) S.spirit = { x: 80, y: 60, t: 0 };
     if (room.kind === "fountain") S.fountain = { x: 80, y: 64, used: R.fountains.includes(key(R.layer, id)) };
     if (room.kind === "boss") {
       if (R.beaten[R.layer]) { if (R.layer < LAYERS.length - 1) S.ladder = { x: 80, y: 64 }; }
@@ -323,92 +328,134 @@ export function boot(hw) {
   }
   function word(x, y, w) { S.fx.push({ kind: "word", x, y, vy: -14, t: 0.9, w }); }
 
-  /* ---------- tricks ---------- */
+  /* ---------- tricks: attack on A, defense on B ---------- */
 
-  function useTrick(slot) {
-    const id = R.equip[slot];
-    if (!id || P.cd[slot] > 0) return;
-    const path = R.tricks[id];
-    const st = trickStats(id, path);
-    if (id === "tornado" && path === "shield") {
-      // The cards stay up until each one is used; the wait starts after the last.
-      if (P.shield) return;
-      P.shield = { cards: Array(SHIELD_CARDS).fill(true), a: 0, srcs: Array.from({ length: SHIELD_CARDS }, () => ({})) };
-      sfx.tornado();
-      return;
-    }
-    P.cd[slot] = st.cd;
+  function setCd(slot, sec) { P.cd[slot] = sec; P.cdMax[slot] = Math.max(0.01, sec); }
+
+  function cardShot(x, y, a, speed, dmg, pierce, life = 1.1, extra = {}) {
+    S.shots.push({ kind: "card", x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life, dmg, pierce, src: {}, ...extra });
+  }
+
+  /** Move in the facing direction up to `far` pixels, stopping at walls. Calls step() at each point. */
+  function dash(far, step) {
     const f = P.face;
-    switch (id) {
+    for (let i = 0; i < far; i += 2) {
+      const nx = P.x + f.x * 2, ny = P.y + f.y * 2;
+      if (solidAt(S.tiles, nx - 3, ny - 3) || solidAt(S.tiles, nx + 2, ny - 3) || solidAt(S.tiles, nx - 3, ny + 2) || solidAt(S.tiles, nx + 2, ny + 2)) break;
+      if (nx < 4 || ny < 4 || nx > RW - 4 || ny > RH - 4) break;
+      P.x = nx; P.y = ny;
+      step?.();
+    }
+  }
+
+  function useAttack() {
+    if (P.cd.a > 0) return;
+    const st = attackStats(R);
+    const f = P.face;
+    const fa = Math.atan2(f.y, f.x);
+    setCd("a", st.cd);
+    switch (R.attack.id) {
       case "cards": {
-        const spread = path === "fan" ? [-0.28, 0, 0.28] : [0];
-        const speed = path === "ace" ? 175 : 145;
-        for (const a of spread) {
-          const c = Math.cos(a), s = Math.sin(a);
-          S.shots.push({ kind: "card", x: P.x, y: P.y - 2, vx: (f.x * c - f.y * s) * speed, vy: (f.x * s + f.y * c) * speed, life: 1.1, dmg: st.dmg, pierce: path === "ace", src: {} });
+        for (let i = 0; i < st.count; i++) {
+          const off = st.count === 1 ? 0 : (i - (st.count - 1) / 2) * st.spread;
+          cardShot(P.x, P.y - 2, fa + off, st.speed, st.dmg, st.pierce);
         }
+        if (st.burst) for (let i = 0; i < 8; i++) cardShot(P.x, P.y - 2, (i / 8) * Math.PI * 2, 120, st.dmg, false, 0.45);
         sfx.card();
         break;
       }
-      case "vanish": {
-        const far = path === "blink" ? 44 : 22;
+      case "wand": {
+        P.wandSt = st;
+        P.wands = [];
+        for (let i = 0; i < st.wands; i++) {
+          const a = fa + (st.wands > 1 ? (i - (st.wands - 1) / 2) * 0.6 : 0);
+          P.wands.push({ x: P.x, y: P.y - 4, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, life: st.steer ? 2.2 : 2.6, hits: st.hits, back: false, src: {} });
+        }
+        sfx.whistle();
+        break;
+      }
+      case "hat":
+        for (let i = 0; i < st.hats; i++) {
+          const a = fa + (st.hats > 1 ? (i - (st.hats - 1) / 2) * 0.7 : 0);
+          S.shots.push({ kind: "hat", x: P.x, y: P.y - 2, vx: Math.cos(a) * st.speed, vy: Math.sin(a) * st.speed, out: st.out, life: 3, dmg: st.dmg, r: st.size, grow: st.grow, magnet: st.magnet, src: {} });
+        }
+        sfx.hat();
+        break;
+      case "scarf": {
+        P.whipT = 0.18; P.whipSpin = st.spin; P.whipReach = st.reach;
+        const src = {};
+        let hit = null;
+        const lash = (dx, dy) => {
+          for (let d = 6; d <= st.reach; d += 4) {
+            const x = P.x + dx * d, y = P.y - 2 + dy * d;
+            for (const e of S.enemies) if (!e.dead && dist(x, y, e.x, e.y) < 7) hit = hit || e;
+            zap(x, y, 4, st.dmg, src, 0.3);
+          }
+        };
+        if (st.spin) for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; lash(Math.cos(a), Math.sin(a)); }
+        else lash(f.x, f.y);
+        const tx = P.x + f.x * st.reach, ty = P.y - 2 + f.y * st.reach;
+        if (st.grab) {
+          if (hit && !hit.dead) { hit.x = P.x + f.x * 10; hit.y = P.y + f.y * 10; hit.stun = 1.0; word(hit.x, hit.y - 8, "GOTCHA!"); }
+          // The scarf pulls pickups in as well.
+          for (const p of S.pickups) if (dist(p.x, p.y, tx, ty) < 16) { p.x = P.x; p.y = P.y; }
+        }
+        for (let i = 0; i < st.doves; i++) S.shots.push({ kind: "dove", x: tx, y: ty, vx: f.x * 60 + (i - (st.doves - 1) / 2) * 30, vy: f.y * 60 + (i - (st.doves - 1) / 2) * 30, life: 1.3, dmg: 1, src: {} });
+        if (st.doves) sfx.doves();
+        if (st.tip) S.shots.push({ kind: "bolt", x: tx, y: ty, vx: f.x * 160, vy: f.y * 160, life: 0.8, dmg: st.dmg, pierce: false, src: {} });
+        sfx.whip();
+        break;
+      }
+    }
+  }
+
+  function useDefense() {
+    if (!R.defense || P.cd.b > 0) return;
+    const st = defenseStats(R);
+    switch (R.defense.id) {
+      case "shield":
+        // The cards stay up until each one is used; the wait starts after the last.
+        if (P.shield) return;
+        P.shield = { cards: Array(st.cards).fill(st.tough), a: 0, srcs: Array.from({ length: st.cards }, () => ({})) };
+        sfx.tornado();
+        break;
+      case "blink": {
+        if (P.blinkGap > 0) return;
         const ox = P.x, oy = P.y;
         puff(ox, oy, 8);
-        for (let i = 0; i < far; i += 2) {
-          const nx = P.x + f.x * 2, ny = P.y + f.y * 2;
-          const b = { x: nx - 3, y: ny - 3, w: 6, h: 6 };
-          if (solidAt(S.tiles, b.x, b.y) || solidAt(S.tiles, b.x + 5, b.y) || solidAt(S.tiles, b.x, b.y + 5) || solidAt(S.tiles, b.x + 5, b.y + 5)) break;
-          if (nx < 4 || ny < 4 || nx > RW - 4 || ny > RH - 4) break;
-          P.x = nx; P.y = ny;
-        }
+        const src = {};
+        dash(st.far, () => { if (st.trail) zap(P.x, P.y, 6, 2, src, 9); });
         puff(P.x, P.y, 8);
-        P.inv = Math.max(P.inv, 0.4);
-        if (path === "decoy") { S.decoy = { x: ox, y: oy, t: 3 }; sfx.decoy(); }
+        if (st.smoke) for (const e of S.enemies) if (dist(e.x, e.y, ox, oy) < 26 || dist(e.x, e.y, P.x, P.y) < 26) { e.stun = 1.4; puff(e.x, e.y, 2); }
+        P.inv = Math.max(P.inv, st.safe);
+        P.blinkGap = 0.18;
+        P.blinks = Math.max(0, (P.blinks ?? st.charges) - 1);
+        if (P.blinks <= 0) setCd("b", st.cd);
         sfx.blink();
         haptic(10);
         break;
       }
-      case "tornado":
-        {
-          for (let i = 0; i < 10; i++) {
-            const a = (i / 10) * Math.PI * 2;
-            S.shots.push({ kind: "card", x: P.x, y: P.y - 2, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, life: 0.55, dmg: st.dmg, pierce: true, src: {} });
-          }
-          sfx.storm();
-          haptic(12);
-        }
-        break;
-      case "wand":
-        P.wand = { x: P.x, y: P.y - 4, vx: f.x * 130, vy: f.y * 130, life: path === "steer" ? 2.2 : 2.6, hits: path === "steer" ? 99 : 4, back: false, steer: path === "steer", slot, dmg: st.dmg, src: {} };
-        sfx.whistle();
-        break;
-      case "hat":
-        S.shots.push({ kind: "hat", x: P.x, y: P.y - 2, vx: f.x * 150, vy: f.y * 150, out: 0.38, life: 3, dmg: st.dmg, r: 5, grow: path === "grow", magnet: path === "magnet", src: {}, carried: [] });
-        sfx.hat();
-        break;
-      case "whip": {
-        P.whipT = 0.18;
-        const reach = 26;
-        let hit = null;
-        for (let d = 6; d <= reach; d += 4) {
-          const x = P.x + f.x * d, y = P.y - 2 + f.y * d;
-          for (const e of S.enemies) if (!e.dead && dist(x, y, e.x, e.y) < 7) { hit = hit || e; }
-          zap(x, y, 4, st.dmg, P, 0.3);
-        }
-        if (path === "grab" && hit && !hit.dead) {
-          hit.x = P.x + f.x * 10; hit.y = P.y + f.y * 10; hit.stun = 1.0;
-          word(hit.x, hit.y - 8, "GOTCHA!");
-        }
-        if (path === "doves") {
-          const tx = P.x + f.x * reach, ty = P.y + f.y * reach;
-          for (let i = 0; i < 3; i++) S.shots.push({ kind: "dove", x: tx, y: ty, vx: f.x * 60 + (i - 1) * 30, vy: f.y * 60 + (i - 1) * 30, life: 1.3, dmg: 1, src: {} });
-          sfx.doves();
-        }
-        // The scarf pulls pickups in as well.
-        if (path === "grab") for (const p of S.pickups) if (dist(p.x, p.y, P.x + f.x * 16, P.y + f.y * 16) < 14) { p.x = P.x; p.y = P.y; }
-        sfx.whip();
+      case "decoy": {
+        const ox = P.x, oy = P.y;
+        puff(ox, oy, 6);
+        dash(st.hop);
+        puff(P.x, P.y, 6);
+        P.inv = Math.max(P.inv, 0.3);
+        for (let i = 0; i < st.bunnies; i++) S.decoys.push({ x: ox + (st.bunnies > 1 ? (i - 0.5) * 16 : 0), y: oy, t: st.time, boom: st.boom, sparkle: st.sparkle });
+        setCd("b", st.cd);
+        sfx.decoy();
         break;
       }
+      case "storm":
+        for (let i = 0; i < st.cards; i++) cardShot(P.x, P.y - 2, (i / st.cards) * Math.PI * 2, 120, st.dmg, true, st.life, { spin: st.spin, drink: st.drink });
+        if (st.push) for (const e of S.enemies) {
+          const d = dist(e.x, e.y, P.x, P.y);
+          if (d < 34 && d > 0.5) { const m = moveBox(S.tiles, { x: e.x - 3, y: e.y - 3, w: 6, h: 6 }, ((e.x - P.x) / d) * st.push, ((e.y - P.y) / d) * st.push); e.x = m.x + 3; e.y = m.y + 3; e.stun = Math.max(e.stun, 0.3); }
+        }
+        setCd("b", st.cd);
+        sfx.storm();
+        haptic(12);
+        break;
     }
   }
 
@@ -430,69 +477,82 @@ export function boot(hw) {
     P.cd.a = Math.max(0, P.cd.a - dt);
     P.cd.b = Math.max(0, P.cd.b - dt);
     P.whipT = Math.max(0, P.whipT - dt);
+    P.blinkGap = Math.max(0, (P.blinkGap || 0) - dt);
+    const dst = defenseStats(R);
+    if (R.defense?.id === "blink" && P.cd.b <= 0 && (P.blinks ?? 0) < dst.charges) P.blinks = dst.charges;
 
-    if (P.shield) {
+    if (P.shield && dst) {
       const sh = P.shield;
       sh.a += dt * 7;
-      sh.cards.forEach((alive, i) => {
-        if (!alive) return;
-        const a = sh.a + (i * Math.PI * 2) / SHIELD_CARDS;
-        const x = P.x + Math.cos(a) * 14, y = P.y - 2 + Math.sin(a) * 14;
-        // Each card is spent on the first thing it blocks or hits.
+      const n = sh.cards.length;
+      sh.cards.forEach((left, i) => {
+        if (left <= 0) return;
+        const a = sh.a + (i * Math.PI * 2) / n;
+        const x = P.x + Math.cos(a) * dst.radius, y = P.y - 2 + Math.sin(a) * dst.radius;
+        // Each card wears out on what it blocks or hits.
         let used = false;
-        // Cards drink the dark magic they catch.
         for (const e of S.enemies) if (!used && e.kind === "spark" && !e.dead && dist(x, y, e.x, e.y) < 6) {
           e.dead = true; used = true; puff(e.x, e.y, 3); R.soul = gainSoul(R.soul, "block");
         }
         for (const f of S.foes) if (!used && !f.dead && dist(x, y, f.x, f.y) < 6) {
           f.dead = true; used = true; R.soul = gainSoul(R.soul, "block");
+          if (dst.reflect) cardShot(x, y, a, 150, dst.dmg + 1, false, 0.9);
         }
-        if (!used && zap(x, y, 4, 1, sh.srcs[i], 0.4)) used = true;
-        if (used) { sh.cards[i] = false; sfx.block(); puff(x, y, 3); haptic(6); }
+        if (!used && zap(x, y, 4, dst.dmg, sh.srcs[i], 0.4)) used = true;
+        if (used) { sh.cards[i]--; sfx.block(); puff(x, y, 3); haptic(6); }
       });
-      if (!sh.cards.some(Boolean)) {
-        P.shield = null;
-        const st = trickStats("tornado", "shield");
-        for (const slot of ["a", "b"]) if (R.equip[slot] === "tornado") P.cd[slot] = st.cd;
-      }
+      if (!sh.cards.some((c) => c > 0)) { P.shield = null; setCd("b", dst.cd); }
     }
 
-    const w = P.wand;
-    if (w) {
+    // Rabbit decoys wait, then go (sometimes with a bang).
+    for (const d of S.decoys) {
+      d.t -= dt;
+      if (d.t > 0) continue;
+      d.dead = true;
+      puff(d.x, d.y, 6);
+      if (d.boom) { zap(d.x, d.y, 20, 3, {}, 9); sfx.pop(); S.shake = Math.max(S.shake, 0.2); for (let k = 0; k < 8; k++) S.fx.push({ kind: "dot", x: d.x, y: d.y, vx: Math.cos(k) * 60, vy: Math.sin(k) * 60, t: 0.3 }); }
+      if (d.sparkle) S.pickups.push({ kind: "sparkle", x: d.x, y: d.y, t: 0 });
+    }
+    S.decoys = S.decoys.filter((d) => !d.dead);
+
+    const st = P.wandSt;
+    P.frozen = !!(st && st.steer && held.a && P.wands.some((w) => !w.back));
+    for (const w of P.wands) {
       w.life -= dt;
-      P.frozen = w.steer && held[w.slot] && !w.back;
-      if (w.back || w.life <= 0 || w.hits <= 0 || (w.steer && !held[w.slot])) {
+      if (w.back || w.life <= 0 || w.hits <= 0 || (st.steer && !held.a)) {
         w.back = true;
         const d = dist(w.x, w.y, P.x, P.y - 4);
-        if (d < 6) P.wand = null;
+        if (d < 6) w.done = true;
         else { w.vx = ((P.x - w.x) / d) * 170; w.vy = ((P.y - 4 - w.y) / d) * 170; }
-      } else if (w.steer) {
+      } else if (st.steer) {
         if (Math.abs(stick.x) + Math.abs(stick.y) > 0.3) {
           // Steer toward where the stick points, with a little swing.
-          w.vx += (stick.x * 140 - w.vx) * Math.min(1, dt * 8);
-          w.vy += (stick.y * 140 - w.vy) * Math.min(1, dt * 8);
+          w.vx += (stick.x * st.speed - w.vx) * Math.min(1, dt * 8);
+          w.vy += (stick.y * st.speed - w.vy) * Math.min(1, dt * 8);
         }
       } else {
         const t = nearestEnemy(w.x, w.y);
         if (t) {
           const d = Math.max(1, dist(w.x, w.y, t.x, t.y));
-          w.vx += (((t.x - w.x) / d) * 140 - w.vx) * Math.min(1, dt * 5);
-          w.vy += (((t.y - w.y) / d) * 140 - w.vy) * Math.min(1, dt * 5);
+          w.vx += (((t.x - w.x) / d) * st.speed - w.vx) * Math.min(1, dt * 5);
+          w.vy += (((t.y - w.y) / d) * st.speed - w.vy) * Math.min(1, dt * 5);
         }
       }
-      if (P.wand) {
-        w.x += w.vx * dt; w.y += w.vy * dt;
-        w.x = Math.max(2, Math.min(RW - 2, w.x)); w.y = Math.max(2, Math.min(RH - 2, w.y));
-        if (!w.back && zap(w.x, w.y, 4, w.dmg, w.src, 0.35)) { w.hits--; sfx.wand(); }
+      w.x += w.vx * dt; w.y += w.vy * dt;
+      w.x = Math.max(2, Math.min(RW - 2, w.x)); w.y = Math.max(2, Math.min(RH - 2, w.y));
+      if (!w.back && zap(w.x, w.y, st.size, st.dmg, w.src, 0.35)) {
+        w.hits--;
+        sfx.wand();
+        if (st.stars) for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + 0.4; S.shots.push({ kind: "star", x: w.x, y: w.y, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, life: 0.35, dmg: 1, pierce: false, src: {} }); }
       }
-    } else P.frozen = false;
+    }
+    P.wands = P.wands.filter((w) => !w.done);
   }
 
   /* ---------- the hero ---------- */
 
   function updatePlayer(dt) {
     P.inv = Math.max(0, P.inv - dt);
-    if (S.decoy && (S.decoy.t -= dt) <= 0) S.decoy = null;
     P.face = faceFrom(stick.x, stick.y, P.face);
     P.moving = false;
     if (!P.frozen && (stick.x || stick.y)) {
@@ -514,8 +574,8 @@ export function boot(hw) {
     // Talking to spirits takes A while you're next to one.
     const nearSpirit = S.spirit && dist(P.x, P.y, S.spirit.x, S.spirit.y) < 16;
     if (nearSpirit && pressed.has("a")) { meetSpirit(); return; }
-    if (pressed.has("a") || (held.a && (R.equip.a === "cards" || R.equip.a === "whip"))) useTrick("a");
-    if (pressed.has("b") || (held.b && (R.equip.b === "cards" || R.equip.b === "whip"))) useTrick("b");
+    if (pressed.has("a") || (held.a && (R.attack.id === "cards" || R.attack.id === "scarf"))) useAttack();
+    if (pressed.has("b")) useDefense();
 
     // Pickups.
     for (const p of S.pickups) {
@@ -557,62 +617,103 @@ export function boot(hw) {
     }
   }
 
-  /* ---------- spirits ---------- */
+  /* ---------- spirits and upgrades ---------- */
+
+  /** Open the choice screen for whatever a spirit or boss offers now. after() runs once it's settled. */
+  function openPick(source, after) {
+    const pick = nextPick(R, source);
+    S.choice = { pick, opts: describePick(R, pick), sel: 0, source, after };
+  }
 
   function meetSpirit() {
-    const trick = S.spirit.trick;
+    const pick = nextPick(R, "spirit");
+    const line = { attack: STORY.spiritAttack, defense: STORY.spiritDefense, upgrade: STORY.spiritUpgrade, bonus: STORY.spiritBonus }[pick.type];
     sfx.spirit();
-    talk([STORY.spiritIntro, `THE ${TRICKS[trick].name}! ${STORY.spiritChoose}`], () => {
-      S.choice = { trick, sel: 0 };
-    });
+    talk([STORY.spiritIntro, line], () => openPick("spirit", null));
   }
 
   function updateChoice() {
     const c = S.choice;
-    if (pressed.has("up") || pressed.has("down")) { c.sel = 1 - c.sel; sfx.blip(); haptic(6); }
-    if (pressed.has("a") || pressed.has("start")) {
-      const path = Object.keys(TRICKS[c.trick].paths)[c.sel];
-      if (choosePath(R, c.trick, path)) {
-        sfx.choose();
-        haptic(25);
-        R.freed.push(c.trick);
-        R.soul = gainSoul(R.soul, "spirit");
-        puff(S.spirit.x, S.spirit.y, 12);
-        S.spirit = null;
-        S.choice = null;
-        save();
-        const slot = R.equip.a === c.trick ? "A" : R.equip.b === c.trick ? "B" : null;
-        talk([`${name} LEARNED ${TRICKS[c.trick].paths[path].name}!` + (slot ? ` IT'S ON THE ${slot} BUTTON.` : " PRESS START TO PUT IT ON A BUTTON.")]);
-      }
+    const n = c.opts.length;
+    if (pressed.has("up")) { c.sel = (c.sel + n - 1) % n; sfx.blip(); haptic(6); }
+    if (pressed.has("down")) { c.sel = (c.sel + 1) % n; sfx.blip(); haptic(6); }
+    if (!(pressed.has("a") || pressed.has("start"))) return;
+    const { pick } = c;
+    const id = pick.options[c.sel];
+    const took = applyPick(R, pick, c.sel);
+    if (!took) return;
+    sfx.choose();
+    haptic(25);
+    S.choice = null;
+    if (c.source === "spirit" && S.spirit) {
+      R.freed.push(key(R.layer, S.room.id));
+      R.soul = gainSoul(R.soul, "spirit");
+      puff(S.spirit.x, S.spirit.y, 12);
+      S.spirit = null;
     }
+    save();
+    let msg;
+    if (pick.type === "attack") msg = took === "extra" ? `${name} KEPT THE CARD TOSS! THAT EARNS A FREE UPGRADE...` : `${name} LEARNED THE ${ATTACKS[id].name}! IT'S ON THE A BUTTON.`;
+    else if (pick.type === "defense") msg = `${name} LEARNED THE ${DEFENSES[id].name}! IT'S ON THE B BUTTON.`;
+    else if (pick.type === "bonus") msg = id === "heart" ? `${name}'S HEART GREW BIGGER!` : `${name}'S SOUL WILL LAST LONGER NOW.`;
+    else {
+      const cat = pick.tree === "attack" ? ATTACKS : DEFENSES;
+      msg = `${name}'S ${cat[R[pick.tree].id].name} GOT ${c.opts[c.sel].name}!`;
+    }
+    if (took === "extra") talk([msg], () => openPick("boss", c.after));
+    else talk([msg], c.after);
   }
 
   function drawChoice() {
     const c = S.choice;
-    const t = TRICKS[c.trick];
+    const { pick, opts } = c;
     rect(0, 0, W, H, 3);
-    sprite(SPIRIT, 80, 22, false, null, 2);
-    ctext(t.name, 28, 0);
-    ctext("CHOOSE YOUR PATH", 37, 1);
-    Object.values(t.paths).forEach((p, i) => {
-      const y = 48 + i * 44;
-      const on = i === c.sel;
-      rect(4, y, W - 8, 40, on ? 0 : 2);
-      rect(5, y + 1, W - 10, 38, 3);
-      ctext((on ? "> " : "") + p.name + (on ? " <" : ""), y + 4, on ? 0 : 1);
-      say(p.desc, name, 36).forEach((l, k) => ctext(l, y + 14 + k * 7, on ? 1 : 2));
-    });
-    ctext("A: CHOOSE  (NO GOING BACK!)", 137, 1);
+    const title = {
+      attack: "PICK YOUR ATTACK (A)",
+      defense: "PICK YOUR DEFENSE (B)",
+      bonus: "YOU'RE MAXED OUT! A BONUS",
+    }[pick.type] || `UPGRADE YOUR ${(pick.tree === "attack" ? ATTACKS : DEFENSES)[R[pick.tree].id].name}`;
+    const sub = pick.type === "upgrade" ? `TIER ${R[pick.tree].ups.length + 1} OF ${TIERS}: CHOOSE ONE` : "IT'S YOURS FOR THE WHOLE RUN";
+    if (opts.length > 2) {
+      ctext(title, 6, 0);
+      ctext(sub, 15, 1);
+      opts.forEach((o, i) => {
+        const y = 25 + i * 27;
+        const on = i === c.sel;
+        rect(3, y, W - 6, 25, on ? 0 : 2);
+        rect(4, y + 1, W - 8, 23, 3);
+        ctext((on ? "> " : "") + o.name + (on ? " <" : ""), y + 3, on ? 0 : 1);
+        say(o.desc, name, 37).slice(0, 2).forEach((l, k) => ctext(l, y + 10 + k * 7, on ? 1 : 2));
+      });
+    } else {
+      sprite(SPIRIT, 80, 20, false, null, 2);
+      ctext(title, 25, 0);
+      ctext(sub, 34, 1);
+      opts.forEach((o, i) => {
+        const y = 44 + i * 45;
+        const on = i === c.sel;
+        rect(4, y, W - 8, 42, on ? 0 : 2);
+        rect(5, y + 1, W - 10, 40, 3);
+        ctext((on ? "> " : "") + o.name + (on ? " <" : ""), y + 4, on ? 0 : 1);
+        say(o.desc, name, 36).slice(0, 3).forEach((l, k) => ctext(l, y + 14 + k * 7, on ? 1 : 2));
+      });
+    }
+    ctext("A: CHOOSE  (NO GOING BACK!)", 138, 1);
   }
 
   /* ---------- enemies ---------- */
 
-  const target = () => (S.decoy ? S.decoy : P);
+  /** Who an enemy is after: the nearest rabbit decoy, if there is one, otherwise you. */
+  function target(e) {
+    let best = P, bd = Infinity;
+    for (const d of S.decoys) { const k = dist(e.x, e.y, d.x, d.y); if (k < bd) { bd = k; best = d; } }
+    return best;
+  }
 
   function updateEnemies(dt) {
-    const tg = target();
     for (const e of S.enemies) {
       if (e.dead) continue;
+      const tg = target(e);
       e.t += dt;
       e.flash = Math.max(0, e.flash - dt);
       if (e.stun > 0) { e.stun -= dt; continue; }
@@ -658,7 +759,7 @@ export function boot(hw) {
         hurtPlayer(ENEMIES[e.kind].touch, e.x, e.y);
         if (e.kind === "spark") { e.dead = true; puff(e.x, e.y, 3); }
       }
-      if (S.decoy && dist(e.x, e.y, S.decoy.x, S.decoy.y) < 6) { S.decoy.t = Math.min(S.decoy.t, 0.3); if (e.kind === "spark") e.dead = true; }
+      for (const d of S.decoys) if (dist(e.x, e.y, d.x, d.y) < 6) { d.t = Math.min(d.t, 0.3); if (e.kind === "spark") e.dead = true; }
     }
     S.enemies = S.enemies.filter((e) => !e.dead);
     if (S.room.kind === "enemy" && !S.enemies.length && !R.cleared.includes(key(R.layer, S.room.id))) roomCleared();
@@ -686,8 +787,10 @@ export function boot(hw) {
         }
         if (zap(s.x, s.y, 3, s.dmg, s.src, 9)) s.life = 0;
       } else {
+        if (s.spin) { const a = Math.atan2(s.vy, s.vx) + dt * 3, sp = Math.hypot(s.vx, s.vy); s.vx = Math.cos(a) * sp; s.vy = Math.sin(a) * sp; }
+        if (s.drink) for (const e of S.enemies) if (e.kind === "spark" && !e.dead && dist(s.x, s.y, e.x, e.y) < 6) R.soul = gainSoul(R.soul, "block");
         if (zap(s.x, s.y, 3, s.dmg, s.src, 9) && !s.pierce) s.life = 0;
-        if (solidAt(S.tiles, s.x, s.y) && s.kind === "card") { s.life = 0; puff(s.x, s.y, 2); }
+        if (solidAt(S.tiles, s.x, s.y) && (s.kind === "card" || s.kind === "bolt")) { s.life = 0; puff(s.x, s.y, 2); }
       }
       s.x += s.vx * dt; s.y += s.vy * dt;
       if (s.x < -4 || s.y < -4 || s.x > RW + 4 || s.y > RH + 4) s.life = 0;
@@ -699,7 +802,7 @@ export function boot(hw) {
       f.x += f.vx * dt; f.y += f.vy * dt;
       if (f.kind === "ecard" && solidAt(S.tiles, f.x, f.y)) f.life = 0;
       if (dist(f.x, f.y, P.x, P.y - 2) < 5) { f.life = 0; hurtPlayer(1, f.x, f.y); }
-      if (S.decoy && dist(f.x, f.y, S.decoy.x, S.decoy.y) < 5) f.life = 0;
+      for (const d of S.decoys) if (dist(f.x, f.y, d.x, d.y) < 5) f.life = 0;
       if (f.x < -6 || f.y < -6 || f.x > RW + 6 || f.y > RH + 6) f.life = 0;
     }
     S.foes = S.foes.filter((f) => f.life > 0 && !f.dead);
@@ -749,7 +852,7 @@ export function boot(hw) {
       else {
         S.ladder = { x: 80, y: 64 };
         snd.play("layer");
-        talk([`${name} BEAT ${b.name}! ${name}'S HEART GREW STRONGER.`, STORY.ladder]);
+        talk([`${name} BEAT ${b.name}! ${name}'S HEART GREW STRONGER.`, STORY.bossGift], () => openPick("boss", () => talk([STORY.ladder])));
       }
       S.boss = null;
     }
@@ -814,7 +917,7 @@ export function boot(hw) {
         // Hit the right card to find him; a joker bursts into sparks.
         for (const c of b.cards) {
           if (c.gone) continue;
-          const hit = S.shots.some((s) => dist(s.x, s.y, c.x, c.y) < 8) || (P.wand && dist(P.wand.x, P.wand.y, c.x, c.y) < 8) || (P.whipT > 0.12 && dist(P.x + P.face.x * 18, P.y + P.face.y * 18, c.x, c.y) < 10);
+          const hit = S.shots.some((s) => dist(s.x, s.y, c.x, c.y) < 8) || P.wands.some((w) => dist(w.x, w.y, c.x, c.y) < 8) || (P.whipT > 0.12 && dist(P.x + P.face.x * 18, P.y + P.face.y * 18, c.x, c.y) < 10);
           if (!hit) continue;
           if (c.real) { b.x = c.x; b.y = c.y; b.state = "show"; b.stT = 3.5; word(c.x, c.y - 14, "FOUND HIM!"); sfx.pop(); break; }
           c.gone = true; word(c.x, c.y - 12, "JOKER!"); sfx.pop(); puff(c.x, c.y, 6);
@@ -867,7 +970,7 @@ export function boot(hw) {
 
   function updateShaft(dt) {
     const sh = S.shaft;
-    R.soul = drainSoul(R.soul, dt);
+    R.soul = drainSoul(R.soul, dt, R.deep);
     sh.inv = Math.max(0, sh.inv - dt);
     if (pressed.has("left") && sh.lane > 0) { sh.lane--; sfx.ladder(); }
     if (pressed.has("right") && sh.lane < 2) { sh.lane++; sfx.ladder(); }
@@ -992,7 +1095,7 @@ export function boot(hw) {
     if (S.phase === "shaft") { updateShaft(dt); return; }
 
     // In a room.
-    R.soul = drainSoul(R.soul, dt);
+    R.soul = drainSoul(R.soul, dt, R.deep);
     if (R.soul < 20 && (S.beatT -= dt) <= 0) { S.beatT = 1.4; sfx.heartbeat(); haptic(8); }
     if (R.soul <= 0) { caught(); return; }
     if (S.bossIn != null && (S.bossIn -= dt) <= 0) { S.bossIn = null; startBoss(); }
@@ -1006,53 +1109,45 @@ export function boot(hw) {
     updateBoss(dt);
   }
 
-  /* ---------- the trick book (pause) ---------- */
+  /* ---------- the trick book (pause): your build ---------- */
 
-  function cycle(slot, dir) {
-    const other = slot === "a" ? "b" : "a";
-    const list = usable(R).filter((k) => k !== R.equip[other]);
-    if (slot === "b") list.unshift(null);
-    const i = list.indexOf(R.equip[slot]);
-    R.equip[slot] = list[(i + dir + list.length) % list.length];
-    if (!R.equip.a) R.equip.a = "cards";
-    P.cd[slot] = 0.2;
-    save();
-  }
+  const PAUSE_ITEMS = ["RESUME", "SAVE AND QUIT"];
 
   function updatePause() {
-    const n = 4;
+    const n = PAUSE_ITEMS.length;
     if (pressed.has("up")) { S.sel = (S.sel + n - 1) % n; sfx.blip(); }
     if (pressed.has("down")) { S.sel = (S.sel + 1) % n; sfx.blip(); }
-    if ((pressed.has("left") || pressed.has("right")) && S.sel < 2) { cycle(S.sel ? "b" : "a", pressed.has("left") ? -1 : 1); sfx.blip(); haptic(6); }
-    const go = pressed.has("a") || pressed.has("start");
-    if (pressed.has("b") || (go && S.sel === 2) || (pressed.has("start") && S.sel < 2)) {
+    const go = pressed.has("a");
+    if (pressed.has("b") || pressed.has("start") || (go && S.sel === 0)) {
       S.paused = false; if (S.song?.name) snd.play(S.song.name, S.song.at); return;
     }
-    if (go && S.sel === 3) { save(); S.paused = false; snd.play("title"); setPhase("title"); S.sel = 0; saved = R; R = null; }
+    if (go && S.sel === 1) { save(); S.paused = false; snd.play("title"); setPhase("title"); S.sel = 0; saved = R; R = null; }
   }
 
   function drawPause() {
     rect(0, 0, W, H, 3);
-    ctext("TRICK BOOK", 6, 0, 1);
-    ctext(`${name}  -  ${LAYERS[R.layer].name}`, 14, 1);
-    const row = (i, label) => {
-      const on = S.sel === i;
-      if (on) rect(6, 24 + i * 10, W - 12, 9, 0);
-      ctext(label, 26 + i * 10, on ? 3 : 1);
+    ctext("TRICK BOOK", 5, 0, 1);
+    ctext(`${name}  -  ${LAYERS[R.layer].name}`, 13, 1);
+    const block = (y, btn, entry, cat, icon) => {
+      rect(4, y, W - 8, 1, 2);
+      if (!entry) { text(`${btn}: NONE YET`, 8, y + 4, 2); text("A SPIRIT CAN TEACH YOU ONE.", 8, y + 12, 2); return; }
+      sprite(ICONS[icon], 11, y + 11, false, { 3: 0 });
+      text(`${btn}: ${cat[entry.id].name}`, 20, y + 4, 0);
+      const ups = upgradeNames(entry, cat);
+      for (let t = 0; t < TIERS; t++) text(`${t < ups.length ? "*" : "-"} ${ups[t] || "UPGRADE " + (t + 1) + " TO COME"}`, 12, y + 13 + t * 7, t < ups.length ? 1 : 2);
     };
-    const nm = (k) => (k ? (R.tricks[k] ? TRICKS[k].paths[R.tricks[k]].name : TRICKS[k].name) : "NOTHING");
-    row(0, `A: < ${nm(R.equip.a)} >`);
-    row(1, `B: < ${nm(R.equip.b)} >`);
-    row(2, "RESUME");
-    row(3, "SAVE AND QUIT");
-    rect(4, 68, W - 8, 1, 2);
-    ctext("TRICKS YOU KNOW", 72, 1);
-    usable(R).forEach((k, i) => {
-      const y = 82 + i * 9;
-      sprite(ICONS[k], 12, y + 7, false, { 3: 0 });
-      text(nm(k), 20, y + 1, 0);
+    block(22, "A", R.attack, ATTACKS, ATTACK_ICON[R.attack.id]);
+    block(58, "B", R.defense, DEFENSES, R.defense && DEFENSE_ICON[R.defense.id]);
+    // Hearts from bonuses: whatever is above the three you start with and one per boss beaten.
+    const extra = Math.max(0, (R.maxHp - 6 - R.beaten.filter(Boolean).length * 2) / 2);
+    const bonus = [extra && `BIG HEART X${extra}`, R.deep && `DEEP SOUL X${R.deep}`].filter(Boolean).join("  ");
+    if (bonus) text(`BONUS: ${bonus}`, 8, 94, 1);
+    PAUSE_ITEMS.forEach((it, i) => {
+      const on = S.sel === i;
+      if (on) rect(30, 106 + i * 10, 100, 9, 0);
+      ctext(it, 108 + i * 10, on ? 3 : 1);
     });
-    ctext("< > SWAP TRICKS   B: BACK", 137, 2);
+    ctext("B: BACK TO THE HAT", 136, 2);
   }
 
   /* ---------- the ending ---------- */
@@ -1080,9 +1175,9 @@ export function boot(hw) {
     }
     banner(["YOU ESCAPED!"], 92, 1);
     ctext(`${name}'S BUILD:`, 110, 3);
-    const build = Object.entries(R.tricks).filter(([, v]) => v).map(([k, v]) => TRICKS[k].paths[v].name);
-    ctext(build.slice(0, 3).join(", ") || "PLAIN CARDS!", 118, 2);
-    ctext(build.slice(3).join(", "), 125, 2);
+    const line = (entry, cat) => [cat[entry.id].name, ...upgradeNames(entry, cat)].join(", ");
+    say(line(R.attack, ATTACKS), name, 38).slice(0, 1).forEach((l) => ctext(l, 118, 2));
+    ctext(R.defense ? say(line(R.defense, DEFENSES), name, 38)[0] : "NO DEFENSE. BRAVE!", 125, 2);
     if (Math.floor(S.t * 2) % 2) ctext("PRESS A", 136, 3);
   }
 
@@ -1201,16 +1296,20 @@ export function boot(hw) {
       if (Math.floor(s.t * 4) % 2) px(s.x + 5, TOP + s.y - 7 + bob, 0);
       if (dist(P.x, P.y, s.x, s.y) < 16) { rect(s.x - 15, TOP + s.y - 17, 30, 7, 3); ctext("A: TALK", TOP + s.y - 16, 0, 1, s.x); }
     }
-    if (S.decoy) sprite(BUNNY, Math.round(S.decoy.x), Math.round(TOP + S.decoy.y + 3));
+    for (const d of S.decoys) if (!(d.t < 0.6 && Math.floor(d.t * 10) % 2)) sprite(BUNNY, Math.round(d.x), Math.round(TOP + d.y + 3));
     drawBoss();
     for (const e of S.enemies) drawEnemy(e);
     drawKid();
-    if (P.shield) P.shield.cards.forEach((alive, i) => { if (!alive) return; const a = P.shield.a + (i * Math.PI * 2) / SHIELD_CARDS; drawCard(P.x + Math.cos(a) * 14, P.y - 2 + Math.sin(a) * 14); });
-    if (P.wand) {
-      const w = P.wand;
+    if (P.shield) {
+      const r = defenseStats(R)?.radius ?? 14, n = P.shield.cards.length;
+      P.shield.cards.forEach((left, i) => { if (left <= 0) return; const a = P.shield.a + (i * Math.PI * 2) / n; drawCard(P.x + Math.cos(a) * r, P.y - 2 + Math.sin(a) * r, left > 1 ? 1 : 0); });
+    }
+    for (const w of P.wands) {
       const a = Math.atan2(w.vy, w.vx);
-      line(Math.round(w.x - Math.cos(a) * 5), Math.round(TOP + w.y - Math.sin(a) * 5), Math.round(w.x), Math.round(TOP + w.y), 3);
+      const big = P.wandSt && P.wandSt.size > 4 ? 3 : 0;
+      line(Math.round(w.x - Math.cos(a) * (5 + big)), Math.round(TOP + w.y - Math.sin(a) * (5 + big)), Math.round(w.x), Math.round(TOP + w.y), 3);
       px(Math.round(w.x), Math.round(TOP + w.y), 0);
+      if (big) { px(Math.round(w.x) + 1, Math.round(TOP + w.y), 0); px(Math.round(w.x), Math.round(TOP + w.y) + 1, 0); }
       if (Math.floor(S.t * 20) % 2) px(Math.round(w.x - Math.cos(a) * 7), Math.round(TOP + w.y - Math.sin(a) * 7), 0);
     }
     for (const s of S.shots) {
@@ -1220,6 +1319,10 @@ export function boot(hw) {
         rect(Math.round(s.x) - r + 1, Math.round(TOP + s.y) - r, (r - 1) * 2, r + 1, 3);
         rect(Math.round(s.x) - r - 1, Math.round(TOP + s.y) + 1, r * 2 + 2, 2, 3);
         rect(Math.round(s.x) - r + 1, Math.round(TOP + s.y) - 1, (r - 1) * 2, 1, 1);
+      } else if (s.kind === "bolt" || s.kind === "star") {
+        const x = Math.round(s.x), y = Math.round(TOP + s.y);
+        px(x, y, 0); px(x - 1, y, 1); px(x + 1, y, 1); px(x, y - 1, 1); px(x, y + 1, 1);
+        if (s.kind === "bolt") rect(x - 1, y - 1, 3, 3, 0);
       } else if (s.kind === "dove") {
         const x = Math.round(s.x), y = Math.round(TOP + s.y), flap = Math.floor(S.t * 16) % 2;
         rect(x - 1, y, 3, 2, 0); px(x - 2, y - flap, 0); px(x + 2, y - flap, 0);
@@ -1318,15 +1421,13 @@ export function boot(hw) {
     [["a", W - 36], ["b", W - 18]].forEach(([slot, x]) => {
       rect(x, 2, 15, 12, 2);
       text(slot.toUpperCase(), x + 1, 3, 1);
-      const k = R.equip[slot];
+      const k = slot === "a" ? ATTACK_ICON[R.attack.id] : R.defense && DEFENSE_ICON[R.defense.id];
       if (k) {
         sprite(ICONS[k], x + 10, 12, false, { 3: P.cd[slot] > 0 ? 1 : 0 });
-        if (P.cd[slot] > 0) {
-          const st = trickStats(k, R.tricks[k]);
-          rect(x, 13, Math.round(15 * (1 - P.cd[slot] / st.cd)), 1, 0);
-        }
-        // Shield cards still circling.
-        if (k === "tornado" && P.shield) P.shield.cards.forEach((alive, i) => alive && rect(x + 2 + i * 3, 13, 2, 1, 0));
+        if (P.cd[slot] > 0) rect(x, 13, Math.round(15 * (1 - P.cd[slot] / P.cdMax[slot])), 1, 0);
+        // Shield cards still circling, and blinks left.
+        if (slot === "b" && P.shield) P.shield.cards.forEach((left, i) => left > 0 && rect(x + 1 + i * 2, 13, 1, 1, 0));
+        if (slot === "b" && R.defense.id === "blink" && P.blinks > 1) { rect(x + 1, 13, 2, 1, 0); rect(x + 4, 13, 2, 1, 0); }
       }
     });
     if (S.boss) {
