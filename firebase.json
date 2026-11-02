@@ -458,6 +458,60 @@
           ]
         }
       ]
+    },
+    {
+      "target": "weather",
+      "public": "apps/weather/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*"
+      ],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "function": {
+            "functionId": "weather-api",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "!/_expo/static/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "/_expo/static/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=31536000, immutable"
+            }
+          ]
+        },
+        {
+          "source": "**",
+          "headers": [
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            }
+          ]
+        }
+      ]
     }
   ],
   "firestore": {
@@ -492,6 +546,16 @@
       "ignore": [
         "node_modules",
         ".git",
+        "*.log"
+      ]
+    },
+    {
+      "source": "apps/weather/functions",
+      "codebase": "weather",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "test",
         "*.log"
       ]
     }

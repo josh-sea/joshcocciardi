@@ -1057,8 +1057,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Weather: the Pirate Weather and Anthropic keys the weather-api function
+    // reads with the Admin SDK. No client may read or write them.
+    match /weather_secrets/{docId} {
+      allow read, write: if false;
+    }
+
     // Default authenticated access for other collections.
-    // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, Seasonal Box HQ, EzPayze, /work and the per-user `users` tree are excluded —
+    // CanITwo, Recipe Box, Mise, the Meal Planner, My Reading Buddy, Seasonal Box HQ, EzPayze, Weather, /work and the per-user `users` tree are excluded —
     // without this carve-out, the catch-all would override their stricter
     // rules above (in Firestore, any matching `allow` wins), and every
     // signed-in user could read and write everyone else's documents.
@@ -1084,6 +1090,7 @@ service cloud.firestore {
         && !collection.matches('ezpayze_.*')
         && !collection.matches('park_.*')
         && !collection.matches('scale_.*')
+        && !collection.matches('weather_.*')
         && collection != 'work_private';
     }
   }

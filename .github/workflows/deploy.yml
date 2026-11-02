@@ -28,6 +28,9 @@
 #                   export), deployed in its own step with its own functions
 #                   codebase, same as EzPayze. Its Realtime Database rules
 #                   (/roy in database.rules.json) go out with the shared rules.
+#   - weather    → josh-cocciardi-weather.web.app (apps/weather/dist, the Expo
+#                   web export), deployed in its own step with its own
+#                   functions codebase (weather-api holds the API keys).
 #
 # Indexes are deliberately NOT deployed from CI: the project has indexes
 # that aren't captured in firestore.indexes.json, and a non-interactive
@@ -263,6 +266,20 @@ jobs:
         working-directory: apps/roy/functions
         run: npm ci
 
+      # Weather: another Expo app exported for the web, plus a functions
+      # codebase that proxies Pirate Weather and asks Claude for summaries.
+      - name: Build Weather web app
+        working-directory: apps/weather
+        run: |
+          npm ci
+          npx expo export -p web --clear
+
+      - name: Test Weather functions
+        working-directory: apps/weather/functions
+        run: |
+          npm ci
+          npm test
+
       - name: Deploy hosting + Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
@@ -296,3 +313,14 @@ jobs:
           npx firebase-tools@13 hosting:sites:get josh-cocciardi-roy --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
             || npx firebase-tools@13 hosting:sites:create josh-cocciardi-roy --project josh-cocciardi --non-interactive
           npx firebase-tools@13 deploy --only hosting:roy,functions:roy --project josh-cocciardi --non-interactive --force
+
+      # Weather ships separately too. Creates the Hosting site the first time.
+      # Its keys live in Firestore (weather_secrets/keys), not in CI.
+      - name: Deploy Weather
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: |
+          npx firebase-tools@13 hosting:sites:get josh-cocciardi-weather --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
+            || npx firebase-tools@13 hosting:sites:create josh-cocciardi-weather --project josh-cocciardi --non-interactive
+          npx firebase-tools@13 deploy --only hosting:weather,functions:weather --project josh-cocciardi --non-interactive --force
