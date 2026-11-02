@@ -24,6 +24,7 @@
 #   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh party        - Test Party Room, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
+#   ./deploy.sh weather      - Test + export the Weather web build, deploy its hosting site, functions, and Firestore rules
 #
 # Apps live in:
 #   apps/portfolio/   - Main React portfolio SPA (CRA)
@@ -362,6 +363,20 @@ deploy_roy() {
     success "Roy deployed → https://josh-cocciardi-roy.web.app"
 }
 
+deploy_weather() {
+    log "Building Weather for the web..."
+    cd "$ROOT_DIR/apps/weather/functions"
+    npm ci || fail "Weather functions install failed"
+    npm test || fail "Weather function tests failed"
+    cd "$ROOT_DIR/apps/weather"
+    npm ci || fail "Weather install failed"
+    npx expo export -p web --clear || fail "Weather web export failed"
+    cd "$ROOT_DIR"
+    firebase hosting:sites:get josh-cocciardi-weather >/dev/null 2>&1 || firebase hosting:sites:create josh-cocciardi-weather
+    firebase deploy --only hosting:weather,functions:weather,firestore:rules || fail "Weather deploy failed"
+    success "Weather deployed → https://josh-cocciardi-weather.web.app"
+}
+
 deploy_firestore() {
     log "Deploying Firestore rules and indexes..."
     cd "$ROOT_DIR"
@@ -562,6 +577,12 @@ case "${1:-all}" in
         echo "========================================"
         deploy_roy
         ;;
+    weather)
+        echo "========================================"
+        echo "  Deploying Weather"
+        echo "========================================"
+        deploy_weather
+        ;;
     tophat)
         echo "========================================"
         echo "  Deploying Tophat & Spears"
@@ -582,7 +603,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|roy|ezpayze|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|roy|weather|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac

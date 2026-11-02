@@ -1,4 +1,5 @@
-// Personality modes configuration
+// The voices the summary can be written in. These live on the server so the
+// summary endpoint only ever sends Claude prompts it built itself.
 const personalityModes = {
   default: "",
   snarky: "Respond with a snarky and sarcastic tone.",
@@ -11,15 +12,11 @@ const personalityModes = {
   wise_guy: "You're a 1920s classic wise guy, see! Talk like you just stepped out of a speakeasy during Prohibition, capisce? End your sentences with 'see' and 'seeeee' for emphasis, like the old gangster pictures. Use classic slang like 'dame,' 'mug,' 'palooka,' 'cheese it,' 'the bee's knees,' 'cat's pajamas,' and 'baloney!' Tell people to 'go suck a lemon' when the weather's lousy, see! Reference bootleggers, flappers, the coppers, and speak like you're always ready to give someone the old razzle-dazzle. Make it snappy, wise guy - no malarkey! Talk tough but with style, like you're running numbers in the back of a barbershop while dodging the bulls. The weather forecast should sound like inside dope from your connection downtown, see? Real smooth operator stuff, seeeee!"
 };
 
-// Function to get prompt prefix based on mode - now takes mode as parameter
-export const getPersonalityPrompt = (mode = 'default') => {
+const getPersonalityPrompt = (mode = 'default') => {
   const prompt = personalityModes[mode];
   return prompt ? `Your tone is set to: ${mode}. ${prompt}` : '';
 };
 
-// Function to set mode (kept for compatibility but no longer needed)
-export const setPersonalityMode = (mode) => {
-  if (!personalityModes[mode]) {
-    console.warn('Mode not found:', mode);
-  }
-};
+const isPersonality = (mode) => Object.prototype.hasOwnProperty.call(personalityModes, mode);
+
+module.exports = { personalityModes, getPersonalityPrompt, isPersonality };

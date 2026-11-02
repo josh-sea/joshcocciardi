@@ -1,0 +1,17 @@
+{
+  "name": "weather-functions",
+  "description": "Cloud Functions for Weather (forecast proxy and Claude summaries). Codebase \"weather\".",
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.6.0"
+  },
+  "private": true
+}

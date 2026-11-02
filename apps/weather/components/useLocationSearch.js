@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Alert } from 'react-native';
-import * as Location from 'expo-location';
+import { useState, useEffect, useRef } from 'react';
+import alert from '../utils/alert';
+import { searchPlaces } from '../utils/geocode';
 
 /**
  * Custom hook for location search functionality
@@ -12,6 +12,7 @@ export const useLocationSearch = (onSelectLocation, onClose = null) => {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchTimer, setSearchTimer] = useState(null);
+  const latestQuery = useRef('');
 
   const searchLocations = async (query) => {
     if (!query.trim() || query.length < 3) {
@@ -22,63 +23,20 @@ export const useLocationSearch = (onSelectLocation, onClose = null) => {
 
     setSearching(true);
     try {
-      const geocodeResults = await Location.geocodeAsync(query.trim());
-      
-      if (geocodeResults.length === 0) {
-        setSearchResults([]);
-        setSearching(false);
-        return;
-      }
-
-      // Get detailed address information for each result
-      const results = [];
-      for (let i = 0; i < Math.min(geocodeResults.length, 5); i++) {
-        const coords = geocodeResults[i];
-        try {
-          const [address] = await Location.reverseGeocodeAsync({
-            latitude: coords.latitude,
-            longitude: coords.longitude
-          });
-          
-          const locationName = address.city && address.region 
-            ? `${address.city}, ${address.region}`
-            : address.name || query.trim();
-
-          const zipcode = address.postalCode || 'N/A';
-          
-          results.push({
-            id: `search-${i}`,
-            name: locationName,
-            zipcode: zipcode,
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            fullAddress: `${address.street || ''} ${address.city || ''} ${address.region || ''} ${address.postalCode || ''}`.trim()
-          });
-        } catch (reverseError) {
-          // Fallback if reverse geocoding fails
-          results.push({
-            id: `search-${i}`,
-            name: query.trim(),
-            zipcode: 'N/A',
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            fullAddress: query.trim()
-          });
-        }
-      }
-      
-      setSearchResults(results);
-      setSearching(false);
-      
+      const results = await searchPlaces(query);
+      // Ignore a slow answer for text the user has since changed.
+      if (latestQuery.current === query) setSearchResults(results);
     } catch (error) {
       console.error('Search error:', error);
-      setSearchResults([]);
-      setSearching(false);
+      if (latestQuery.current === query) setSearchResults([]);
+    } finally {
+      if (latestQuery.current === query) setSearching(false);
     }
   };
 
   const handleLocationInputChange = (text) => {
     setLocationInput(text);
+    latestQuery.current = text;
     
     // Clear existing timer
     if (searchTimer) {
@@ -96,6 +54,7 @@ export const useLocationSearch = (onSelectLocation, onClose = null) => {
   const selectSearchResult = async (result) => {
     setAdding(true);
     setLocationInput('');
+    latestQuery.current = '';
     setSearchResults([]);
     
     const newLocation = {
@@ -118,83 +77,44 @@ export const useLocationSearch = (onSelectLocation, onClose = null) => {
 
   const addLocationManually = async () => {
     if (!locationInput.trim()) {
-      Alert.alert('Error', 'Please enter a location (zipcode, city, or city, state)');
+      alert('Error', 'Please enter a location (zipcode, city, or city, state)');
       return;
     }
 
     setAdding(true);
     try {
-      const geocodeResult = await Location.geocodeAsync(locationInput.trim());
-      
-      if (geocodeResult.length === 0) {
-        Alert.alert('Error', 'Could not find this location. Please try a different search term.');
-        setAdding(false);
+      const [first] = await searchPlaces(locationInput);
+      if (!first) {
+        alert('Error', 'Could not find this location. Please try a different search term.');
         return;
       }
 
-      const coords = geocodeResult[0];
-      
-      try {
-        const [address] = await Location.reverseGeocodeAsync({
-          latitude: coords.latitude,
-          longitude: coords.longitude
-        });
-        
-        const locationName = address.city && address.region 
-          ? `${address.city}, ${address.region}`
-          : locationInput.trim();
+      onSelectLocation({
+        id: Date.now().toString(),
+        type: 'zipcode',
+        name: first.name,
+        zipcode: first.zipcode,
+        latitude: first.latitude,
+        longitude: first.longitude,
+      });
+      setLocationInput('');
+      setSearchResults([]);
 
-        const zipcode = address.postalCode || locationInput.trim();
-
-        const newLocation = {
-          id: Date.now().toString(),
-          type: 'zipcode',
-          name: locationName,
-          zipcode: zipcode,
-          latitude: coords.latitude,
-          longitude: coords.longitude
-        };
-
-        onSelectLocation(newLocation);
-        setLocationInput('');
-        setSearchResults([]);
-        setAdding(false);
-        
-        // Close modal if onClose is provided (for LocationModal)
-        if (onClose) {
-          onClose();
-        }
-        
-      } catch (reverseError) {
-        const newLocation = {
-          id: Date.now().toString(),
-          type: 'zipcode',
-          name: locationInput.trim(),
-          zipcode: locationInput.trim(),
-          latitude: coords.latitude,
-          longitude: coords.longitude
-        };
-
-        onSelectLocation(newLocation);
-        setLocationInput('');
-        setSearchResults([]);
-        setAdding(false);
-        
-        // Close modal if onClose is provided (for LocationModal)
-        if (onClose) {
-          onClose();
-        }
+      // Close modal if onClose is provided (for LocationModal)
+      if (onClose) {
+        onClose();
       }
-      
     } catch (error) {
       console.error('Geocoding error:', error);
-      Alert.alert('Error', 'Could not find this location. Please try again with a different search term.');
+      alert('Error', 'Could not find this location. Please try again with a different search term.');
+    } finally {
       setAdding(false);
     }
   };
 
   const clearSearch = () => {
     setLocationInput('');
+    latestQuery.current = '';
     setSearchResults([]);
     setAdding(false);
     setSearching(false);

@@ -5,18 +5,17 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   ScrollView, 
-  Alert, 
   TextInput, 
   Modal,
   FlatList,
   ActivityIndicator,
-  RefreshControl
+  RefreshControl,
+  Platform
 } from 'react-native';
-import axios from 'axios';
 import * as Location from 'expo-location';
-import { WEATHER_API_KEY, OPENAI_API_KEY } from '@env';
-import mockWeatherData from '../mockWeatherData';
-import { createPromptWithPersonality, setMode } from './integrate_personality';
+import alert from '../utils/alert';
+import { fetchForecast, fetchSummary } from '../utils/api';
+import { reverseGeocode } from '../utils/geocode';
 import { useLocationSearch } from './useLocationSearch';
 import LocationSearchForm from './LocationSearchForm';
 import { StorageUtils } from './StorageUtils';
@@ -62,7 +61,7 @@ const MenuModal = ({ visible, onClose, selectedPersonality, onPersonalityChange,
       >
         <Text style={styles.locationItemName}>{item.name}</Text>
         <Text style={styles.locationItemType}>
-          {item.type === 'current' ? '📍 Current Location' : `📮 ${item.zipcode}`}
+          {item.type === 'current' ? '📍 Current Location' : item.zipcode ? `📮 ${item.zipcode}` : '🗺️ Saved place'}
         </Text>
       </TouchableOpacity>
       {item.type === 'zipcode' && (
@@ -132,7 +131,7 @@ const MenuModal = ({ visible, onClose, selectedPersonality, onPersonalityChange,
                   <View style={styles.locationItemInfo}>
                     <Text style={styles.locationItemName}>{item.name}</Text>
                     <Text style={styles.locationItemType}>
-                      {item.type === 'current' ? '📍 Current Location' : `📮 ${item.zipcode}`}
+                      {item.type === 'current' ? '📍 Current Location' : item.zipcode ? `📮 ${item.zipcode}` : '🗺️ Saved place'}
                     </Text>
                   </View>
                   {gettingCurrentLocation && item.type === 'current' && (
@@ -211,7 +210,7 @@ const LocationModal = ({ visible, onClose, onSelectLocation, locations, onDelete
       >
         <Text style={styles.locationItemName}>{item.name}</Text>
         <Text style={styles.locationItemType}>
-          {item.type === 'current' ? '📍 Current Location' : `📮 ${item.zipcode}`}
+          {item.type === 'current' ? '📍 Current Location' : item.zipcode ? `📮 ${item.zipcode}` : '🗺️ Saved place'}
         </Text>
       </TouchableOpacity>
       {item.type === 'zipcode' && (
@@ -360,11 +359,14 @@ const Weather = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState('temperature');
   const [metricSelectorVisible, setMetricSelectorVisible] = useState(false);
-  const [personalityTransitioning, setPersonalityTransitioning] = useState(false);
   const [storageInitialized, setStorageInitialized] = useState(false);
 
-  // Ref to store stable hourly data that won't be affected by AI summary state changes
-  const stableHourlyData = useRef(null);
+  // Which place and voice the summaries on screen belong to, so an answer
+  // that arrives after the user moved on is dropped instead of shown.
+  const summaryContext = useRef('');
+  summaryContext.current = selectedLocation
+    ? `${selectedLocation.latitude},${selectedLocation.longitude}|${selectedPersonality}`
+    : '';
 
   // Note: API keys are now loaded from .env file for security
 
@@ -541,130 +543,47 @@ const Weather = () => {
   };
 
   /**
-   * Generates an AI-powered weather summary using OpenAI API with personality
+   * Asks the weather-api function for a summary of one timeframe. The server
+   * builds the prompt from its own copy of the forecast and holds the
+   * Anthropic key; it answers with a plain fallback line if Claude is down.
    * @param {string} timeframe - Time period for the summary (now, today, tomorrow, week, weekend)
-   * @param {Object} weatherInfo - Processed weather data object
-   * @param {string} locationName - Name of the location for context
+   * @param {Object} location - The selected location (name and coordinates)
    */
-  const generateAISummary = React.useCallback(async (timeframe, weatherInfo, locationName) => {
+  const generateAISummary = React.useCallback(async (timeframe, location) => {
+    if (!location || location.latitude == null || location.longitude == null) return;
+    const context = summaryContext.current;
+    const stillCurrent = () => summaryContext.current === context;
+    setSummaryLoading(prev => ({ ...prev, [timeframe]: true }));
     try {
-      // Use functional state updates to avoid dependency issues
-      setSummaryLoading(prev => ({ ...prev, [timeframe]: true }));
-      
-      let prompt = '';
-      
-      if (timeframe === 'now') {
-        const current = weatherInfo.current;
-        const currentHour = new Date().getHours();
-        const currentMonth = new Date().getMonth() + 1;
-        
-        let season = 'spring';
-        if (currentMonth >= 6 && currentMonth <= 8) season = 'summer';
-        else if (currentMonth >= 9 && currentMonth <= 11) season = 'fall';
-        else if (currentMonth === 12 || currentMonth <= 2) season = 'winter';
-        
-        let timeOfDay = 'morning';
-        if (currentHour >= 12 && currentHour < 17) timeOfDay = 'afternoon';
-        else if (currentHour >= 17 && currentHour < 20) timeOfDay = 'evening';
-        else if (currentHour >= 20 || currentHour < 6) timeOfDay = 'night';
-        
-        prompt = `Write a brief 1-2 sentence weather summary for RIGHT NOW in ${locationName}:
-        
-Temperature: ${Math.round(current.temperature)}°F (feels like ${Math.round(current.apparentTemperature)}°F)
-Conditions: ${current.summary}
-Humidity: ${Math.round(current.humidity * 100)}%
-Wind: ${Math.round(current.windSpeed)} mph
-Time: ${timeOfDay} in ${season}
-
-Be conversational and focus on how it feels to be outside right now. Keep it under 30 words.`;
-        
-      } else if (timeframe === 'today') {
-        const today = weatherInfo.today;
-        prompt = `Write a brief 1-2 sentence summary for TODAY's weather in ${locationName}:
-        
-High: ${Math.round(today.temperatureHigh)}°F, Low: ${Math.round(today.temperatureLow)}°F
-Conditions: ${today.summary}
-
-Focus on what to expect throughout the day. Keep it under 30 words.`;
-        
-      } else if (timeframe === 'tomorrow') {
-        const tomorrow = weatherInfo.tomorrow;
-        prompt = `Write a brief 1-2 sentence summary for TOMORROW's weather in ${locationName}:
-        
-High: ${Math.round(tomorrow.temperatureHigh)}°F, Low: ${Math.round(tomorrow.temperatureLow)}°F
-Conditions: ${tomorrow.summary}
-
-Focus on planning for tomorrow. Keep it under 30 words.`;
-        
-      } else if (timeframe === 'week') {
-        prompt = `Write a brief 1-2 sentence summary for THIS WEEK's weather in ${locationName}:
-        
-${weatherInfo.weekSummary}
-
-Focus on the overall weekly trend. Keep it under 30 words.`;
-        
-      } else if (timeframe === 'weekend') {
-        const saturday = weatherInfo.saturday;
-        const sunday = weatherInfo.sunday;
-        prompt = `Write a brief 1-2 sentence summary for THIS WEEKEND in ${locationName}:
-        
-Saturday: ${saturday.summary}, High: ${Math.round(saturday.temperatureHigh)}°F
-Sunday: ${sunday.summary}, High: ${Math.round(sunday.temperatureHigh)}°F
-
-Focus on weekend plans. Keep it under 30 words.`;
-      }
-
-      const messagesWithPersonality = createPromptWithPersonality(prompt, selectedPersonality);
-
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4.1-nano',
-          messages: messagesWithPersonality,
-          max_tokens: 100,
-          temperature: 0.7,
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      const summary = response.data.choices[0].message.content.trim();
-      
-      // Update state directly to avoid timing issues
-      setAiSummaries(prev => ({ ...prev, [timeframe]: summary }));
-      setSummaryLoading(prev => ({ ...prev, [timeframe]: false }));
-      
+      const { summary } = await fetchSummary({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        name: location.name,
+        timeframe,
+        personality: selectedPersonality,
+      });
+      if (stillCurrent()) setAiSummaries(prev => ({ ...prev, [timeframe]: summary }));
     } catch (error) {
       console.error(`Error generating AI summary for ${timeframe}:`, error);
-      
-      // Fallback summaries
-      let fallback = '';
-      if (timeframe === 'now') {
-        const current = weatherInfo.current;
-        fallback = `${Math.round(current.temperature)}°F with ${Math.round(current.humidity * 100)}% humidity. ${current.windSpeed > 10 ? 'Breezy' : 'Calm'} conditions.`;
-      } else if (timeframe === 'today') {
-        fallback = `High of ${Math.round(weatherInfo.today.temperatureHigh)}°F, low of ${Math.round(weatherInfo.today.temperatureLow)}°F today.`;
-      } else if (timeframe === 'tomorrow') {
-        fallback = `Tomorrow: ${Math.round(weatherInfo.tomorrow.temperatureHigh)}°F high, ${Math.round(weatherInfo.tomorrow.temperatureLow)}°F low.`;
-      } else {
-        fallback = 'Weather information available.';
-      }
-      
-      // Update state directly to avoid timing issues
-      setAiSummaries(prev => ({ ...prev, [timeframe]: fallback }));
-      setSummaryLoading(prev => ({ ...prev, [timeframe]: false }));
+      if (stillCurrent()) setAiSummaries(prev => ({
+        ...prev,
+        [timeframe]: error.code === 'slow_down'
+          ? 'Too many summaries in a row. Give it a minute and pull to refresh.'
+          : 'The AI summary is unavailable right now.',
+      }));
+    } finally {
+      if (stillCurrent()) setSummaryLoading(prev => ({ ...prev, [timeframe]: false }));
     }
   }, [selectedPersonality]);
 
   /**
-   * Gets the user's current location using device GPS with error handling and Android optimizations
+   * Gets the user's current location using device GPS (the browser's geolocation on the web)
+   * @param {Object} [options]
+   * @param {boolean} [options.silent] - Skip the error dialogs (used for the automatic try at startup)
    * @returns {Promise<Object|null>} Location object with coordinates and name, or null if failed
    */
-  const getCurrentLocation = async () => {
+  const getCurrentLocation = async ({ silent = false } = {}) => {
+    const say = (...args) => { if (!silent) alert(...args); };
     setGettingCurrentLocation(true);
     
     try {
@@ -675,7 +594,7 @@ Focus on weekend plans. Keep it under 30 words.`;
       console.log('Location services enabled:', isLocationEnabled);
       
       if (!isLocationEnabled) {
-        Alert.alert(
+        say(
           'Location Services Disabled',
           'Please enable location services in your device settings to use current location.',
           [{ text: 'OK' }]
@@ -690,9 +609,11 @@ Focus on weekend plans. Keep it under 30 words.`;
       console.log('Permission status:', status);
       
       if (status !== 'granted') {
-        Alert.alert(
+        say(
           'Permission Denied',
-          'Location permission is required to use current location. Please check your app permissions in device settings.',
+          Platform.OS === 'web'
+            ? 'Location permission is required to use current location. Allow it for this site in your browser settings, or search for a city or zipcode instead.'
+            : 'Location permission is required to use current location. Please check your app permissions in device settings.',
           [{ text: 'OK' }]
         );
         setGettingCurrentLocation(false);
@@ -715,42 +636,24 @@ Focus on weekend plans. Keep it under 30 words.`;
       };
 
       // Reverse geocode to get location name
+      let locationName = null;
       try {
-        console.log('Reverse geocoding...');
-        const [address] = await Location.reverseGeocodeAsync(coords);
-        console.log('Address:', address);
-        
-        const locationName = address.city && address.region 
-          ? `${address.city}, ${address.region}`
-          : 'Current Location';
-        
-        const currentLoc = {
-          id: 'current',
-          type: 'current',
-          name: locationName,
-          latitude: coords.latitude,
-          longitude: coords.longitude
-        };
-
-        console.log('Final location object:', currentLoc);
-        setCurrentLocation(currentLoc);
-        setGettingCurrentLocation(false);
-        return currentLoc;
-        
+        locationName = await reverseGeocode(coords.latitude, coords.longitude);
       } catch (reverseError) {
         console.log('Could not get location name, using coordinates');
-        const currentLoc = {
-          id: 'current',
-          type: 'current',
-          name: 'Current Location',
-          latitude: coords.latitude,
-          longitude: coords.longitude
-        };
-
-        setCurrentLocation(currentLoc);
-        setGettingCurrentLocation(false);
-        return currentLoc;
       }
+
+      const currentLoc = {
+        id: 'current',
+        type: 'current',
+        name: locationName || 'Current Location',
+        latitude: coords.latitude,
+        longitude: coords.longitude
+      };
+
+      setCurrentLocation(currentLoc);
+      setGettingCurrentLocation(false);
+      return currentLoc;
 
     } catch (err) {
       console.error('Error getting current location:', err);
@@ -758,9 +661,12 @@ Focus on weekend plans. Keep it under 30 words.`;
       // More specific error messages for Android
       let errorMessage = 'Could not get your current location. ';
       
-      if (err.code === 'E_LOCATION_TIMEOUT') {
+      // Browser geolocation errors: 1 denied, 2 unavailable, 3 timeout.
+      if (err.code === 1) {
+        errorMessage += 'Location permission was denied. Allow it for this site in your browser settings, or search for a city or zipcode.';
+      } else if (err.code === 3 || err.code === 'E_LOCATION_TIMEOUT') {
         errorMessage += 'Location request timed out. Please try again or make sure you have a clear view of the sky.';
-      } else if (err.code === 'E_LOCATION_UNAVAILABLE') {
+      } else if (err.code === 2 || err.code === 'E_LOCATION_UNAVAILABLE') {
         errorMessage += 'Location services are unavailable. Please check your device settings.';
       } else if (err.code === 'E_LOCATION_SETTINGS_UNSATISFIED') {
         errorMessage += 'Please enable high accuracy location in your device settings.';
@@ -768,7 +674,7 @@ Focus on weekend plans. Keep it under 30 words.`;
         errorMessage += 'Please try again or use a zipcode.';
       }
       
-      Alert.alert('Location Error', errorMessage, [{ text: 'OK' }]);
+      say('Location Error', errorMessage, [{ text: 'OK' }]);
       setGettingCurrentLocation(false);
       return null;
     }
@@ -799,7 +705,7 @@ Focus on weekend plans. Keep it under 30 words.`;
   };
 
   const handleDeleteLocation = (locationId) => {
-    Alert.alert(
+    alert(
       'Delete Location',
       'Are you sure you want to remove this location?',
       [
@@ -858,7 +764,6 @@ Focus on weekend plans. Keep it under 30 words.`;
         // Set loaded personality
         if (savedPersonality) {
           setSelectedPersonality(savedPersonality);
-          setMode(savedPersonality);
           console.log('Loaded personality:', savedPersonality);
         }
 
@@ -873,8 +778,9 @@ Focus on weekend plans. Keep it under 30 words.`;
           setSelectedLocation(lastLocation);
           console.log('Restored last selected location:', lastLocation.name);
         } else {
-          // Otherwise, try to get current location
-          const current = await getCurrentLocation();
+          // Otherwise, try to get current location (quietly: a browser that
+          // says no just lands on the welcome screen)
+          const current = await getCurrentLocation({ silent: true });
           if (current) {
             setSelectedLocation(current);
           }
@@ -887,7 +793,7 @@ Focus on weekend plans. Keep it under 30 words.`;
         console.error('Error initializing storage:', error);
         
         // Fallback: still try to get current location
-        const current = await getCurrentLocation();
+        const current = await getCurrentLocation({ silent: true });
         if (current) {
           setSelectedLocation(current);
         }
@@ -899,85 +805,21 @@ Focus on weekend plans. Keep it under 30 words.`;
     initializeStorage();
   }, []);
 
-  // Consolidated useEffect for weather data and AI summary management
+  // A new place: fetch its forecast and forget the old place's summaries.
   useEffect(() => {
-    let isMounted = true;
-    let summaryTimer = null;
+    if (!selectedLocation || selectedLocation.latitude == null || selectedLocation.longitude == null) return;
+    setAiSummaries({});
+    setSummaryLoading({});
+    fetchWeather(selectedLocation.latitude, selectedLocation.longitude);
+  }, [selectedLocation]);
 
-    const handleWeatherAndSummaries = async () => {
-      // Fetch weather data when location changes
-      if (selectedLocation && selectedLocation.latitude && selectedLocation.longitude) {
-        // Store the hourly data reference before any state changes
-        if (weatherData?.hourly?.data) {
-          stableHourlyData.current = weatherData.hourly.data;
-        }
-
-        // Only fetch new weather data if location actually changed (not just personality)
-        if (!personalityTransitioning) {
-          await fetchWeather(selectedLocation.latitude, selectedLocation.longitude);
-          setAiSummaries({});
-          setSummaryLoading({});
-        }
-      }
-
-      // Generate AI summaries when conditions are right
-      if (weatherData && selectedLocation && isMounted) {
-        const weatherInfo = prepareWeatherInfo(weatherData);
-        
-        // Generate summary for current timeframe if not already generated or loading
-        // This includes personality changes since summaries were cleared in onPersonalityChange
-        if (!aiSummaries[selectedTimeframe] && !summaryLoading[selectedTimeframe]) {
-          // Use requestAnimationFrame to ensure this runs after render
-          summaryTimer = setTimeout(() => {
-            if (isMounted) {
-              generateAISummary(selectedTimeframe, weatherInfo, selectedLocation.name);
-            }
-          }, 50);
-        }
-      }
-    };
-
-    handleWeatherAndSummaries();
-
-    return () => {
-      isMounted = false;
-      if (summaryTimer) {
-        clearTimeout(summaryTimer);
-      }
-    };
-  }, [selectedLocation, weatherData?.currently?.time, selectedTimeframe, selectedPersonality]);
-
-  // Separate useEffect for personality transitioning management
+  // Write the summary for the timeframe on screen once there is a forecast,
+  // and again after a refresh or a personality change clears it.
   useEffect(() => {
-    if (!personalityTransitioning) return;
-
-    let transitionTimer = null;
-    let summaryCheckTimer = null;
-
-    // Reset personality transitioning after maximum time
-    transitionTimer = setTimeout(() => {
-      setPersonalityTransitioning(false);
-    }, 2000);
-
-    // Also reset when AI summary loads for current timeframe
-    const checkSummaryLoaded = () => {
-      if (aiSummaries[selectedTimeframe] && !summaryLoading[selectedTimeframe]) {
-        clearTimeout(transitionTimer);
-        setTimeout(() => {
-          setPersonalityTransitioning(false);
-        }, 100);
-      } else {
-        summaryCheckTimer = setTimeout(checkSummaryLoaded, 200);
-      }
-    };
-
-    checkSummaryLoaded();
-
-    return () => {
-      if (transitionTimer) clearTimeout(transitionTimer);
-      if (summaryCheckTimer) clearTimeout(summaryCheckTimer);
-    };
-  }, [personalityTransitioning, aiSummaries, selectedTimeframe, summaryLoading]);
+    if (!weatherData || !selectedLocation) return;
+    if (aiSummaries[selectedTimeframe] || summaryLoading[selectedTimeframe]) return;
+    generateAISummary(selectedTimeframe, selectedLocation);
+  }, [weatherData, selectedLocation, selectedTimeframe, aiSummaries, summaryLoading, generateAISummary]);
 
   /**
    * Fetches weather data from Pirate Weather API for given coordinates
@@ -991,11 +833,7 @@ Focus on weekend plans. Keep it under 30 words.`;
       
       console.log(`Fetching weather for coordinates: ${latitude}, ${longitude}`);
       
-      const response = await axios.get(
-        `https://api.pirateweather.net/forecast/${WEATHER_API_KEY}/${latitude},${longitude}?exclude=hrrr`
-      );
-      
-      setWeatherData(response.data);
+      setWeatherData(await fetchForecast(latitude, longitude));
       console.log('Weather data fetched successfully');
       setLoading(false);
       
@@ -1010,18 +848,19 @@ Focus on weekend plans. Keep it under 30 words.`;
     const current = weatherData.currently;
     const daily = weatherData.daily.data;
     
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const daysUntilSaturday = dayOfWeek === 6 ? 7 : (6 - dayOfWeek) % 7;
-    const saturdayIndex = daysUntilSaturday;
-    const sundayIndex = (daysUntilSaturday + 1) % 7;
+    // Same rule as the server's prompt: on Saturday the weekend is today and
+    // tomorrow, and on Sunday only today is left of it.
+    const dayOfWeek = new Date().getDay();
+    const daysUntilSaturday = dayOfWeek === 6 ? 0 : 6 - dayOfWeek;
+    const saturdayIndex = dayOfWeek === 0 ? -1 : daysUntilSaturday;
+    const sundayIndex = dayOfWeek === 0 ? 0 : daysUntilSaturday + 1;
     
     return {
       current,
       today: daily[0],
       tomorrow: daily[1],
       weekSummary: weatherData.daily.summary,
-      saturday: daily[saturdayIndex],
+      saturday: saturdayIndex >= 0 ? daily[saturdayIndex] : null,
       sunday: daily[sundayIndex]
     };
   };
@@ -1118,6 +957,20 @@ Focus on weekend plans. Keep it under 30 words.`;
         };
         
       case 'weekend':
+        if (!weatherInfo.saturday) {
+          return {
+            title: 'This Weekend',
+            summary: `Sunday: ${weatherInfo.sunday.summary}`,
+            temperature: `${formatTemp(weatherInfo.sunday.temperatureHigh)}`,
+            feelsLike: `Low ${formatTemp(weatherInfo.sunday.temperatureLow)}`,
+            details: [
+              { label: 'Sun High', value: formatTemp(weatherInfo.sunday.temperatureHigh) },
+              { label: 'Sun Low', value: formatTemp(weatherInfo.sunday.temperatureLow) },
+              { label: 'Humidity', value: `${Math.round(weatherInfo.sunday.humidity * 100)}%` },
+              { label: 'UV Index', value: weatherInfo.sunday.uvIndex }
+            ]
+          };
+        }
         return {
           title: 'This Weekend',
           summary: `Saturday: ${weatherInfo.saturday.summary}`,
@@ -1309,7 +1162,7 @@ Focus on weekend plans. Keep it under 30 words.`;
         
         <TouchableOpacity 
           style={[styles.button, gettingCurrentLocation && styles.buttonDisabled]}
-          onPress={getCurrentLocation}
+          onPress={() => handleSelectLocation({ type: 'current' })}
           disabled={gettingCurrentLocation}
         >
           <Text style={styles.buttonText}>
@@ -1401,9 +1254,21 @@ Focus on weekend plans. Keep it under 30 words.`;
               <Text style={styles.locationText}>{selectedLocation.name}</Text>
             </View>
             
+            {/* Pull to refresh doesn't exist in a desktop browser */}
+            {Platform.OS === 'web' && (
+              <TouchableOpacity
+                style={[styles.menuButton, styles.refreshButton]}
+                onPress={handleRefresh}
+                disabled={refreshing}
+                accessibilityLabel="Refresh weather and AI summary"
+              >
+                <Text style={styles.refreshButtonText}>{refreshing ? '…' : '↻'}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity 
               style={styles.menuButton}
               onPress={() => setSettingsModalVisible(true)}
+              accessibilityLabel="Settings"
             >
               <View style={styles.hamburger}>
                 <View style={styles.hamburgerLine} />
@@ -1429,14 +1294,7 @@ Focus on weekend plans. Keep it under 30 words.`;
                   styles.timeframeChip,
                   selectedTimeframe === section.id && styles.timeframeChipSelected
                 ]}
-                onPress={() => {
-                  setSelectedTimeframe(section.id);
-                  // Generate AI summary if not already generated
-                  if (weatherData && !aiSummaries[section.id] && !summaryLoading[section.id]) {
-                    const weatherInfo = prepareWeatherInfo(weatherData);
-                    generateAISummary(section.id, weatherInfo, selectedLocation.name);
-                  }
-                }}
+                onPress={() => setSelectedTimeframe(section.id)}
               >
                 <Text style={[
                   styles.timeframeChipText,
@@ -1569,9 +1427,7 @@ Focus on weekend plans. Keep it under 30 words.`;
         onClose={() => setSettingsModalVisible(false)}
         selectedPersonality={selectedPersonality}
         onPersonalityChange={async (personality) => {
-          setPersonalityTransitioning(true);
           setSelectedPersonality(personality);
-          setMode(personality);
           
           // Save personality to storage
           await StorageUtils.savePersonality(personality);
@@ -1640,6 +1496,14 @@ const styles = StyleSheet.create({
   },
   locationDisplay: {
     flex: 1,
+  },
+  refreshButton: {
+    marginLeft: 'auto',
+    marginRight: 10,
+  },
+  refreshButtonText: {
+    fontSize: 22,
+    color: '#333',
   },
   menuButton: {
     backgroundColor: '#f8f9fa',
@@ -1948,6 +1812,9 @@ const styles = StyleSheet.create({
   },
   locationInput: {
     flex: 1,
+    // A browser <input> has a built-in minimum width; without this it
+    // pushes the Add button off the edge of a phone screen.
+    minWidth: 0,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
