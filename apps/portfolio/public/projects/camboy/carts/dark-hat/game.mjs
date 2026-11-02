@@ -6,7 +6,7 @@
  */
 
 import {
-  W, H, TILE, COLS, ROWS, TOP, SPEED, SOUL_MAX, NAME_LEN, ALPHABET, STORY, TRICKS, LAYERS, BOSSES, ENEMIES,
+  W, H, TILE, COLS, ROWS, TOP, SPEED, SOUL_MAX, NAME_LEN, ALPHABET, STORY, TRICKS, LAYERS, BOSSES, ENEMIES, RABBIT, SHIELD_CARDS, rabbitLanding,
   cleanName, say, trickStats, knows, choosePath, usable, layoutLayer, neighbor, roomTiles, solidAt, moveBox,
   drainSoul, gainSoul, newRun, validRun, beatBoss, descend, dist, faceFrom, makeRng, roomEnemies,
 } from "./rules.mjs";
@@ -65,7 +65,7 @@ const BUNNY = [".3...3.", ".30.03.", ".30003.", "3000003", "3030303", "3000003",
 const SOLDIER = ["..333..", ".30003.", ".30303.", "3333333", "3000003", "3030303", "3000003", "3333333", ".3...3.", ".33.33."];
 const WISP = ["..111..", ".11111.", "1131311", "1111111", "1111111", "1.1.1.1"];
 const SPIRIT = ["..000..", ".00000.", "0030300", "0000000", "0000000", ".0.0.0."];
-const RABBIT = [
+const RABBIT_ROWS = [
   ".33....33...",
   ".303..303...",
   ".303..303...",
@@ -177,7 +177,7 @@ export function boot(hw) {
   /* ---------- runs and rooms ---------- */
 
   function startRun() {
-    S.endT = null; S.bossIn = null;
+    S.endT = null; S.bossIn = null; P.shield = null;
     R = newRun(name);
     save();
     saved = R;
@@ -187,7 +187,7 @@ export function boot(hw) {
   }
 
   function continueRun() {
-    S.endT = null; S.bossIn = null;
+    S.endT = null; S.bossIn = null; P.shield = null;
     R = JSON.parse(JSON.stringify(saved));
     name = R.name;
     layout = layoutLayer(R.layer);
@@ -218,7 +218,7 @@ export function boot(hw) {
     const room = S.room;
     S.enemies = []; S.shots = []; S.foes = []; S.pickups = []; S.fx = [];
     S.boss = null; S.spirit = null; S.ladder = null; S.fountain = null; S.decoy = null;
-    P.shield = null; P.wand = null; P.whipT = 0; P.frozen = false;
+    P.wand = null; P.whipT = 0; P.frozen = false; // the card shield comes along
     S.sealed = false;
     // Arriving through a door: stand just inside the matching door.
     if (from === "left") { P.x = RW - 12; P.y = 64; }
@@ -330,6 +330,13 @@ export function boot(hw) {
     if (!id || P.cd[slot] > 0) return;
     const path = R.tricks[id];
     const st = trickStats(id, path);
+    if (id === "tornado" && path === "shield") {
+      // The cards stay up until each one is used; the wait starts after the last.
+      if (P.shield) return;
+      P.shield = { cards: Array(SHIELD_CARDS).fill(true), a: 0, srcs: Array.from({ length: SHIELD_CARDS }, () => ({})) };
+      sfx.tornado();
+      return;
+    }
     P.cd[slot] = st.cd;
     const f = P.face;
     switch (id) {
@@ -362,8 +369,7 @@ export function boot(hw) {
         break;
       }
       case "tornado":
-        if (path === "shield") { P.shield = { t: 6, a: 0, src: {} }; sfx.tornado(); }
-        else {
+        {
           for (let i = 0; i < 10; i++) {
             const a = (i / 10) * Math.PI * 2;
             S.shots.push({ kind: "card", x: P.x, y: P.y - 2, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, life: 0.55, dmg: st.dmg, pierce: true, src: {} });
@@ -427,20 +433,28 @@ export function boot(hw) {
 
     if (P.shield) {
       const sh = P.shield;
-      sh.t -= dt; sh.a += dt * 7;
-      for (let i = 0; i < 3; i++) {
-        const a = sh.a + (i * Math.PI * 2) / 3;
+      sh.a += dt * 7;
+      sh.cards.forEach((alive, i) => {
+        if (!alive) return;
+        const a = sh.a + (i * Math.PI * 2) / SHIELD_CARDS;
         const x = P.x + Math.cos(a) * 14, y = P.y - 2 + Math.sin(a) * 14;
-        zap(x, y, 4, 1, sh.src, 0.4);
+        // Each card is spent on the first thing it blocks or hits.
+        let used = false;
         // Cards drink the dark magic they catch.
-        for (const e of S.enemies) if (e.kind === "spark" && !e.dead && dist(x, y, e.x, e.y) < 6) {
-          e.dead = true; puff(e.x, e.y, 3); sfx.block(); R.soul = gainSoul(R.soul, "block");
+        for (const e of S.enemies) if (!used && e.kind === "spark" && !e.dead && dist(x, y, e.x, e.y) < 6) {
+          e.dead = true; used = true; puff(e.x, e.y, 3); R.soul = gainSoul(R.soul, "block");
         }
-        for (const f of S.foes) if (!f.dead && dist(x, y, f.x, f.y) < 6) {
-          f.dead = true; sfx.block(); R.soul = gainSoul(R.soul, "block");
+        for (const f of S.foes) if (!used && !f.dead && dist(x, y, f.x, f.y) < 6) {
+          f.dead = true; used = true; R.soul = gainSoul(R.soul, "block");
         }
+        if (!used && zap(x, y, 4, 1, sh.srcs[i], 0.4)) used = true;
+        if (used) { sh.cards[i] = false; sfx.block(); puff(x, y, 3); haptic(6); }
+      });
+      if (!sh.cards.some(Boolean)) {
+        P.shield = null;
+        const st = trickStats("tornado", "shield");
+        for (const slot of ["a", "b"]) if (R.equip[slot] === "tornado") P.cd[slot] = st.cd;
       }
-      if (sh.t <= 0) P.shield = null;
     }
 
     const w = P.wand;
@@ -756,9 +770,10 @@ export function boot(hw) {
       const fast = b.hp < b.max / 2;
       if (b.state === "idle" && b.stT <= 0) { b.state = "crouch"; b.stT = 0.45; }
       else if (b.state === "crouch" && b.stT <= 0) {
-        b.state = "air"; b.stT = fast ? 0.7 : 0.9; b.air = b.stT;
+        b.state = "air"; b.stT = fast ? RABBIT.airFast : RABBIT.air; b.air = b.stT;
         b.from = { x: b.x, y: b.y };
-        b.to = { x: Math.max(20, Math.min(RW - 20, P.x)), y: Math.max(24, Math.min(RH - 16, P.y)) };
+        const land = rabbitLanding(b.from, P);
+        b.to = { x: Math.max(20, Math.min(RW - 20, land.x)), y: Math.max(24, Math.min(RH - 16, land.y)) };
       } else if (b.state === "air") {
         const k = 1 - Math.max(0, b.stT) / b.air;
         b.x = b.from.x + (b.to.x - b.from.x) * k; b.y = b.from.y + (b.to.y - b.from.y) * k;
@@ -771,10 +786,10 @@ export function boot(hw) {
         }
       }
       if (b.ring) {
-        b.ring.t += dt; b.ring.r = 4 + b.ring.t * 80;
+        b.ring.t += dt; b.ring.r = 4 + b.ring.t * RABBIT.ringSpeed;
         const d = dist(P.x, P.y, b.ring.x, b.ring.y);
         if (Math.abs(d - b.ring.r) < 4 && !b.ring.hit) { b.ring.hit = true; hurtPlayer(1, b.ring.x, b.ring.y); }
-        if (b.ring.r > 60) b.ring = null;
+        if (b.ring.r > RABBIT.ring) b.ring = null;
       }
       if (b.state !== "air" && dist(b.x, b.y, P.x, P.y) < 12) hurtPlayer(1, b.x, b.y);
     } else if (b.kind === "king") {
@@ -1190,7 +1205,7 @@ export function boot(hw) {
     drawBoss();
     for (const e of S.enemies) drawEnemy(e);
     drawKid();
-    if (P.shield) for (let i = 0; i < 3; i++) { const a = P.shield.a + (i * Math.PI * 2) / 3; drawCard(P.x + Math.cos(a) * 14, P.y - 2 + Math.sin(a) * 14); }
+    if (P.shield) P.shield.cards.forEach((alive, i) => { if (!alive) return; const a = P.shield.a + (i * Math.PI * 2) / SHIELD_CARDS; drawCard(P.x + Math.cos(a) * 14, P.y - 2 + Math.sin(a) * 14); });
     if (P.wand) {
       const w = P.wand;
       const a = Math.atan2(w.vy, w.vx);
@@ -1241,7 +1256,7 @@ export function boot(hw) {
       const lift = Math.round(b.lift || 0);
       if (b.state === "air") ellipse(Math.round(b.to.x), Math.round(TOP + b.to.y + 6), 8, 3, 3, null);
       const squash = b.state === "crouch" ? 2 : 0;
-      sprite(RABBIT, Math.round(b.x), Math.round(TOP + b.y + 12 - lift + squash), P.x < b.x, null, 2);
+      sprite(RABBIT_ROWS, Math.round(b.x), Math.round(TOP + b.y + 12 - lift + squash), P.x < b.x, null, 2);
     } else if (b.kind === "king") {
       if (b.state === "show") {
         const x = Math.round(b.x), y = Math.round(TOP + b.y);
@@ -1310,6 +1325,8 @@ export function boot(hw) {
           const st = trickStats(k, R.tricks[k]);
           rect(x, 13, Math.round(15 * (1 - P.cd[slot] / st.cd)), 1, 0);
         }
+        // Shield cards still circling.
+        if (k === "tornado" && P.shield) P.shield.cards.forEach((alive, i) => alive && rect(x + 2 + i * 3, 13, 2, 1, 0));
       }
     });
     if (S.boss) {

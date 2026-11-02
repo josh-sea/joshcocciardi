@@ -188,6 +188,23 @@ export const LAYERS = [
   },
 ];
 
+/**
+ * The Giant Rabbit's hop and the shockwave ring it makes landing. He hops
+ * at most `hop` pixels toward you, so his shadow never lands too far to run
+ * from, and the ring stops at `ring`, so getting clear of it is possible.
+ */
+export const RABBIT = { hop: 46, air: 0.9, airFast: 0.8, ring: 34, ringSpeed: 60 };
+
+/** Where the rabbit lands: toward you, but never more than one hop away. */
+export function rabbitLanding(from, toward, hop = RABBIT.hop) {
+  const d = Math.hypot(toward.x - from.x, toward.y - from.y);
+  if (d <= hop) return { x: toward.x, y: toward.y };
+  return { x: from.x + ((toward.x - from.x) / d) * hop, y: from.y + ((toward.y - from.y) / d) * hop };
+}
+
+/** The card shield: three cards that circle until each one blocks or hits something. */
+export const SHIELD_CARDS = 3;
+
 export const BOSSES = {
   rabbit: { name: "THE GIANT RABBIT", hp: 20 },
   king: { name: "THE CARD KING", hp: 26 },
