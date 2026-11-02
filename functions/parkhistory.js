@@ -598,6 +598,36 @@ async function staleParks() {
  * have reported no data for a full archive until the next day rolled over.
  * Four existence reads a run is a cheap way not to ship that.
  */
+/* A park whose hourly rollup was built by older code and will never be
+ * rebuilt on its own.
+ *
+ * The rebuild above runs for a park that stored days this pass, which is
+ * right while a backfill is working and wrong the moment it finishes: a
+ * complete park reports "up to date" for ever and is never rebuilt again.
+ * So the per-ride grids, added after Magic Kingdom, EPCOT and Hollywood
+ * Studios were already complete, would never have been written for any of
+ * them. Three parks out of four with charts that cannot cross-filter, and
+ * nothing anywhere reporting a problem.
+ *
+ * This is the same hole `missingRollups` fills on the daily side, one shape
+ * change later: there, a rollup that does not exist; here, one that exists
+ * and is out of date.
+ *
+ * `span` is the marker because it arrived with the grids, so a rollup
+ * without one predates them. Four reads a run, and it clears itself the
+ * first time each park is rebuilt.
+ */
+async function outdatedRollups() {
+  const keys = Object.keys(PARKS);
+  const refs = keys.map((k) => db().collection('park_rollups').doc(`${k}_hours`));
+  const snaps = await db().getAll(...refs);
+  const out = [];
+  snaps.forEach((snap, i) => {
+    if (snap.exists && typeof snap.data().span !== 'number') out.push(keys[i]);
+  });
+  return out;
+}
+
 async function missingRollups() {
   const keys = Object.keys(PARKS);
   const refs = keys.map((k) => db().collection('park_rollups').doc(k));
@@ -707,17 +737,22 @@ async function archiveHours({ now = new Date(), apiKey = null, from = null, to =
    * daily side this is not deferred to a stale list: an hourly backfill can
    * take several runs, and a chart that only appears at the very end is a
    * chart nobody can use to tell whether the backfill is working.
+   *
+   * Plus any park whose rollup is older than the shape we now write, which
+   * is the case touching alone cannot reach. See outdatedRollups.
    */
+  const touched = Object.keys(PARKS).filter((key) => {
+    const note = String(report[key] || '');
+    return !note.startsWith('0 days') && /days/.test(note);
+  });
   const rolled = {};
-  for (const key of Object.keys(PARKS)) {
-    if (!String(report[key] || '').startsWith('0 days') && /days/.test(String(report[key] || ''))) {
-      try {
-        const out = await rebuildHoursRollup(key);
-        rolled[key] = out ? `${out.rides} rides over ${out.days} days` : 'nothing yet';
-      } catch (err) {
-        console.error(`[parkArchive] hours rollup ${key} failed`, err);
-        rolled[key] = `failed: ${err.message || err}`;
-      }
+  for (const key of [...new Set([...touched, ...(await outdatedRollups())])]) {
+    try {
+      const out = await rebuildHoursRollup(key);
+      rolled[key] = out ? `${out.rides} rides over ${out.days} days` : 'nothing yet';
+    } catch (err) {
+      console.error(`[parkArchive] hours rollup ${key} failed`, err);
+      rolled[key] = `failed: ${err.message || err}`;
     }
   }
 
@@ -855,5 +890,6 @@ exports._internal = {
   getPage, planFloor, held, fillRange, writeCursor,
   rebuildRollup, markStale, clearStale, staleParks, missingRollups,
   fillHours, heldHours, hourlyWindow, hoursLeft, archiveHours, rebuildHoursRollup,
+  outdatedRollups,
   OPEN_LIMIT, BACKFILL_LIMIT, HOURS_LIMIT, BUDGET_MS, FETCH_SHARE_MS, HOSTING_CAP_MS, LOOKUP_CHUNK,
 };
