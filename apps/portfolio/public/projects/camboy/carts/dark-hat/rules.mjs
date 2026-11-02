@@ -338,6 +338,49 @@ export function applyPick(run, pick, i) {
   return true;
 }
 
+/* ---------- the spell book ---------- */
+
+/**
+ * Every path and upgrade, for the spell book. A node's key is "a:cards" for
+ * a path or "a:cards:twin" for one of its upgrades ("d:" for defenses).
+ * Path names always show, so you know what exists; an upgrade stays "???"
+ * until you've taken it once, in any run. Flip SHOW_ALL to reveal them all.
+ */
+export const SHOW_ALL = false;
+
+export const bookPaths = () => [
+  ...Object.entries(ATTACKS).map(([id, p]) => ({ kind: "a", id, ...p })),
+  ...Object.entries(DEFENSES).map(([id, p]) => ({ kind: "d", id, ...p })),
+];
+
+export const nodeKey = (kind, id, upId = null) => (upId ? `${kind}:${id}:${upId}` : `${kind}:${id}`);
+
+/** Every key in the book: 8 paths and their 48 upgrades. */
+export const allNodeKeys = () => bookPaths().flatMap((p) => [nodeKey(p.kind, p.id), ...p.tiers.flat().map((u) => nodeKey(p.kind, p.id, u.id))]);
+
+/**
+ * The build a "try it" demo uses for a node: the path, plus the upgrade on
+ * the same side of the tree at every tier up to the chosen one. tier -1 is
+ * the plain path.
+ */
+export function demoBuild(path, tier, col) {
+  const ups = [];
+  for (let t = 0; t <= tier; t++) ups.push(path.tiers[t][col].id);
+  return { id: path.id, ups, picked: true };
+}
+
+/** Which book keys a pick unlocks. Bonuses aren't in the book. */
+export function keysForPick(run, pick, i) {
+  const id = pick.options[i];
+  if (pick.type === "attack") return [nodeKey("a", id)];
+  if (pick.type === "defense") return [nodeKey("d", id)];
+  if (pick.type === "upgrade") {
+    const kind = pick.tree === "attack" ? "a" : "d";
+    return [nodeKey(kind, run[pick.tree].id, id)];
+  }
+  return [];
+}
+
 /* ---------- the hat's layers ---------- */
 
 /**
@@ -387,6 +430,7 @@ export const BOSSES = {
 };
 
 export const ENEMIES = {
+  dummy: { hp: 3, speed: 0, touch: 0 },   // straw targets in the spell book's practice room
   spark: { hp: 1, speed: 26, touch: 1 },
   glove: { hp: 2, speed: 20, touch: 1 },
   bunny: { hp: 2, speed: 36, touch: 1 },
