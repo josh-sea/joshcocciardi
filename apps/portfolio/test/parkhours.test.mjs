@@ -198,6 +198,86 @@ const sparse = H.buildHours('mk', [{
 }]);
 ok(!sparse.rides.ghost, 'a ride with no observations at all is left out');
 
+/* ── the per-day grid ──────────────────────────────────────────────────────
+ *
+ * The profiles above cannot answer "when is this busy in October", because
+ * building them throws the date axis away, and a median cannot be
+ * re-aggregated afterwards to put it back. So the values go out per day as
+ * well, and everything about that is positional: day 40 has to land on day
+ * 40 or every month boundary is wrong.
+ *
+ * `built` holds 3 November, 8 November and 10 November, so the grid is eight
+ * days long with gaps, not three days long.
+ */
+is(built.span, 8, 'the span is the window, inclusive, not the count of days held');
+{
+  const grid = built.grids.r1.h.split(H.DAY_SEP);
+  is(grid.length, 8, 'the grid has a slot per day of the window');
+  is(H.decode(grid[0])[12], 10, 'the first day is where it belongs');
+  is(grid[1], '', 'a day the archive has nothing for is empty, not missing');
+  is(grid[2], '', 'and stays empty rather than collapsing the ones after it');
+  is(H.decode(grid[5])[12], 50, 'so the sixth day is 8 November, five days on');
+  is(H.decode(grid[7])[12], 20, 'and the last is 10 November');
+}
+
+// Leading gaps are the ones that matter: dropping them shifts every day in
+// the grid and silently rotates the calendar.
+{
+  const late = H.buildHours('mk', [
+    { park: 'mk', date: '2025-11-03', index: H.encode([]), rides: {} },
+    { park: 'mk', date: '2025-11-06', index: H.encode([5]), rides: { r1: { n: 'A', h: H.encode([5]) } } },
+  ]);
+  const grid = late.grids.r1.h.split(H.DAY_SEP);
+  is(grid[0], '', 'a window opening on a day this ride has nothing for keeps its empty slot');
+  is(H.decode(grid[3])[0], 5, 'so the day three on is still three on');
+}
+
+// Trailing gaps carry no information, and trimming them is what keeps the
+// string from growing every time a park closes for a season.
+{
+  const trailing = H.buildHours('mk', [
+    { park: 'mk', date: '2025-11-03', index: H.encode([7]), rides: { r1: { n: 'A', h: H.encode([7]) } } },
+    { park: 'mk', date: '2025-11-09', index: H.encode([]), rides: {} },
+  ]);
+  ok(!trailing.grids.r1.h.endsWith(H.DAY_SEP), 'trailing empty days are trimmed');
+  is(trailing.grids.r1.h, '7', 'down to the last day that has anything');
+  is(trailing.span, 7, 'while the span still records how wide the window was');
+}
+
+/* Ride grids travel beside the rollup, not inside it: all of Magic Kingdom's
+ * together are about 566KB against a 1MB document limit, and they grow with
+ * every day collected. The park keeps no grid of its own at all, because
+ * nothing reads one yet and `{park}_hours` is fetched on every page open.
+ */
+ok(!('grid' in built), 'the park rollup carries no grid of its own');
+is(Object.keys(built.grids), ['r1'], 'every ride that survived gets a grid');
+is(built.grids.r1.n, 'Space Mountain', 'carrying the name the rollup settled on');
+{
+  const grid = built.grids.r1.h.split(H.DAY_SEP);
+  is(grid.length, 8, 'positional over the same window as the park');
+  is(H.decode(grid[0])[12], 10, 'with the ride\'s own values');
+  is(grid[1], '', 'and the same gaps');
+  is(H.decode(grid[7])[12], 20, 'to the same last day');
+}
+ok(!sparse.grids.ghost, 'a ride dropped for posting nothing gets no grid either');
+
+// The grid and the profile have to describe the same ride. If they disagree
+// the chart and the chart it filters are two different rides.
+is(H.median(H.decode(built.grids.r1.h.split(H.DAY_SEP)[0])),
+  H.median(H.decode(built.grids.r1.h.split(H.DAY_SEP)[0])),
+  'a grid day decodes to the same 24 slots it was built from');
+is(H.decode(built.grids.r1.h.split(H.DAY_SEP)[0]).length, 24, 'a grid day is 24 slots wide');
+
+/* The arithmetic the positions rest on. Inclusive at both ends: a window
+ * from the 3rd to the 10th is eight days, not seven.
+ */
+is(H.dayCount('2025-11-03', '2025-11-10'), 8, 'a span is inclusive at both ends');
+is(H.dayCount('2025-11-03', '2025-11-03'), 1, 'one day is one day');
+is(H.dayIndex('2025-11-03', '2025-11-03'), 0, 'the first day is index zero');
+is(H.dayIndex('2025-11-03', '2025-11-10'), 7, 'and the eighth is index seven');
+// Across the US fall-back, where a naive hour count gives 7.04 days.
+is(H.dayCount('2026-10-29', '2026-11-05'), 8, 'a span across the DST seam is still eight days');
+
 is(H.buildHours('mk', []), null, 'no documents, no rollup');
 is(H.buildHours('mk', null), null, 'and null does not throw');
 

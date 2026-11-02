@@ -523,14 +523,52 @@ async function rebuildRollup(key) {
 /* The hourly rollup, built from park_hours exactly as the daily one is built
  * from park_history: a projection, never a second copy that can drift.
  */
+/* How many ride grids go in one batch. Firestore's limit is 500 writes; the
+ * margin is for the park document sharing a run, not for arithmetic.
+ */
+const GRID_CHUNK = 200;
+
+/* The hourly rollup, plus a per-day grid per ride in its own document.
+ *
+ * The grids are separate on purpose. Magic Kingdom's thirty-one of them come
+ * to about 566KB together against a 1MB document limit, and unlike the
+ * profiles they grow with every day collected, so one document holding all
+ * of them is a size limit with a date on it. Separate, each is about 21KB,
+ * it is fetched only when that ride is opened, and the page does not pay
+ * half a megabyte to draw one chart on park wifi.
+ *
+ * Spread carefully: `built` carries `grids`, and spreading it into the park
+ * document would put all of them back.
+ */
 async function rebuildHoursRollup(key) {
   const snap = await db().collection('park_hours').where('park', '==', key).get();
   const built = hours.buildHours(key, snap.docs.map((d) => d.data()));
   if (!built) return null;
+
+  const { grids, ...head } = built;
   await db().collection('park_rollups').doc(`${key}_hours`).set({
-    ...built, builtAt: FieldValue.serverTimestamp(),
+    ...head, builtAt: FieldValue.serverTimestamp(),
   });
-  return { days: built.days, rides: Object.keys(built.rides).length };
+
+  const ids = Object.keys(grids);
+  for (let i = 0; i < ids.length; i += GRID_CHUNK) {
+    const batch = db().batch();
+    for (const id of ids.slice(i, i + GRID_CHUNK)) {
+      batch.set(db().collection('park_rollups').doc(`${key}_hours_${id}`), {
+        park: key,
+        ride: id,
+        n: grids[id].n,
+        from: built.from,
+        to: built.to,
+        span: built.span,
+        h: grids[id].h,
+        builtAt: FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  return { days: built.days, rides: Object.keys(built.rides).length, grids: ids.length };
 }
 
 async function markStale(parks) {

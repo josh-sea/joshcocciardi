@@ -169,11 +169,58 @@ function reduceDay(entities, date, tz) {
  * must not be confused: a ride that was closed every Tuesday morning has no
  * Tuesday-morning wait, which is not the same as a zero-minute one.
  */
+/* ── the per-day grid ──────────────────────────────────────────────────────
+ *
+ * The profiles below answer "when is this busy". They cannot answer "when is
+ * this busy in October", because building them throws the date axis away.
+ *
+ * That is not a gap a richer summary fixes. A median cannot be
+ * re-aggregated: ship a median per month and a reader who selects two
+ * months, or a month and a weekday, has no correct number available. Any
+ * cross-filtering worth the name needs the values themselves, grouped at
+ * read time over whatever is selected.
+ *
+ * So one 24-slot series per day goes out as well, positional from `from` the
+ * same way the daily rollup's series are, with an empty entry for a day the
+ * archive has nothing for. About 20KB per ride over Magic Kingdom's 398
+ * days, against the 1MB document limit.
+ *
+ * Per ride only. The park's own grid is another 22KB in a document fetched
+ * on every page open, and the park-level charts do not cross-filter yet, so
+ * it would be 44% added to a hot path for data nothing reads. It is four
+ * lines to add back when those charts want it, and the rollup is a
+ * projection, so adding it is a rebuild and not a migration.
+ */
+const DAY_SEP = ';';
+
+const at = (dateStr) => new Date(`${dateStr}T12:00:00Z`);
+
+function dayIndex(from, date) {
+  return Math.round((at(date).getTime() - at(from).getTime()) / 86400000);
+}
+
+function dayCount(from, to) {
+  return dayIndex(from, to) + 1;  // inclusive at both ends
+}
+
+/* Trailing empty days are dropped; leading ones never are. The grid is
+ * positional, so an empty slot at the front is what makes day 40 land on day
+ * 40, while an empty one at the end carries no information at all.
+ */
+const encodeGrid = (perDay) => perDay
+  .map((slots) => (slots ? encode(slots) : ''))
+  .join(DAY_SEP)
+  .replace(new RegExp(`(?:${DAY_SEP})+$`), '');
+
 function buildHours(park, docs) {
   const rows = (docs || [])
     .filter((d) => d && typeof d.date === 'string')
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   if (!rows.length) return null;
+
+  const span = dayCount(rows[0].date, rows[rows.length - 1].date);
+  // id -> 24-slot series per day, positional from the first day
+  const gridByRide = new Map();
 
   // id -> { n, all: [24][], dow: [7][24][] }
   const rides = new Map();
@@ -184,7 +231,8 @@ function buildHours(park, docs) {
     // The park's own date string, read back as UTC because that is how it was
     // written. No zone conversion belongs here: which day this was has
     // already been decided.
-    const dow = new Date(`${row.date}T12:00:00Z`).getUTCDay();
+    const dow = at(row.date).getUTCDay();
+    const i = dayIndex(rows[0].date, row.date);
 
     decode(row.index).forEach((v, h) => {
       if (v === null) return;
@@ -205,7 +253,15 @@ function buildHours(park, docs) {
       }
       // Rows are sorted, so the last name wins: the one a reader recognises.
       if (typeof ride.n === 'string' && ride.n) slot.n = ride.n;
-      decode(ride.h).forEach((v, h) => {
+
+      const hours = decode(ride.h);
+      if (i >= 0 && i < span && hours.length) {
+        let grid = gridByRide.get(id);
+        if (!grid) { grid = new Array(span).fill(null); gridByRide.set(id, grid); }
+        grid[i] = hours;
+      }
+
+      hours.forEach((v, h) => {
         if (v === null) return;
         slot.all[h].push(v);
         slot.dow[dow][h].push(v);
@@ -220,17 +276,32 @@ function buildHours(park, docs) {
     ridesOut[id] = { n: slot.n || id, all: profile(slot.all), dow: slot.dow.map(profile) };
   }
 
+  /* The per-ride grids are returned beside the rollup rather than inside it.
+   * All of them together are about 620KB for Magic Kingdom and grow with
+   * every day collected, so they belong in a document each, fetched when a
+   * ride is actually opened. The caller writes them; this only shapes them.
+   */
+  const grids = {};
+  for (const [id, grid] of gridByRide) {
+    if (!ridesOut[id]) continue;  // a ride dropped for posting nothing
+    const h = encodeGrid(grid);
+    if (h) grids[id] = { n: ridesOut[id].n, h };
+  }
+
   return {
     park,
     from: rows[0].date,
     to: rows[rows.length - 1].date,
     days: rows.length,
+    span,
     index: { all: profile(parkAll), dow: parkDow.map(profile) },
     rides: ridesOut,
+    grids,
   };
 }
 
 module.exports = {
   HOURS, parkHour, parkDate, minuteOf, sampleDay, reduceDay, buildHours,
   median, encode, decode,
+  encodeGrid, dayIndex, dayCount, DAY_SEP,
 };

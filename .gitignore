@@ -31,5 +31,7 @@ firestore-debug.log
 database-debug.log
 ui-debug.log
 
-# Screenshot written by apps/portfolio/test/history-render.mjs when it runs.
+# Screenshots written by apps/portfolio/test/history-render.mjs when it runs:
+# the history screen, and the same ride with a filter applied.
 apps/portfolio/test/history.png
+apps/portfolio/test/history-filtered.png
