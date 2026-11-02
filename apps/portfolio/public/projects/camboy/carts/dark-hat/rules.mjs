@@ -137,12 +137,13 @@ export const ATTACKS = {
   },
   wand: {
     name: "WAND WHISTLE",
-    desc: "WHISTLE AND YOUR WAND HUNTS ENEMIES, THEN COMES BACK.",
-    base: { cd: 2.2, dmg: 2, hits: 4, speed: 130, steer: false, wands: 1, stars: false, size: 4 },
+    desc: "WHISTLE: YOUR WAND FLIES TO AN ENEMY, HITS IT AND COMES BACK.",
+    // One hit per trip, and no new whistle until it's back in your hand.
+    base: { cd: 0.4, dmg: 2, hits: 1, speed: 130, steer: false, wands: 1, stars: false, size: 4 },
     tiers: [
       [
-        { id: "steer", name: "STEERED WAND", desc: "HOLD A AND STEER IT YOURSELF. HITS HARDER.", set: { steer: true }, add: { dmg: 1, hits: 96 } },
-        { id: "hunt", name: "HUNTING WAND", desc: "IT KEEPS HUNTING AND HITS MORE ENEMIES EACH TRIP.", add: { hits: 3 } },
+        { id: "steer", name: "STEERED WAND", desc: "HOLD A TO STEER IT YOURSELF. IT HITS HARDER, UP TO THREE TIMES.", set: { steer: true }, add: { dmg: 1, hits: 2 } },
+        { id: "hunt", name: "HUNTING WAND", desc: "IT HUNTS ONE MORE ENEMY BEFORE IT COMES BACK.", add: { hits: 1 } },
       ],
       [
         { id: "twin", name: "TWIN WANDS", desc: "TWO WANDS FLY OUT AT ONCE.", add: { wands: 1 } },
@@ -150,7 +151,7 @@ export const ATTACKS = {
       ],
       [
         { id: "stars", name: "STAR WAND", desc: "EVERY HIT BURSTS INTO LITTLE STARS.", set: { stars: true } },
-        { id: "giant", name: "GIANT WAND", desc: "A BIG WAND THAT HITS VERY HARD.", add: { dmg: 3, size: 4 } },
+        { id: "giant", name: "GIANT WAND", desc: "A BIG WAND THAT HITS VERY HARD.", add: { dmg: 2, size: 4 } },
       ],
     ],
   },
@@ -987,12 +988,20 @@ export function descend(run) {
 
 export const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 
-/** Eight-way facing from a stick, as a unit vector. */
+/**
+ * Four-way facing from a stick: up, down, left or right, so shots line up
+ * easily. Near a diagonal you keep whichever of its two directions you
+ * were already facing, so walking diagonally doesn't flip your aim.
+ */
 export function faceFrom(x, y, prev) {
   const m = Math.hypot(x, y);
   if (m < 0.3) return prev;
-  const a = Math.round(Math.atan2(y, x) / (Math.PI / 4)) * (Math.PI / 4);
-  return { x: Math.round(Math.cos(a) * 1000) / 1000, y: Math.round(Math.sin(a) * 1000) / 1000 };
+  const ax = Math.abs(x), ay = Math.abs(y);
+  if (Math.abs(ax - ay) < 0.25 * m) {
+    if (prev.x && Math.sign(prev.x) === Math.sign(x)) return prev;
+    if (prev.y && Math.sign(prev.y) === Math.sign(y)) return prev;
+  }
+  return ax >= ay ? { x: Math.sign(x), y: 0 } : { x: 0, y: Math.sign(y) };
 }
 
 /** Small seeded generator so a run's rooms fill the same way each visit. */

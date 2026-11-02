@@ -194,6 +194,19 @@ console.log('\nthe hat');
   ok('deeper layers bring more enemies', roomEnemies(r, 3, 0).length >= 5 && roomEnemies(r, 3, 0).length <= 6);
 }
 
+console.log('\nthe wand and aiming');
+{
+  ok('the wand hits one enemy a trip', ATTACKS.wand.base.hits === 1);
+  ok('hunting adds just one more', statsOf({ id: 'wand', ups: ['hunt'] }, ATTACKS).hits === 2);
+  ok('steering hits up to three times, not forever', statsOf({ id: 'wand', ups: ['steer'] }, ATTACKS).hits === 3);
+  const R = { x: 1, y: 0 }, U = { x: 0, y: -1 };
+  const same = (a, b) => a.x === b.x && a.y === b.y;
+  ok('you face up, down, left or right', same(faceFrom(0.9, 0.3, U), R) && same(faceFrom(0.2, -1, R), U) && same(faceFrom(-1, 0, R), { x: -1, y: 0 }) && same(faceFrom(0, 1, R), { x: 0, y: 1 }));
+  ok('walking diagonally keeps the way you were facing', same(faceFrom(0.707, -0.707, U), U) && same(faceFrom(0.707, -0.707, R), R));
+  ok('a diagonal from a standstill picks a side', [faceFrom(0.707, 0.707, { x: 0, y: -1 })].every((f) => Math.abs(f.x) + Math.abs(f.y) === 1));
+  ok('a light touch keeps your facing', faceFrom(0.1, 0.1, U) === U);
+}
+
 console.log('\nthe giant rabbit');
 {
   const far = rabbitLanding({ x: 20, y: 20 }, { x: 140, y: 100 });
