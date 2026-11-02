@@ -191,6 +191,12 @@ jobs:
         working-directory: apps/portfolio
         run: node test/boulder.test.mjs
 
+      # Dark Hat on the Camboy: the hat's maps, trick paths, names, story
+      # text and run saves. Plain modules, no install needed.
+      - name: Test Dark Hat cartridge
+        working-directory: apps/portfolio
+        run: node test/dark-hat.test.mjs
+
       # Camboku: every generated board must have exactly one answer and be
       # finishable by logic alone, and hints must never point the wrong way.
       # Plain module, no install needed.
