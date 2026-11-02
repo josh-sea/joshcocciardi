@@ -158,6 +158,7 @@ $("pages").addEventListener("pointerup", (e) => {
 
 const device = $("device");
 let busy = false;
+let current = null; // the cartridge from the book that's in the slot
 
 // Safari on iPhone ignores backface-visibility here and lets the front
 // show through the back, so the hidden face is switched off by hand halfway
@@ -184,6 +185,7 @@ async function insert(c, push = true) {
   hw.unlock();
   hw.haptic(10);
   const mod = await c.load();
+  current = c;
   if (push) history.pushState({ cart: c.id }, "", `?cart=${c.id}`);
   document.body.dataset.view = "play";
   const drop = $("drop");
@@ -229,6 +231,88 @@ async function eject(pop = false) {
   if (!pop) history.pushState({}, "", location.pathname);
   busy = false;
 }
+
+/* ---------- a magician's glove swaps the cartridge ---------- */
+
+// A game can ask for a different cartridge mid-story (Malvado zaps you
+// into his own game). The fake cartridge only ever exists here, never in
+// the book. back: true puts the book's cartridge back.
+const GLOVE = `<svg class="glove" viewBox="0 0 60 72" aria-hidden="true">
+  <g fill="#fff" stroke="#1d1a2c" stroke-width="3" stroke-linejoin="round">
+    <rect x="11" y="38" width="9" height="28" rx="4.5"/><rect x="20.5" y="40" width="9" height="30" rx="4.5"/>
+    <rect x="30" y="40" width="9" height="30" rx="4.5"/><rect x="39.5" y="38" width="9" height="26" rx="4.5"/>
+    <rect x="9" y="14" width="42" height="32" rx="12"/><rect x="13" y="2" width="34" height="15" rx="4"/>
+  </g>
+  <g stroke="#1d1a2c" stroke-width="2.5" stroke-linecap="round"><path d="M23 22v10M30 21v11M37 22v10"/></g>
+</svg>`;
+
+async function swapCart(d) {
+  const drop = $("drop");
+  const old = drop.firstElementChild;
+  const into = d.back ? current : { id: "swap", title: d.title, label: d.label || "#555", load: async () => ({ cover: d.cover }) };
+  // Already the right cartridge (a run picked up again inside the swap): nothing to do.
+  if (!into || (old?.dataset.id ?? old?.firstElementChild?.dataset.id) === into.id) { d.done(true); return; }
+  busy = true;
+  const carrier = (cart) => {
+    const c = document.createElement("div");
+    c.className = "carrier";
+    cart.tabIndex = -1;
+    cart.getAnimations().forEach((a) => a.cancel());
+    c.dataset.id = cart.dataset.id;
+    c.append(cart);
+    return c;
+  };
+  const fly = (el, from, to, ms, easing = "cubic-bezier(.4,0,.5,1)") =>
+    el.animate([{ transform: from }, { transform: to }], { duration: ms, easing, fill: "forwards" }).finished;
+  if (reduced) {
+    drop.innerHTML = "";
+    drop.append(carrier(cartEl(into)));
+    hw.clunk();
+  } else {
+    await sleep(200);
+    await pose(0.62, 10, 0, 420);
+    await pose(0.62, 10, 180, 700);
+    // The glove comes down, grabs the cartridge and pulls it out of sight.
+    const out = old?.classList.contains("carrier") ? old : old ? carrier(old) : null;
+    out?.getAnimations().forEach((x) => x.cancel());
+    if (out) {
+      drop.innerHTML = "";
+      drop.append(out);
+      out.style.transform = "translateY(18%)";
+      out.insertAdjacentHTML("beforeend", GLOVE);
+      const glove = out.lastElementChild;
+      await fly(glove, "translateY(-320%)", "translateY(0)", 520, "cubic-bezier(.2,.7,.3,1)");
+      hw.haptic(15);
+      await glove.animate([{ transform: "rotate(0)" }, { transform: "rotate(-8deg)" }, { transform: "rotate(6deg)" }, { transform: "rotate(0)" }], { duration: 300 }).finished;
+      await fly(out, "translateY(18%)", "translateY(-115%)", 520);
+      await fly(out, "translateY(-115%)", "translateY(-420%)", 380, "cubic-bezier(.6,0,1,.6)");
+    }
+    // And brings the other one down and pushes it in.
+    const inn = carrier(cartEl(into));
+    inn.insertAdjacentHTML("beforeend", GLOVE);
+    drop.innerHTML = "";
+    drop.append(inn);
+    await fly(inn, "translateY(-420%)", "translateY(-115%)", 420, "cubic-bezier(0,.4,.4,1)");
+    await fly(inn, "translateY(-115%)", "translateY(18%)", 560, "cubic-bezier(.3,.6,.4,1)");
+    hw.clunk();
+    hw.haptic(30);
+    const glove = inn.querySelector(".glove");
+    await fly(glove, "translateY(0)", "translateY(-360%)", 480, "cubic-bezier(.5,0,.8,.5)");
+    glove.remove();
+    await pose(0.6, 11, 180, 90);
+    await pose(0.62, 10, 180, 90);
+    await pose(0.62, 10, 0, 800);
+    await pose(1, 0, 0, 420);
+    device.style.transform = "";
+  }
+  busy = false;
+  d.done();
+}
+addEventListener("camboy:swap", (e) => {
+  if (busy) return; // mid-insert or eject: the game just carries on
+  e.preventDefault();
+  swapCart(e.detail);
+});
 
 $("power").addEventListener("click", () => eject());
 addEventListener("popstate", (e) => {

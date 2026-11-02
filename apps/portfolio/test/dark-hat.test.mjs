@@ -13,8 +13,9 @@ import {
   DOOR_COLS, DOOR_ROWS, cleanName, say, layoutLayer, neighbor, roomTiles,
   ATTACKS, DEFENSES, BONUSES, TIERS, statsOf, attackStats, defenseStats, upgradeNames, nextPick, describePick, applyPick,
   SHOW_ALL, bookPaths, nodeKey, allNodeKeys, demoBuild, keysForPick,
-  moveBox, reachable, drainSoul, gainSoul, newRun, validRun, beatBoss, descend, faceFrom, roomEnemies,
+  moveBox, reachable, drainSoul, gainSoul, newRun, validRun, upgradeRun, beatBoss, descend, faceFrom, roomEnemies,
   SPEED, RABBIT, rabbitLanding,
+  CASTLE, CASTLE_LAYER, castleTiles, castleEnemies, SIDE, sideStep, sideMove, tileAt, standsOn, T_WALL, T_LEDGE, T_LADDER,
 } from '../public/projects/camboy/carts/dark-hat/rules.mjs';
 import { SONGS } from '../public/projects/camboy/carts/dark-hat/sound.mjs';
 import { compile, midi } from '../public/projects/camboy/js/chip.mjs';
@@ -32,7 +33,9 @@ console.log('\nnames and words');
   ok('no name falls back to HERO', cleanName('') === 'HERO' && cleanName('   ') === 'HERO' && cleanName(null) === 'HERO');
   ok('trailing blanks are dropped', cleanName('BO  ') === 'BO');
   ok('the name goes into the story', say('{N} FELL IN!', 'cam').join(' ') === 'CAM FELL IN!');
-  const all = [...STORY.intro, ...STORY.escape, STORY.spiritIntro, STORY.spiritAttack, STORY.spiritDefense, STORY.spiritUpgrade, STORY.spiritBonus, STORY.bossGift, STORY.fountain, STORY.caught, STORY.ladder];
+  const all = [...STORY.intro, ...STORY.escape, STORY.spiritIntro, STORY.spiritAttack, STORY.spiritDefense, STORY.spiritUpgrade, STORY.spiritBonus, STORY.bossGift, STORY.fountain, STORY.caught, STORY.ladder,
+    ...STORY.castleIntro, ...STORY.castleLand, STORY.castleBoss, STORY.castleDoor, ...STORY.castleExit, STORY.castleBack,
+    ...STORY.flightIntro, STORY.flightHelp, STORY.flightCaught];
   const longest = Math.max(...all.flatMap((t) => say(t, 'WWWW')).map((l) => l.length));
   ok('every line of story fits the text box, even with a four letter name', longest <= LINE_CHARS, `longest ${longest}`);
   ok('a page of story fits on the screen', all.every((t) => say(t, 'WWWW', 36).length <= 6));
@@ -141,12 +144,13 @@ console.log('\nthe spell book');
 
 console.log('\nthe hat');
 {
-  ok('three layers down to Malvado', LAYERS.length === 3 && LAYERS[2].boss === 'malvado');
+  ok('four layers down to Malvado, his castle third', LAYERS.length === 4 && LAYERS[3].boss === 'malvado' && CASTLE_LAYER === 2 && LAYERS[2].side);
   ok('every boss and enemy is defined', LAYERS.every((L) => BOSSES[L.boss] && L.enemies.every((e) => ENEMIES[e])));
   const spirits = LAYERS.map((_, i) => layoutLayer(i).rooms.filter((r) => r.kind === 'spirit').length);
   ok('two spirits on the first layer (an attack and a defense), more below to upgrade', spirits[0] === 2 && spirits[1] + spirits[2] >= 3);
   ok('enough spirits and bosses to max out both paths', spirits.reduce((a, b) => a + b, 0) - 2 + (LAYERS.length - 1) >= TIERS * 2);
   LAYERS.forEach((L, i) => {
+    if (L.side) return; // the castle has its own checks below
     const lay = layoutLayer(i);
     const ids = lay.rooms.map((r) => r.id);
     const seen = new Set([lay.start]);
@@ -187,7 +191,7 @@ console.log('\nthe hat');
   ok('walls stop you', b.x >= TILE);
   const r = newRun('bo', 42);
   ok('the same room fills the same way each visit', JSON.stringify(roomEnemies(r, 1, 4)) === JSON.stringify(roomEnemies(r, 1, 4)));
-  ok('deeper layers bring more enemies', roomEnemies(r, 2, 0).length >= 5);
+  ok('deeper layers bring more enemies', roomEnemies(r, 3, 0).length >= 5 && roomEnemies(r, 3, 0).length <= 6);
 }
 
 console.log('\nthe giant rabbit');
@@ -228,9 +232,125 @@ console.log('\nthe soul and the run');
   descend(r);
   ok('the ladder goes to the next layer\'s start', r.layer === 1 && r.room === layoutLayer(1).start);
   descend(r);
-  r.beaten[2] = false;
+  ok('the castle comes after the catacombs, at its gate', r.layer === CASTLE_LAYER && r.room === layoutLayer(CASTLE_LAYER).start);
+  ok('a run in the castle is a good save', validRun(JSON.parse(JSON.stringify(r))));
+  ok('beating the flat rabbit is not the end', beatBoss(r) === false);
+  descend(r);
+  ok('out of the castle is the bottom', r.layer === 3 && LAYERS[3].boss === 'malvado');
   ok('beating Malvado ends the game', beatBoss(r) === true);
   ok('the name is kept as typed', newRun('cAmP').name === 'CAMP' && NAME_LEN === 4);
+}
+
+console.log('\nmalvado\'s castle');
+{
+  const lay = layoutLayer(CASTLE_LAYER);
+  ok('six rooms, a start and a boss', lay.rooms.length === 6 && lay.rooms[lay.start].kind === 'start' && lay.rooms[lay.boss].kind === 'boss');
+  ok('every room is sixteen tiles tall, at least a screen wide, and square-edged', CASTLE.every((c) => c.map.length === ROWS && c.map[0].length >= COLS && c.map.every((row) => row.length === c.map[0].length)));
+  ok('every room is walled in', CASTLE.every((c) => /^#+$/.test(c.map[0]) && /^#+$/.test(c.map[ROWS - 1]) && c.map.every((row) => row[0] === '#' && row.at(-1) === '#')));
+  const letters = lay.rooms.flatMap((r) => r.doors.map((d) => d.id)).filter((l) => l !== 'x');
+  ok('every door letter joins exactly two rooms', [...new Set(letters)].every((l) => letters.filter((k) => k === l).length === 2));
+  ok('every door leads back to where you came from', lay.rooms.every((r) => r.doors.every((d) => d.id === 'x' || lay.rooms[d.to].doors.some((k) => k.id === d.id && k.to === r.id))));
+  ok('the only way out is in the throne room', lay.rooms.flatMap((r) => r.doors.filter((d) => d.id === 'x').map(() => r.kind)).join() === 'boss');
+  const doorsSound = lay.rooms.every((r) => {
+    const t = castleTiles(r);
+    return r.doors.every((d) => [0, 1].every((dx) => [0, 1, 2].every((dy) => t[d.ty - dy][d.tx + dx] === 0)) && [0, 1].every((dx) => standsOn(t, d.tx + dx, d.ty + 1)));
+  });
+  ok('every door is clear, two by three, with floor under it', doorsSound);
+  // The rooms connect through the doors.
+  const seen = new Set([lay.start]);
+  const q = [lay.start];
+  while (q.length) { const id = q.shift(); for (const d of lay.rooms[id].doors) if (d.to != null && !seen.has(d.to)) { seen.add(d.to); q.push(d.to); } }
+  ok('every room can be reached from the gate', seen.size === lay.rooms.length);
+  ok('one spirit and one fountain in the castle', lay.rooms.filter((r) => r.spirit).length === 1 && lay.rooms.filter((r) => r.fountain).length === 1);
+  ok('the spirit\'s room counts as a spirit room', lay.rooms.filter((r) => r.kind === 'spirit').every((r) => r.spirit));
+
+  // The physics.
+  const flat = Array.from({ length: ROWS }, (_, y) => Array.from({ length: COLS }, (_, x) => (y === ROWS - 1 || x === 0 || x === COLS - 1 ? T_WALL : 0)));
+  const body = () => ({ x: 80, y: (ROWS - 1) * TILE - 5, w: 6, h: 10, vx: 0, vy: 0, ground: true, climb: false });
+  const sim = (tiles, b, plan, frames) => { let top = b.y; for (let f = 0; f < frames; f++) { sideStep(tiles, b, plan(f), 1 / 60); top = Math.min(top, b.y); } return top; };
+  let b = body();
+  const rise = b.y - sim(flat, b, (f) => ({ x: 0, up: true, jump: f === 0 }), 90);
+  ok('a full jump rises about five tiles', rise > 4.5 * TILE && rise < 5.5 * TILE, `${rise.toFixed(1)}px`);
+  ok('and lands back on the floor', b.ground && b.y === (ROWS - 1) * TILE - 5);
+  b = body();
+  const hop = b.y - sim(flat, b, (f) => ({ x: 0, up: f < 4, jump: f === 0 }), 90);
+  ok('letting go of Up early makes a short hop', hop < rise * 0.5, `${hop.toFixed(1)}px`);
+  b = body();
+  sim(flat, b, () => ({ x: 1 }), 30);
+  ok('walking goes at walking speed', Math.abs(b.x - 80 - SIDE.walk * 0.5) < 1);
+  b = body(); b.x = 20;
+  sim(flat, b, () => ({ x: -1 }), 60);
+  ok('walls stop you', b.x - 3 >= TILE);
+  const ledge = flat.map((r) => r.slice()); for (let x = 6; x < 14; x++) ledge[11][x] = T_LEDGE;
+  b = body();
+  sim(ledge, b, (f) => ({ x: 0, up: true, jump: f === 0 }), 90);
+  ok('you jump up through a ledge and land on it', b.ground && b.y === 11 * TILE - 5);
+  sim(ledge, b, (f) => ({ x: 0, down: f < 2, downPressed: f === 0 }), 60);
+  ok('down drops you back through it', b.ground && b.y === (ROWS - 1) * TILE - 5);
+  const ladder = flat.map((r) => r.slice()); for (let y = 8; y < ROWS - 1; y++) ladder[y][10] = T_LADDER; for (let x = 11; x < 15; x++) ladder[8][x] = T_WALL;
+  b = body(); b.x = 84;
+  sim(ladder, b, () => ({ x: 0, up: true }), 200);
+  ok('up a ladder, you stand on top of it', b.ground && !b.climb && b.y === 8 * TILE - 5);
+  sim(ladder, b, (f) => ({ x: 0, down: true }), 200);
+  ok('and down again', b.ground && b.y === (ROWS - 1) * TILE - 5);
+  const box = { x: 40, y: 40, w: 6, h: 6 };
+  ok('a big fall can\'t skip through the floor', sideMove(flat, box, 0, 400).y === (ROWS - 1) * TILE - 3);
+  ok('off the sides is wall, above the top is open', tileAt(flat, -1, 3) === T_WALL && tileAt(flat, 3, -1) === 0);
+
+  // Can every door, spirit and fountain be reached, jumping and climbing, from every door?
+  const reach = (room, from) => {
+    const tiles = castleTiles(room);
+    const spots = new Map();
+    const q = [];
+    const add = (p) => { const k = `${Math.round(p.x / 3)},${Math.round(p.y)}`; if (!spots.has(k)) { spots.set(k, { x: p.x, y: p.y }); q.push({ x: p.x, y: p.y }); } };
+    add(from);
+    const run = (s, plan) => {
+      const p = { x: s.x, y: s.y, w: 6, h: 10, vx: 0, vy: 0, ground: true, climb: false };
+      let left = false;
+      for (let f = 0; f < 200; f++) {
+        const c = plan(f);
+        if (sideStep(tiles, p, c, 1 / 60).spikes) return;
+        if (!p.ground) left = true;
+        if (p.ground && (left || c.walk) && f > 0) { add(p); if (left) return; }
+        if (c.stop) return;
+      }
+    };
+    while (q.length) {
+      const s = q.shift();
+      for (const d of [-1, 1]) run(s, (f) => ({ x: d, walk: true, stop: f > 4 }));
+      for (const d1 of [-1, 0, 1]) for (const d2 of [-1, 0, 1]) for (const k of [0, 8, 16, 26]) for (const hold of [6, 99]) run(s, (f) => ({ x: f < k ? d1 : d2, up: f < hold, jump: f === 0 }));
+      run(s, () => ({ x: 0, up: true }));
+      run(s, (f) => ({ x: 0, down: true, downPressed: f === 0 }));
+      for (const d of [-1, 1]) run(s, (f) => ({ x: f > 30 ? d : 0, up: f <= 30 }));
+    }
+    return [...spots.values()];
+  };
+  for (const room of lay.rooms) {
+    const starts = room.doors.map((d) => ({ x: d.x, y: d.foot - 5 }));
+    if (room.start) starts.push(room.start);
+    const missing = [];
+    for (const s of starts) {
+      const pts = reach(room, s);
+      for (const d of room.doors) if (!pts.some((p) => Math.abs(p.x - d.x) < 6 && p.y + 5 === d.foot)) missing.push(d.id);
+      for (const thing of [room.spirit, room.fountain]) if (thing && !pts.some((p) => Math.hypot(p.x - thing.x, p.y - thing.y) < 14)) missing.push('spirit or fountain');
+    }
+    ok(`${room.name}: every door${room.spirit ? ', the spirit' : ''}${room.fountain ? ', the fountain' : ''} can be reached from every door, without spikes`, !missing.length, missing.join());
+  }
+
+  const r = newRun('cam', 3);
+  const foes = castleEnemies(r, CASTLE_LAYER, lay.rooms[4]);
+  ok('the castle fills its rooms the same way each visit', JSON.stringify(foes) === JSON.stringify(castleEnemies(r, CASTLE_LAYER, lay.rooms[4])));
+  ok('walkers stand on the floor, fliers fly', foes.every((e) => (LAYERS[CASTLE_LAYER].ground.includes(e.kind) ? standsOn(castleTiles(lay.rooms[4]), Math.floor(e.x / TILE), Math.floor((e.y + 4) / TILE)) : LAYERS[CASTLE_LAYER].air.includes(e.kind))));
+  ok('the throne room is only the boss', castleEnemies(r, CASTLE_LAYER, lay.rooms[lay.boss]).length === 0 && BOSSES[LAYERS[CASTLE_LAYER].boss]);
+
+  // Saves from before the castle.
+  const old = { ...newRun('bo', 5), beaten: [true, true, false], layer: 2, room: 1, cleared: ['1:3', '2:0'], freed: ['2:1'], fountains: ['2:2'] };
+  const up = upgradeRun(old);
+  ok('an old save at the bottom stays at the bottom, castle counted as done', up.layer === 3 && up.beaten.join() === 'true,true,true,false' && validRun(up));
+  ok('and keeps what it did there', up.cleared.join() === '1:3,3:0' && up.freed.join() === '3:1' && up.fountains.join() === '3:2');
+  const early = upgradeRun({ ...newRun('bo', 5), beaten: [true, false, false], layer: 1 });
+  ok('an old save higher up still has the castle ahead', early.layer === 1 && early.beaten.join() === 'true,false,false,false' && validRun(early));
+  ok('a new save is left alone', upgradeRun(r) === r && !validRun(old));
 }
 
 console.log('\nmusic');

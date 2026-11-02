@@ -2,15 +2,19 @@
  * Dark Hat: Sorcerer's Escape. A game by Campbell, cartridge #3 for the Camboy.
  *
  * Overhead rooms inside the Great Malvado's top hat, side-view ladder
- * shafts between its layers. See rules.mjs for the story and the rules.
+ * shafts between its layers. Partway down, Malvado zaps you flat and
+ * swaps in a cartridge of his own: a side-on castle with doors, ledges
+ * and ladders. The way out at the end is a flight up the hat on a magic
+ * scarf. See rules.mjs for the story and the rules.
  */
 
 import {
   W, H, TILE, COLS, ROWS, TOP, SPEED, SOUL_MAX, NAME_LEN, ALPHABET, STORY, LAYERS, BOSSES, ENEMIES, RABBIT, rabbitLanding,
   ATTACKS, DEFENSES, TIERS, attackStats, defenseStats, upgradeNames, nextPick, describePick, applyPick,
   SHOW_ALL, bookPaths, nodeKey, allNodeKeys, demoBuild, keysForPick,
-  cleanName, say, layoutLayer, neighbor, roomTiles, solidAt, moveBox,
-  drainSoul, gainSoul, newRun, validRun, beatBoss, descend, dist, faceFrom, makeRng, roomEnemies,
+  cleanName, say, layoutLayer, neighbor, roomTiles, solidAt, boxHits, moveBox,
+  drainSoul, gainSoul, newRun, validRun, upgradeRun, beatBoss, descend, dist, faceFrom, makeRng, roomEnemies,
+  castleTiles, castleEnemies, SIDE, sideStep, sideMove, tileAt, standsOn, T_WALL, T_LEDGE, T_LADDER, T_SPIKES,
 } from "./rules.mjs";
 import { createSound } from "./sound.mjs";
 
@@ -108,7 +112,7 @@ export function boot(hw) {
 
   let name = cleanName(hw.load("darkhat.name", ""));
   let hasName = !!hw.load("darkhat.name", "");
-  let saved = hw.load("darkhat.run", null);
+  let saved = upgradeRun(hw.load("darkhat.run", null));
   if (!validRun(saved)) saved = null;
   let wins = hw.load("darkhat.wins", 0);
   // Book keys you've unlocked by picking them in any run. The plain card toss starts known.
@@ -128,6 +132,7 @@ export function boot(hw) {
     boss: null, spirit: null, ladder: null, fountain: null, decoy: null,
     toast: null, dialog: null, choice: null, shake: 0, beatT: 0, shaft: null, ending: null,
     entry: null, name: null,
+    side: false, rw: RW, cam: 0, flight: null, cut: null, // the castle, the scarf flight, and Malvado's cutscenes
   };
   const P = { x: 80, y: 64, face: { x: 0, y: 1 }, cd: { a: 0, b: 0 }, cdMax: { a: 1, b: 1 }, inv: 0, step: 0, moving: false, shield: null, wands: [], wandSt: null, blinks: 0, blinkGap: 0, whipT: 0, frozen: false };
 
@@ -193,6 +198,7 @@ export function boot(hw) {
 
   function startRun() {
     S.endT = null; S.bossIn = null; P.shield = null; P.wands = []; P.blinks = 0; P.cd = { a: 0, b: 0 };
+    S.side = false; S.flight = null; S.cut = null;
     R = newRun(name);
     save();
     saved = R;
@@ -203,9 +209,13 @@ export function boot(hw) {
 
   function continueRun() {
     S.endT = null; S.bossIn = null; P.shield = null; P.wands = []; P.blinks = 0; P.cd = { a: 0, b: 0 };
+    S.side = false; S.flight = null; S.cut = null;
     R = JSON.parse(JSON.stringify(saved));
     name = R.name;
     layout = layoutLayer(R.layer);
+    // Malvado beaten but still in the hat: back onto the scarf.
+    if (R.beaten[LAYERS.length - 1]) { startFlight(); return; }
+    if (LAYERS[R.layer].side) { enterCastle(false); return; }
     P.x = RW / 2; P.y = RH / 2;
     enterRoom(R.room, null);
     snd.play("layer");
@@ -235,6 +245,7 @@ export function boot(hw) {
     S.boss = null; S.spirit = null; S.ladder = null; S.fountain = null; S.decoys = [];
     P.wands = []; P.whipT = 0; P.frozen = false; // the card shield comes along
     S.sealed = false;
+    S.side = false; S.rw = RW; S.cam = 0;
     // Arriving through a door: stand just inside the matching door.
     if (from === "left") { P.x = RW - 12; P.y = 64; }
     if (from === "right") { P.x = 12; P.y = 64; }
@@ -284,12 +295,18 @@ export function boot(hw) {
     R.hp = Math.max(0, R.hp - n);
     P.inv = 1.0;
     const d = Math.max(1, dist(P.x, P.y, fromX, fromY));
-    const push = moveBox(S.tiles, { x: P.x - 3, y: P.y - 3, w: 6, h: 6 }, ((P.x - fromX) / d) * 8, ((P.y - fromY) / d) * 8);
-    P.x = push.x + 3; P.y = push.y + 3;
+    if (S.side) {
+      // Knocked back and up a little, the way a platformer does it.
+      P.x = sideMove(S.tiles, P, ((P.x - fromX) / d) * 8, 0).x;
+      P.climb = false; P.ground = false; P.vy = Math.min(P.vy || 0, -110);
+    } else {
+      const push = moveBox(S.tiles, { x: P.x - 3, y: P.y - 3, w: 6, h: 6 }, ((P.x - fromX) / d) * 8, ((P.y - fromY) / d) * 8);
+      P.x = push.x + 3; P.y = push.y + 3;
+    }
     sfx.hurt();
     haptic(30);
     S.shake = 0.2;
-    if (R.hp <= 0) caught();
+    if (R.hp <= 0) { if (S.flight) flightCaught(); else caught(); }
   }
 
   function caught() {
@@ -347,13 +364,19 @@ export function boot(hw) {
     S.shots.push({ kind: "card", x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life, dmg, pierce, src: {}, ...extra });
   }
 
+  /** Does the hero's body touch a wall at (x, y)? Taller in the castle, where you stand side-on. */
+  const bodyHits = (x, y) => (S.side ? boxHits(S.tiles, x - 3, y - 5, 6, 10) : boxHits(S.tiles, x - 3, y - 3, 6, 6));
+
+  /** Which way a blink or a hop goes: where you face, or on the scarf, where you steer (ahead by default). */
+  const dashDir = () => (S.flight ? (stick.x || stick.y ? { x: stick.x, y: stick.y } : { x: 1, y: 0 }) : P.face);
+
   /** Move in the facing direction up to `far` pixels, stopping at walls. Calls step() at each point. */
   function dash(far, step) {
-    const f = P.face;
+    const f = dashDir();
     for (let i = 0; i < far; i += 2) {
       const nx = P.x + f.x * 2, ny = P.y + f.y * 2;
-      if (solidAt(S.tiles, nx - 3, ny - 3) || solidAt(S.tiles, nx + 2, ny - 3) || solidAt(S.tiles, nx - 3, ny + 2) || solidAt(S.tiles, nx + 2, ny + 2)) break;
-      if (nx < 4 || ny < 4 || nx > RW - 4 || ny > RH - 4) break;
+      if (bodyHits(nx, ny)) break;
+      if (nx < 4 || ny < 4 || nx > S.rw - 4 || ny > RH - 4) break;
       P.x = nx; P.y = ny;
       step?.();
     }
@@ -551,7 +574,7 @@ export function boot(hw) {
         }
       }
       w.x += w.vx * dt; w.y += w.vy * dt;
-      w.x = Math.max(2, Math.min(RW - 2, w.x)); w.y = Math.max(2, Math.min(RH - 2, w.y));
+      w.x = Math.max(2, Math.min(S.rw - 2, w.x)); w.y = Math.max(2, Math.min(RH - 2, w.y));
       if (!w.back && zap(w.x, w.y, st.size, st.dmg, w.src, 0.35)) {
         w.hits--;
         sfx.wand();
@@ -589,27 +612,8 @@ export function boot(hw) {
     if (pressed.has("a") || (held.a && (R.attack.id === "cards" || R.attack.id === "scarf"))) useAttack();
     if (pressed.has("b")) useDefense();
 
-    // Pickups.
-    for (const p of S.pickups) {
-      p.t += dt;
-      if (p.dead || dist(p.x, p.y, P.x, P.y) > 8) continue;
-      p.dead = true;
-      if (p.kind === "sparkle") { R.soul = gainSoul(R.soul, "sparkle"); sfx.sparkle(); }
-      else { R.hp = Math.min(R.maxHp, R.hp + 2); sfx.heart(); haptic(10); }
-    }
-    S.pickups = S.pickups.filter((p) => !p.dead);
-
-    // The fountain fills your soul once.
-    const ft = S.fountain;
-    if (ft && !ft.used && dist(P.x, P.y, ft.x, ft.y) < 14) {
-      ft.used = true;
-      R.fountains.push(key(R.layer, S.room.id));
-      R.soul = SOUL_MAX;
-      sfx.fountain();
-      haptic(15);
-      talk(STORY.fountain);
-      save();
-    }
+    takePickups(dt);
+    drinkFountain();
 
     // Down the ladder.
     if (S.ladder && dist(P.x, P.y, S.ladder.x, S.ladder.y) < 7) startShaft();
@@ -627,6 +631,30 @@ export function boot(hw) {
         else { P.x = Math.max(4, Math.min(RW - 4, P.x)); P.y = Math.max(4, Math.min(RH - 4, P.y)); }
       }
     }
+  }
+
+  function takePickups(dt) {
+    for (const p of S.pickups) {
+      p.t += dt;
+      if (p.dead || dist(p.x, p.y, P.x, P.y) > 8) continue;
+      p.dead = true;
+      if (p.kind === "sparkle") { R.soul = gainSoul(R.soul, "sparkle"); sfx.sparkle(); }
+      else { R.hp = Math.min(R.maxHp, R.hp + 2); sfx.heart(); haptic(10); }
+    }
+    S.pickups = S.pickups.filter((p) => !p.dead);
+  }
+
+  /** The fountain fills your soul once. */
+  function drinkFountain() {
+    const ft = S.fountain;
+    if (!ft || ft.used || dist(P.x, P.y, ft.x, ft.y) >= 14) return;
+    ft.used = true;
+    R.fountains.push(key(R.layer, S.room.id));
+    R.soul = SOUL_MAX;
+    sfx.fountain();
+    haptic(15);
+    talk(STORY.fountain);
+    save();
   }
 
   /* ---------- spirits and upgrades ---------- */
@@ -730,7 +758,7 @@ export function boot(hw) {
       const tg = target(e);
       e.t += dt;
       e.flash = Math.max(0, e.flash - dt);
-      if (e.stun > 0) { e.stun -= dt; continue; }
+      if (e.stun > 0) { e.stun -= dt; if (S.side && WALKERS[e.kind]) sideEnemy(e, dt, 0, 0, true); continue; }
       const dx = tg.x - e.x, dy = tg.y - e.y;
       const d = Math.max(1, Math.hypot(dx, dy));
       const sp = ENEMIES[e.kind].speed;
@@ -740,11 +768,16 @@ export function boot(hw) {
         e.x = m.x + 3; e.y = m.y + 3;
       };
       if (e.kind === "dummy") continue;
-      if (e.kind === "spark") {
+      if (S.side && WALKERS[e.kind]) sideEnemy(e, dt, dx, dy, false);
+      else if (e.kind === "spark" && e.fly) {
+        // On the scarf: the hat throws its sparks down at you in a stream.
+        e.x += e.fly * dt; e.y += Math.cos(e.t * 5) * 14 * dt;
+        if (e.x < -8) e.dead = true;
+      } else if (e.kind === "spark") {
         // Dark magic drifts at you, wobbling, right through the furniture.
         e.x += ((dx / d) * sp + Math.sin(e.t * 6) * 14) * dt;
         e.y += ((dy / d) * sp + Math.cos(e.t * 5) * 14) * dt;
-        e.x = Math.max(4, Math.min(RW - 4, e.x)); e.y = Math.max(4, Math.min(RH - 4, e.y));
+        e.x = Math.max(4, Math.min(S.rw - 4, e.x)); e.y = Math.max(4, Math.min(RH - 4, e.y));
       } else if (e.kind === "glove") {
         if (e.state === "dash") {
           walk(e.vx, e.vy);
@@ -777,7 +810,36 @@ export function boot(hw) {
       for (const d of S.decoys) if (dist(e.x, e.y, d.x, d.y) < 6) { d.t = Math.min(d.t, 0.3); if (e.kind === "spark") e.dead = true; }
     }
     S.enemies = S.enemies.filter((e) => !e.dead);
-    if (S.room.kind === "enemy" && !S.enemies.length && !R.cleared.includes(key(R.layer, S.room.id))) roomCleared();
+    const fights = S.side ? S.room.spots.length > 0 : S.room.kind === "enemy";
+    if (fights && !S.enemies.length && !R.cleared.includes(key(R.layer, S.room.id))) roomCleared();
+  }
+
+  /** In the castle, bunnies and soldiers have to stand on something. */
+  const WALKERS = { bunny: true, soldier: true };
+
+  function sideEnemy(e, dt, dx, dy, dizzy) {
+    e.vy = Math.min(SIDE.fall, (e.vy || 0) + SIDE.gravity * dt);
+    let vx = 0;
+    if (!dizzy && e.kind === "bunny") {
+      if (e.ground && e.cd <= 0) { e.cd = 0.8 + Math.random() * 0.5; e.vy = -175; e.hopVx = (Math.sign(dx) || 1) * 58; e.ground = false; }
+      vx = e.ground ? 0 : e.hopVx || 0;
+    } else if (!dizzy) {
+      // Soldiers march along their ledge, turn at the edge, and throw cards at you level with them.
+      e.dir = e.dir || (dx < 0 ? -1 : 1);
+      if (e.ground && !standsOn(S.tiles, Math.floor((e.x + e.dir * 5) / TILE), Math.floor((e.y + 4) / TILE))) e.dir = -e.dir;
+      vx = e.dir * 18;
+      if (e.cd <= 0 && Math.abs(dy) < 16 && Math.abs(dx) < 110) {
+        e.cd = 2.2; e.dir = Math.sign(dx) || e.dir;
+        S.foes.push({ kind: "ecard", x: e.x, y: e.y, vx: e.dir * 80, vy: 0, life: 2 });
+        sfx.card();
+      }
+    }
+    const b = { x: e.x, y: e.y, w: 6, h: 6 };
+    const m = sideMove(S.tiles, b, vx * dt, e.vy * dt);
+    if (m.hitX && e.kind === "soldier") e.dir = -e.dir;
+    e.x = m.x; e.y = m.y;
+    if (m.landed) { e.ground = true; e.vy = 0; } else if (e.vy > 0) e.ground = false;
+    if (m.bonk) e.vy = 0;
   }
 
   function updateShots(dt) {
@@ -808,7 +870,7 @@ export function boot(hw) {
         if (solidAt(S.tiles, s.x, s.y) && (s.kind === "card" || s.kind === "bolt")) { s.life = 0; puff(s.x, s.y, 2); }
       }
       s.x += s.vx * dt; s.y += s.vy * dt;
-      if (s.x < -4 || s.y < -4 || s.x > RW + 4 || s.y > RH + 4) s.life = 0;
+      if (s.x < -4 || s.y < -4 || s.x > S.rw + 4 || s.y > RH + 4) s.life = 0;
     }
     S.shots = S.shots.filter((s) => s.life > 0);
 
@@ -816,9 +878,15 @@ export function boot(hw) {
       f.life -= dt;
       f.x += f.vx * dt; f.y += f.vy * dt;
       if (f.kind === "ecard" && solidAt(S.tiles, f.x, f.y)) f.life = 0;
+      if (f.kind === "wave") {
+        // The flat rabbit's shockwave runs along the floor: jump it.
+        if (Math.abs(f.x - P.x) < 5 && P.y + 5 > f.y - 3 && P.y - 5 < f.y + 3) hurtPlayer(1, f.x, f.y + 6);
+        if (f.x < 10 || f.x > S.rw - 10) f.life = 0;
+        continue;
+      }
       if (dist(f.x, f.y, P.x, P.y - 2) < 5) { f.life = 0; hurtPlayer(1, f.x, f.y); }
       for (const d of S.decoys) if (dist(f.x, f.y, d.x, d.y) < 5) f.life = 0;
-      if (f.x < -6 || f.y < -6 || f.x > RW + 6 || f.y > RH + 6) f.life = 0;
+      if (f.x < -6 || f.y < -6 || f.x > S.rw + 6 || f.y > RH + 6) f.life = 0;
     }
     S.foes = S.foes.filter((f) => f.life > 0 && !f.dead);
   }
@@ -829,6 +897,7 @@ export function boot(hw) {
     const kind = LAYERS[R.layer].boss;
     S.boss = { kind, name: BOSSES[kind].name, hp: BOSSES[kind].hp, max: BOSSES[kind].hp, x: 80, y: 40, r: 10, t: 0, state: "idle", stT: 0, flash: 0, hitBy: new Map(), lands: 0, phase: 1 };
     if (kind === "king") { S.boss.r = 8; S.boss.state = "show"; S.boss.stT = 3; }
+    if (kind === "flatrabbit") Object.assign(S.boss, { r: 11, x: S.rw - 50, y: (S.tiles.length - 1) * TILE - 12, stT: 1.2 });
     if (kind === "malvado") { S.boss.r = 8; S.boss.y = 30; snd.play("malvado"); sfx.laugh(); }
     else { snd.play("boss"); sfx.roar(); }
     toast([S.boss.name], 1.6);
@@ -841,11 +910,19 @@ export function boot(hw) {
     if (b.kind === "rabbit") return b.state !== "air";
     if (b.kind === "king") return b.state === "show";
     if (b.kind === "malvado") return b.state !== "gone";
-    return true;
+    return true; // the flat rabbit, and Malvado chasing the scarf
   }
 
   function hurtBoss(dmg, fx, fy) {
     const b = S.boss;
+    if (b.kind === "chase") {
+      // He can't be beaten on the scarf, only knocked back.
+      b.x = Math.max(10, b.x - 2 - dmg * 2); // knocked back, but always in sight
+      b.flash = 0.15;
+      sfx.hit();
+      haptic(6);
+      return;
+    }
     b.hp -= dmg;
     b.flash = 0.2;
     sfx.hit();
@@ -861,10 +938,14 @@ export function boot(hw) {
       b.vortex = false;
       const last = beatBoss(R);
       S.sealed = false;
-      S.tiles = roomTiles(S.room, false);
+      if (!S.side) S.tiles = roomTiles(S.room, false);
       save();
       if (last) { S.endT = 2.2; }
-      else {
+      else if (S.side) {
+        // No ladder in the castle: the way out is a door.
+        snd.play("castle");
+        talk([`${name} BEAT ${b.name}! ${name}'S HEART GREW STRONGER.`, STORY.bossGift], () => openPick("boss", () => talk([STORY.castleDoor])));
+      } else {
         S.ladder = { x: 80, y: 64 };
         snd.play("layer");
         talk([`${name} BEAT ${b.name}! ${name}'S HEART GREW STRONGER.`, STORY.bossGift], () => openPick("boss", () => talk([STORY.ladder])));
@@ -941,6 +1022,28 @@ export function boot(hw) {
         if (b.state === "deal" && b.stT <= 0) { const c = b.cards.find((k) => k.real); b.x = c.x; b.y = c.y; b.state = "show"; b.stT = 3; }
       }
       if (b.state === "show" && dist(b.x, b.y, P.x, P.y) < 12) hurtPlayer(1, b.x, b.y);
+    } else if (b.kind === "flatrabbit") {
+      // Side-on now: he hops in big arcs, and every landing sends a shockwave along the floor.
+      const fast = b.hp < b.max / 2, floor = (S.tiles.length - 1) * TILE - 12;
+      if (b.state === "idle" && b.stT <= 0) { b.state = "crouch"; b.stT = 0.4; }
+      else if (b.state === "crouch" && b.stT <= 0) {
+        b.state = "air";
+        b.vy = -(fast ? 250 : 225);
+        const air = (2 * -b.vy) / SIDE.gravity;
+        b.vx = Math.max(-95, Math.min(95, (P.x - b.x) / air));
+        sfx.jump();
+      } else if (b.state === "air") {
+        b.vy += SIDE.gravity * dt;
+        b.x = Math.max(20, Math.min(S.rw - 20, b.x + b.vx * dt));
+        b.y += b.vy * dt;
+        if (b.y >= floor) {
+          b.y = floor; b.state = "idle"; b.stT = fast ? 0.45 : 0.75;
+          sfx.thump(); sfx.wave(); S.shake = 0.3; haptic(20);
+          for (const d of [-1, 1]) S.foes.push({ kind: "wave", x: b.x + d * 12, y: floor + 9, vx: d * (fast ? 95 : 80), vy: 0, life: 3 });
+          if (++b.lands % 3 === 0) { addEnemy("bunny", b.x - 16, floor + 6); addEnemy("bunny", b.x + 16, floor + 6); }
+        }
+      }
+      if (dist(b.x, b.y, P.x, P.y) < 14) hurtPlayer(1, b.x, b.y);
     } else if (b.kind === "malvado") {
       const ph = b.hp > b.max * 0.66 ? 1 : b.hp > b.max * 0.33 ? 2 : 3;
       if (ph !== b.phase) {
@@ -1010,7 +1113,8 @@ export function boot(hw) {
       descend(R);
       R.hp = Math.max(R.hp, 1);
       S.shaft = null;
-      enterLayer(false);
+      if (LAYERS[R.layer].side) castleIntro();
+      else enterLayer(false);
     }
   }
 
@@ -1031,6 +1135,357 @@ export function boot(hw) {
     rect(4, H - 9, W - 8, 6, 2);
     rect(5, H - 8, Math.round((W - 10) * Math.min(1, sh.prog)), 4, 0);
     ctext("< > DODGE   DOWN: FASTER", TOP + 4, 1);
+  }
+
+  /* ---------- Malvado's Castle: a flat game inside the game ---------- */
+
+  const CASTLE_TITLE = "MALVADO'S CASTLE";
+
+  /** Malvado pops up after the Card King and zaps you flat, into a cartridge of his own. */
+  function castleIntro() {
+    save();
+    S.cut = { kind: "in", t: 0, zap: null };
+    setPhase("cut");
+    snd.play("malvado");
+    sfx.laugh();
+    talk(STORY.castleIntro, () => { S.cut.zap = 0; sfx.flat(); haptic(40); });
+  }
+
+  /** Out the castle's last door: he isn't happy, and swaps his cartridge back out. */
+  function castleExit() {
+    S.cut = { kind: "out", t: 0, zap: null };
+    setPhase("cut");
+    snd.play("malvado");
+    sfx.laugh();
+    talk(STORY.castleExit, () => { S.cut.zap = 0; sfx.flat(); haptic(40); });
+  }
+
+  function updateCut(dt) {
+    const c = S.cut;
+    c.t += dt;
+    if (c.zap == null || c.swapping) return;
+    c.zap += dt;
+    if (c.zap < 1.6) return;
+    c.swapping = true;
+    snd.stop();
+    // The fourth wall: the page pulls this cartridge and plugs in Malvado's (or back again).
+    const spec = c.kind === "in"
+      ? { title: CASTLE_TITLE, label: "#3b3550", cover: castleCover }
+      : { back: true, title: meta.title };
+    (hw.swapCartridge ? hw.swapCartridge(spec) : Promise.resolve()).then(() => (c.kind === "in" ? enterCastle(true) : leaveCastle()));
+  }
+
+  function enterCastle(first) {
+    S.cut = null;
+    layout = layoutLayer(R.layer);
+    enterSideRoom(R.room, null);
+    snd.setTempo(1);
+    snd.play("castle");
+    setPhase("room");
+    toast([CASTLE_TITLE], 1.6);
+    if (first) talk(STORY.castleLand);
+  }
+
+  function leaveCastle() {
+    S.cut = null;
+    descend(R);
+    enterLayer(false);
+    talk([STORY.castleBack]);
+  }
+
+  const camera = () => { S.cam = Math.round(Math.max(0, Math.min(S.rw - W, P.x - W / 2))); };
+
+  /** Into a castle room, through the door with letter `from` (or at its start). */
+  function enterSideRoom(id, from) {
+    R.room = id;
+    const room = (S.room = layout.rooms[id]);
+    S.enemies = []; S.shots = []; S.foes = []; S.pickups = []; S.fx = [];
+    S.boss = null; S.spirit = null; S.ladder = null; S.fountain = null; S.decoys = []; S.bossIn = null;
+    P.wands = []; P.whipT = 0; P.frozen = false;
+    S.side = true;
+    S.tiles = castleTiles(room);
+    S.rw = room.cols * TILE;
+    const door = room.doors.find((d) => d.id === from) || (!room.start && room.doors[0]);
+    const at = door ? { x: door.x, y: door.foot - 5 } : room.start;
+    Object.assign(P, { x: at.x, y: at.y, vx: 0, vy: 0, w: 6, h: 10, ground: true, climb: false, coyote: 0, buffer: 0, dropT: 0 });
+    P.face = { x: P.x < S.rw / 2 ? 1 : -1, y: 0 };
+    P.inv = Math.max(P.inv, 0.6);
+    S.sealed = room.kind === "boss" && !R.beaten[R.layer];
+    const k = key(R.layer, id);
+    if (!R.cleared.includes(k)) for (const e of castleEnemies(R, R.layer, room)) if (dist(e.x, e.y, P.x, P.y) > 40) addEnemy(e.kind, e.x, e.y);
+    if (room.spirit && !R.freed.includes(k)) S.spirit = { ...room.spirit, t: 0 };
+    if (room.fountain) S.fountain = { ...room.fountain, used: R.fountains.includes(k) };
+    if (S.sealed) { sfx.door(); talk([STORY.castleBoss], () => { S.bossIn = 0.6; toast(STORY.bossDoor, 1.0); }); }
+    camera();
+    save();
+  }
+
+  /** The door you're standing in front of, if any. The way out only shows once the boss is beaten. */
+  function doorHere() {
+    if (!S.side || !P.ground || P.climb) return null;
+    return S.room.doors.find((d) => (d.id !== "x" || R.beaten[R.layer]) && Math.abs(P.x - d.x) < 7 && Math.abs(P.y + 5 - d.foot) < 2) || null;
+  }
+
+  function updateSidePlayer(dt) {
+    P.inv = Math.max(0, P.inv - dt);
+    const sx = P.frozen ? 0 : Math.abs(stick.x) > 0.3 ? Math.sign(stick.x) : 0;
+    if (sx) P.face = { x: sx, y: 0 };
+    // Up in front of a door goes through it.
+    const door = doorHere();
+    if (door && pressed.has("up")) {
+      if (S.sealed) { sfx.door(); toast(["LOCKED!"], 0.6); }
+      else if (door.id === "x") { castleExit(); return; }
+      else { sfx.door(); enterSideRoom(door.to, door.id); return; }
+    }
+    const ev = sideStep(S.tiles, P, {
+      x: sx, up: held.up && !P.frozen, down: held.down,
+      jump: pressed.has("up") && !door && !P.frozen, downPressed: pressed.has("down"),
+    }, dt);
+    if (ev.jumped) sfx.jump();
+    if (ev.landed) sfx.land();
+    P.moving = (!!sx && P.ground) || (P.climb && (held.up || held.down));
+    if (P.moving) P.step += dt * 8;
+    if (ev.spikes) { hurtPlayer(1, P.x, P.y + 8); P.vy = -180; P.ground = false; P.coyote = 0; }
+    camera();
+    // Spirits, tricks, sparkles and fountains work just like upstairs.
+    if (S.spirit && dist(P.x, P.y, S.spirit.x, S.spirit.y) < 16 && pressed.has("a")) { meetSpirit(); return; }
+    if (pressed.has("a") || (held.a && (R.attack.id === "cards" || R.attack.id === "scarf"))) useAttack();
+    if (pressed.has("b")) useDefense();
+    takePickups(dt);
+    drinkFountain();
+  }
+
+  function drawCastle() {
+    const t = S.tiles, cols = t[0].length, w = cols * TILE, room = S.room;
+    // The back wall: big stone blocks.
+    rect(0, TOP, w, RH, 2);
+    for (let y = 0; y < RH; y += 8) {
+      rect(0, TOP + y, w, 1, 3);
+      for (let x = (y / 8) % 2 ? 8 : 0; x < w; x += 16) rect(x, TOP + y, 1, 8, 3);
+    }
+    // Tall windows with the moon in one.
+    for (let wx = 5; wx < cols - 3; wx += 12) {
+      const x = wx * TILE, y = TOP + 22;
+      rect(x - 1, y + 2, 12, 16, 3); rect(x + 1, y, 8, 2, 3);
+      rect(x + 1, y + 3, 8, 14, 1); rect(x + 5, y + 3, 1, 14, 3); rect(x + 1, y + 9, 8, 1, 3);
+      if (wx === 5) { rect(x + 2, y + 4, 3, 3, 0); }
+    }
+    // The throne, behind the fight.
+    if (room.kind === "boss") {
+      const x = w / 2, y = TOP + RH - 8;
+      rect(x - 12, y - 44, 24, 44, 3); rect(x - 9, y - 40, 18, 22, 1); rect(x - 16, y - 18, 32, 4, 3);
+      rect(x - 5, y - 52, 10, 8, 3); rect(x - 8, y - 45, 16, 2, 3); // his hat on top
+    }
+    const library = room.name === "THE LIBRARY";
+    for (let ty = 0; ty < t.length; ty++) for (let tx = 0; tx < cols; tx++) {
+      const c = t[ty][tx], x = tx * TILE, y = TOP + ty * TILE;
+      if (c === T_WALL) {
+        const inner = tx > 0 && ty > 0 && tx < cols - 1 && ty < t.length - 1;
+        if (library && inner) {
+          // Bookshelves: rows of spines.
+          rect(x, y, 8, 8, 3);
+          rect(x + 1, y + 1, 1, 6, 1); rect(x + 3, y + 2, 1, 5, 0); rect(x + 5, y + 1, 2, 6, 1);
+          rect(x, y + 7, 8, 1, 2);
+        } else {
+          rect(x, y, 8, 8, 3);
+          if (tileAt(t, tx, ty - 1) !== T_WALL) rect(x, y, 8, 1, 1);
+          else if ((tx * 7 + ty * 3) % 5 === 0) px(x + 3, y + 4, 2);
+        }
+      } else if (c === T_LEDGE) {
+        rect(x, y, 8, 3, 3); rect(x, y, 8, 1, 1);
+        if (tx % 2) rect(x + 3, y + 3, 2, 2, 3);
+      } else if (c === T_LADDER) {
+        rect(x + 1, y, 1, 8, 1); rect(x + 6, y, 1, 8, 1);
+        rect(x + 1, y + 2, 6, 1, 1); rect(x + 1, y + 6, 6, 1, 1);
+      } else if (c === T_SPIKES) {
+        for (const i of [0, 4]) { rect(x + i, y + 6, 4, 2, 3); rect(x + i + 1, y + 3, 2, 3, 1); px(x + i + 1, y + 2, 0); }
+      }
+    }
+    // Doors. The way out glows once the boss is down.
+    const here = doorHere();
+    for (const d of room.doors) {
+      const out = d.id === "x";
+      if (out && !R.beaten[R.layer]) continue;
+      const x = d.x - 8, y = TOP + d.foot - 24;
+      rect(x - 1, y + 2, 18, 22, 3); rect(x + 1, y, 14, 2, 3);
+      rect(x + 1, y + 3, 14, 21, out ? 0 : 1);
+      if (out) { if (Math.floor(S.t * 4) % 2) { px(x + 4, y + 8, 1); px(x + 11, y + 14, 1); px(x + 7, y + 19, 1); } }
+      else { rect(x + 8, y + 3, 1, 21, 2); px(x + 5, y + 14, 3); px(x + 11, y + 14, 3); }
+      if (S.sealed) bars(x + 1, y + 3, 14, 21);
+      if (d === here && Math.floor(S.t * 2) % 2) { rect(x + 1, y - 9, 14, 7, 3); ctext(out ? "OUT" : "UP", y - 8, 0, 1, x + 8); }
+    }
+  }
+
+  /* ---------- the scarf flight: out of the hat, with Malvado on your tail ---------- */
+
+  const FLIGHT_TIME = 40; // seconds from the bottom of the hat to the top
+
+  function startFlight() {
+    S.endT = null;
+    S.flight = null;
+    snd.play("flight");
+    setPhase("story");
+    talk(STORY.flightIntro, () => beginFlight(0), true);
+  }
+
+  /** On the scarf. A catch puts you back here with your hearts full; the run is safe. */
+  function beginFlight(tries) {
+    S.side = false; S.cut = null;
+    S.enemies = []; S.shots = []; S.foes = []; S.pickups = []; S.fx = []; S.decoys = [];
+    S.spirit = null; S.ladder = null; S.fountain = null; S.bossIn = null; S.sealed = false;
+    S.room = { id: -2, kind: "flight", template: 0, doors: { up: false, down: false, left: false, right: false } };
+    S.tiles = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    S.rw = RW; S.cam = 0;
+    S.flight = { prog: 0, spawn: 1.5, cardT: 4, gloveT: 7, tries, won: 0 };
+    Object.assign(P, { x: 100, y: 64, face: { x: -1, y: 0 }, inv: 1.5, wands: [], whipT: 0, frozen: false, moving: false, climb: false });
+    R.hp = R.maxHp;
+    S.boss = { kind: "chase", name: "THE GREAT MALVADO", hp: 1, max: 1, x: 12, y: 64, r: 9, t: 0, flash: 0, hitBy: new Map(), shotT: 2.5 };
+    snd.setTempo(1);
+    snd.play("flight");
+    setPhase("room");
+    if (!tries) talk([STORY.flightHelp]);
+    else toast(["FLY!"], 1);
+  }
+
+  function updateFlight(dt) {
+    const f = S.flight, b = S.boss;
+    if (f.won) {
+      // Malvado falls away and the scarf shoots out the top.
+      f.won += dt;
+      b.x -= 50 * dt; b.y += 30 * dt;
+      P.x += 40 * dt * f.won;
+      if (f.won > 2.4) { S.flight = null; S.boss = null; startEnding(); }
+      return;
+    }
+    f.prog = Math.min(1, f.prog + dt / FLIGHT_TIME);
+    P.inv = Math.max(0, P.inv - dt);
+    if (!P.frozen) { P.x += stick.x * 64 * dt; P.y += stick.y * 64 * dt; }
+    P.x = Math.max(34, Math.min(W - 8, P.x)); P.y = Math.max(8, Math.min(RH - 8, P.y));
+    P.moving = false;
+    P.face = { x: -1, y: 0 }; // looking back at him
+    if (pressed.has("a") || (held.a && (R.attack.id === "cards" || R.attack.id === "scarf"))) useAttack();
+    if (pressed.has("b")) useDefense();
+    takePickups(dt);
+    // The hat throws its dark magic down at you: sparks, card volleys, then gloves.
+    if ((f.spawn -= dt) <= 0) {
+      f.spawn = 0.75 - f.prog * 0.35 + Math.random() * 0.35;
+      const e = addEnemy("spark", W + 6, 8 + Math.random() * (RH - 16));
+      e.fly = -(48 + f.prog * 40 + Math.random() * 20);
+    }
+    if ((f.cardT -= dt) <= 0) {
+      f.cardT = 3.4 - f.prog * 1.4;
+      const y = 16 + Math.random() * (RH - 32);
+      for (let i = -1; i <= 1; i++) S.foes.push({ kind: "ecard", x: W + 4, y: y + i * 12, vx: -95, vy: 0, life: 3 });
+      sfx.card();
+    }
+    if (f.prog > 0.3 && (f.gloveT -= dt) <= 0) { f.gloveT = 6 - f.prog * 2; addEnemy("glove", W + 4, 10 + Math.random() * (RH - 20)); }
+    updateTricks(dt);
+    updateEnemies(dt);
+    updateShots(dt);
+    if (!S.flight || S.dialog) return;
+    // Malvado flies after you, a little faster the higher you get.
+    b.t += dt; b.flash = Math.max(0, b.flash - dt);
+    b.x += (4 + f.prog * 8) * dt;
+    b.y += (P.y - b.y) * Math.min(1, dt * 1.1);
+    if ((b.shotT -= dt) <= 0) {
+      b.shotT = 2.3 - f.prog * 0.9;
+      bolt(b.x + 6, b.y - 6, 78);
+      if (f.prog > 0.5) { bolt(b.x + 6, b.y - 6, 78, 0.3); bolt(b.x + 6, b.y - 6, 78, -0.3); }
+      sfx.bolt();
+    }
+    if (b.x > P.x - 12) { flightCaught(); return; }
+    if (f.prog >= 1) {
+      f.won = 0.001;
+      for (const e of S.enemies) puff(e.x, e.y, 3);
+      S.enemies = []; S.foes = [];
+      word(Math.max(20, b.x + 4), b.y - 14, "CURSES!");
+      sfx.bossDown(); haptic(50);
+    }
+  }
+
+  function flightCaught() {
+    sfx.laugh(); haptic(40);
+    const tries = S.flight.tries + 1;
+    S.foes = []; S.enemies = [];
+    S.flight.prog = Math.min(S.flight.prog, 0.999);
+    talk([STORY.flightCaught], () => beginFlight(tries));
+  }
+
+  function drawSky() {
+    const p = S.flight.prog;
+    // A mid shade, so Malvado's black hat and your outline both show.
+    rect(0, TOP, W, RH, 2);
+    // The light at the top of the hat grows as you climb.
+    ellipse(W + 6, TOP + RH / 2, Math.round(6 + p * 40), Math.round(12 + p * 52), 1, null);
+    if (p > 0.4) ellipse(W + 6, TOP + RH / 2, Math.round((p - 0.4) * 50), Math.round((p - 0.4) * 90), 0, null);
+    // The hat's lining streams past.
+    for (let i = 0; i < 26; i++) {
+      const sp = 50 + (i % 3) * 30;
+      const x = W + 10 - ((i * 53 + S.t * sp) % (W + 30));
+      rect(Math.round(x), TOP + 4 + ((i * 37) % (RH - 8)), 3 + (i % 3) * 3, 1, i % 3 ? 3 : 1);
+    }
+  }
+
+  function drawFlightBar() {
+    const p = S.flight.prog;
+    rect(16, H - 7, W - 40, 5, 3);
+    rect(17, H - 6, W - 42, 3, 2);
+    rect(17, H - 6, Math.round((W - 42) * p), 3, 0);
+    text("OUT", W - 20, H - 7, 0);
+  }
+
+  /** The magic scarf under the hero's feet, rippling. */
+  function drawScarf(x, y) {
+    for (let i = -10; i <= 10; i++) {
+      const wob = Math.round(Math.sin(S.t * 9 + i * 0.6) * (Math.abs(i) > 6 ? 2 : 1));
+      rect(x + i, y + wob, 1, 2, i % 3 ? 0 : 1);
+      px(x + i, y + 2 + wob, 2);
+    }
+    // A fringe at each end.
+    for (const e of [-11, 11]) px(x + e, y + 1 + Math.round(Math.sin(S.t * 12 + e) * 2), 1);
+  }
+
+  /* ---------- Malvado's cutscenes ---------- */
+
+  /** A sprite squashed flat by a spell: f = 0 is normal, 1 is a pancake. */
+  function drawSquashed(rows, x, feet, f, s) {
+    const h = rows.length, w = rows[0].length;
+    const nh = Math.max(1, Math.round(h * (1 - 0.75 * f))), nw = Math.round(w * (1 + 0.75 * f));
+    for (let r = 0; r < nh; r++) for (let c = 0; c < nw; c++) {
+      const ch = rows[Math.floor((r * h) / nh)][Math.floor((c * w) / nw)];
+      if (ch !== ".") rect(x + (c - nw / 2) * s, feet - (nh - r) * s, s, s, +ch);
+    }
+  }
+
+  function drawCut() {
+    const c = S.cut, z = c.zap;
+    // His stage: curtains, a spotlight, the boards.
+    rect(0, 0, W, H, 2);
+    for (let x = 0; x < 24; x += 4) { rect(x, 0, 3, H, 3); rect(W - 3 - x, 0, 3, H, 3); }
+    rect(0, 0, W, 8, 3);
+    for (let x = 0; x < W; x += 8) rect(x, 8, 4, 3, 3);
+    ellipse(80, 114, 54, 7, 1, null);
+    rect(0, 120, W, H - 120, 3);
+    const shake = z != null && z < 0.6 ? Math.round(Math.sin(S.t * 60)) : 0;
+    drawMalvado(110 + shake, 100, 2);
+    // You, before and after.
+    const flat = c.kind === "out" ? 1 : z == null ? 0 : Math.min(1, z / 0.7);
+    drawSquashed(KID_DOWN, 50, 118, flat, 2);
+    // The spell: a crackle from his wand to you.
+    if (z != null && z < 0.65 && Math.floor(z * 24) % 2) {
+      let lx = 128, ly = 82;
+      for (let i = 1; i <= 6; i++) {
+        const nx = 128 + ((50 - 128) * i) / 6, ny = 82 + ((104 - 82) * i) / 6 + (i < 6 ? (i % 2 ? -5 : 5) : 0);
+        line(Math.round(lx), Math.round(ly), Math.round(nx), Math.round(ny), 0);
+        lx = nx; ly = ny;
+      }
+    }
+    // Then the picture folds away like an old TV.
+    if (z != null && z > 0.9) {
+      const k = Math.min(1, (z - 0.9) / 0.6), hh = Math.round((H / 2) * k);
+      rect(0, 0, W, hh, 3); rect(0, H - hh, W, hh, 3);
+      if (k >= 1) rect(0, 0, W, H, 3);
+    }
   }
 
   /* ---------- the frame ---------- */
@@ -1096,6 +1551,7 @@ export function boot(hw) {
     if (S.phase === "practice") { updatePractice(dt); return; }
     if (S.phase === "name") { updateName(); return; }
     if (S.dialog) { updateDialog(dt); return; }
+    if (S.phase === "cut") { updateCut(dt); return; }
     if (S.phase === "story") return;
     if (S.phase === "caught") {
       if (S.t > 1.5 && (pressed.has("a") || pressed.has("start"))) { R = null; snd.play("title"); setPhase("title"); S.sel = 0; }
@@ -1111,15 +1567,16 @@ export function boot(hw) {
     if (pressed.has("start")) { S.paused = true; S.sel = 0; S.song = snd.pause(); sfx.blip(); return; }
 
     if (S.phase === "shaft") { updateShaft(dt); return; }
+    if (S.flight) { updateFlight(dt); return; }
 
     // In a room.
     R.soul = drainSoul(R.soul, dt, R.deep);
     if (R.soul < 20 && (S.beatT -= dt) <= 0) { S.beatT = 1.4; sfx.heartbeat(); haptic(8); }
     if (R.soul <= 0) { caught(); return; }
     if (S.bossIn != null && (S.bossIn -= dt) <= 0) { S.bossIn = null; startBoss(); }
-    if (S.endT != null && (S.endT -= dt) <= 0) { S.endT = null; startEnding(); return; }
+    if (S.endT != null && (S.endT -= dt) <= 0) { S.endT = null; startFlight(); return; }
     if (S.spirit) S.spirit.t += dt;
-    updatePlayer(dt);
+    if (S.side) updateSidePlayer(dt); else updatePlayer(dt);
     if (S.phase !== "room" || S.dialog) return;
     updateTricks(dt);
     updateEnemies(dt);
@@ -1256,7 +1713,7 @@ export function boot(hw) {
   }
 
   /** Copy the room and hero so the practice room can borrow them and give them back. */
-  const ROOM_KEYS = ["room", "tiles", "sealed", "enemies", "shots", "foes", "pickups", "fx", "boss", "spirit", "ladder", "fountain", "decoys", "bossIn", "endT", "toast"];
+  const ROOM_KEYS = ["room", "tiles", "sealed", "enemies", "shots", "foes", "pickups", "fx", "boss", "spirit", "ladder", "fountain", "decoys", "bossIn", "endT", "toast", "side", "rw", "cam", "flight"];
 
   function enterPractice(n) {
     const snap = { R, layout, S: {}, P: { ...P, cd: { ...P.cd }, cdMax: { ...P.cdMax }, face: { ...P.face } } };
@@ -1273,6 +1730,7 @@ export function boot(hw) {
     S.tiles = roomTiles(S.room);
     S.sealed = false; S.enemies = []; S.shots = []; S.foes = []; S.pickups = []; S.fx = [];
     S.boss = null; S.spirit = null; S.ladder = null; S.fountain = null; S.decoys = []; S.bossIn = null; S.endT = null; S.toast = null;
+    S.side = false; S.rw = RW; S.cam = 0; S.flight = null;
     Object.assign(P, { x: 44, y: 64, face: { x: 1, y: 0 }, cd: { a: 0, b: 0 }, cdMax: { a: 1, b: 1 }, inv: 0, shield: null, wands: [], wandSt: null, blinks: 0, blinkGap: 0, whipT: 0, frozen: false });
     for (const [x, y] of S.practice.homes) addEnemy("dummy", x, y);
     setPhase("practice");
@@ -1361,12 +1819,14 @@ export function boot(hw) {
   function drawEnding() {
     rect(0, 0, W, H, 0);
     drawHatArt(80, 70, 2);
-    // The spirits lift the hero out.
+    // Out of the hat on the magic scarf, with the freed spirits all around.
     const lift = Math.min(40, S.t * 12);
-    sprite(KID_DOWN, 80, Math.round(60 - lift));
+    const y = Math.round(60 - lift + Math.sin(S.t * 3) * 2);
+    drawScarf(80, y);
+    sprite(KID_DOWN, 80, y);
     for (let i = 0; i < 6; i++) {
       const a = S.t * 2 + i;
-      sprite(SPIRIT, Math.round(80 + Math.cos(a) * 24), Math.round(62 - lift + Math.sin(a) * 10));
+      sprite(SPIRIT, Math.round(80 + Math.cos(a) * 26), Math.round(y + 2 + Math.sin(a) * 10));
     }
     banner(["YOU ESCAPED!"], 92, 1);
     ctext(`${name}'S BUILD:`, 110, 3);
@@ -1381,7 +1841,7 @@ export function boot(hw) {
   const ox = () => (S.shake > 0 ? Math.round((Math.random() - 0.5) * S.shake * 6) : 0);
 
   function drawRoom() {
-    const L = R.layer;
+    const L = LAYERS[R.layer].look ?? 0;
     const dx = ox();
     // Floor.
     rect(0, TOP, W, RH, L === 2 ? 1 : 2);
@@ -1443,10 +1903,10 @@ export function boot(hw) {
   }
 
   function drawKid() {
-    if (P.inv > 0 && Math.floor(P.inv * 14) % 2) return;
+    if (P.inv > 0 && !S.dialog && Math.floor(P.inv * 14) % 2) return; // no flicker frozen mid-blink behind a text box
     const f = P.face;
-    let rows = Math.abs(f.x) > Math.abs(f.y) + 0.1 ? KID_SIDE : f.y < 0 ? KID_UP : KID_DOWN;
-    if (P.moving && Math.floor(P.step) % 2) rows = stepLegs(rows);
+    let rows = S.side && P.climb ? KID_UP : Math.abs(f.x) > Math.abs(f.y) + 0.1 ? KID_SIDE : f.y < 0 ? KID_UP : KID_DOWN;
+    if ((P.moving && Math.floor(P.step) % 2) || (S.side && !P.ground && !P.climb)) rows = stepLegs(rows);
     sprite(rows, Math.round(P.x), Math.round(TOP + P.y + 5), f.x < -0.1);
     // The scarf whip lashing out.
     if (P.whipT > 0) {
@@ -1465,8 +1925,23 @@ export function boot(hw) {
   }
 
   function drawWorld() {
-    drawRoom();
-    if (S.fountain) {
+    if (S.flight) drawSky();
+    else if (S.side) { lcd.g.save(); lcd.g.translate(-S.cam + ox(), 0); drawCastle(); }
+    else drawRoom();
+    drawThings();
+    if (S.side) lcd.g.restore();
+    if (S.practice) drawPracticeBar(); else drawHud();
+    if (S.flight) drawFlightBar();
+  }
+
+  function drawThings() {
+    if (S.fountain && S.side) {
+      // A stone basin, seen from the side.
+      const ft = S.fountain, x = ft.x, y = TOP + ft.y + 4;
+      rect(x - 9, y - 8, 18, 3, 3); rect(x - 7, y - 5, 14, 3, 3); rect(x - 2, y - 2, 4, 2, 3);
+      rect(x - 8, y - 9, 16, 1, ft.used ? 2 : 0);
+      if (!ft.used) for (let i = 0; i < 3; i++) px(x - 6 + ((S.t * 20 + i * 5) % 12), y - 10 - ((S.t * 9 + i * 3) % 8), 0);
+    } else if (S.fountain) {
       const ft = S.fountain;
       ellipse(ft.x, TOP + ft.y, 12, 6, 3, 1);
       ellipse(ft.x, TOP + ft.y, 9, 4, ft.used ? 2 : 0, null);
@@ -1494,6 +1969,7 @@ export function boot(hw) {
     for (const d of S.decoys) if (!(d.t < 0.6 && Math.floor(d.t * 10) % 2)) sprite(BUNNY, Math.round(d.x), Math.round(TOP + d.y + 3));
     drawBoss();
     for (const e of S.enemies) drawEnemy(e);
+    if (S.flight) drawScarf(Math.round(P.x), Math.round(TOP + P.y + 5));
     drawKid();
     if (P.shield) {
       const r = defenseStats(R)?.radius ?? 14, n = P.shield.cards.length;
@@ -1525,13 +2001,16 @@ export function boot(hw) {
     }
     for (const f of S.foes) {
       if (f.kind === "ecard") drawCard(f.x, f.y, 2);
+      else if (f.kind === "wave") {
+        const x = Math.round(f.x), y = Math.round(TOP + f.y), k = Math.floor(S.t * 16) % 2;
+        rect(x - 3, y, 7, 3, 0); rect(x - 2, y - 2 - k, 5, 2, 1); px(x - 4, y + 2, 1); px(x + 4, y + 2, 1);
+      }
       else { const x = Math.round(f.x), y = Math.round(TOP + f.y); rect(x - 1, y - 1, 3, 3, 0); px(x, y, 3); }
     }
     for (const f of S.fx) {
       if (f.kind === "dot") px(Math.round(f.x), Math.round(TOP + f.y), f.t > 0.2 ? 0 : 1);
       else if (f.kind === "word") { rect(Math.round(f.x) - Math.ceil(textW(f.w) / 2) - 1, Math.round(TOP + f.y) - 1, textW(f.w) + 2, 7, 3); ctext(f.w, Math.round(TOP + f.y), 0, 1, Math.round(f.x)); }
     }
-    if (S.practice) drawPracticeBar(); else drawHud();
   }
 
   function drawEnemy(e) {
@@ -1555,6 +2034,15 @@ export function boot(hw) {
       if (b.state === "air") ellipse(Math.round(b.to.x), Math.round(TOP + b.to.y + 6), 8, 3, 3, null);
       const squash = b.state === "crouch" ? 2 : 0;
       sprite(RABBIT_ROWS, Math.round(b.x), Math.round(TOP + b.y + 12 - lift + squash), P.x < b.x, null, 2);
+    } else if (b.kind === "flatrabbit") {
+      const squash = b.state === "crouch" ? 2 : 0;
+      sprite(RABBIT_ROWS, Math.round(b.x), Math.round(TOP + b.y + 12 + squash), P.x < b.x, null, 2);
+    } else if (b.kind === "chase") {
+      const x = Math.round(b.x), y = Math.round(TOP + b.y);
+      drawMalvado(x, y, 1);
+      // A grabbing hand, reaching for the end of the scarf.
+      const reach = 3 + Math.round(Math.sin(S.t * 8) * 2);
+      rect(x + 4, y - 3, reach + 3, 1, 3); rect(x + 7 + reach, y - 5, 3, 4, 0); px(x + 10 + reach, y - 5, 0);
     } else if (b.kind === "king") {
       if (b.state === "show") {
         const x = Math.round(b.x), y = Math.round(TOP + b.y);
@@ -1582,18 +2070,23 @@ export function boot(hw) {
         for (let k = 0; k < 6; k++) px(Math.round(80 + Math.cos(a + k) * (10 + k)), Math.round(TOP + 64 + Math.sin(a + k) * (5 + k / 2)), 0);
       }
       if (b.state === "gone") return;
-      const x = Math.round(b.x), y = Math.round(TOP + b.y);
-      rect(x - 4, y - 20, 8, 8, 3);              // top hat
-      rect(x - 6, y - 12, 12, 2, 3);
-      rect(x - 4, y - 14, 8, 1, 1);              // hat band
-      rect(x - 3, y - 10, 6, 6, 0);              // face
-      px(x - 2, y - 8, 3); px(x + 1, y - 8, 3);
-      rect(x - 2, y - 6, 4, 1, 3);               // mustache
-      for (let k = 0; k < 10; k++) rect(x - 2 - Math.floor(k / 1.5), y - 4 + k, 4 + Math.floor(k / 1.5) * 2, 1, 3); // cape
-      rect(x - 1, y - 3, 2, 8, 1);               // shirt front
-      line(x + 5, y - 2, x + 9, y - 8, 3);       // wand
-      px(x + 9, y - 9, 0);
+      drawMalvado(Math.round(b.x), Math.round(TOP + b.y), 1);
     }
+  }
+
+  /** The Great Malvado: top hat, mustache, cape and wand. s scales him up for cutscenes. */
+  function drawMalvado(x, y, s = 1) {
+    const r = (dx, dy, w, h, c) => rect(x + dx * s, y + dy * s, w * s, h * s, c);
+    r(-4, -20, 8, 8, 3);               // top hat
+    r(-6, -12, 12, 2, 3);
+    r(-4, -14, 8, 1, 1);               // hat band
+    r(-3, -10, 6, 6, 0);               // face
+    r(-2, -8, 1, 1, 3); r(1, -8, 1, 1, 3);
+    r(-2, -6, 4, 1, 3);                // mustache
+    for (let k = 0; k < 10; k++) r(-2 - Math.floor(k / 1.5), -4 + k, 4 + Math.floor(k / 1.5) * 2, 1, 3); // cape
+    r(-1, -3, 2, 8, 1);                // shirt front
+    for (let i = 0; i <= 6; i++) r(5 + Math.round((i * 4) / 6), -2 - i, 1, 1, 3); // wand
+    r(9, -9, 1, 1, 0);
   }
 
   function drawHud() {
@@ -1625,7 +2118,7 @@ export function boot(hw) {
         if (slot === "b" && R.defense.id === "blink" && P.blinks > 1) { rect(x + 1, 13, 2, 1, 0); rect(x + 4, 13, 2, 1, 0); }
       }
     });
-    if (S.boss) {
+    if (S.boss && S.boss.kind !== "chase") {
       const b = S.boss;
       rect(16, TOP + 2, W - 32, 5, 3);
       rect(17, TOP + 3, Math.round((W - 34) * (b.hp / b.max)), 3, 0);
@@ -1697,6 +2190,7 @@ export function boot(hw) {
     if (S.phase === "caught") return drawCaught();
     if (S.phase === "book") return drawBook();
     if (S.phase === "story" || (S.phase === "escape" && S.dialog)) return drawDialog();
+    if (S.phase === "cut") { drawCut(); if (S.dialog) drawDialog(); return; }
     if (S.phase === "escape") return drawEnding();
     if (S.choice) return drawChoice();
     if (S.paused && S.phase !== "practice") return drawPause();
@@ -1712,6 +2206,28 @@ export function boot(hw) {
     suspend() { if ((S.phase === "room" || S.phase === "shaft") && !S.paused && !S.dialog && !S.choice) { S.paused = true; S.sel = 0; S.song = snd.pause(); } save(); },
     dispose() { save(); snd.dispose(); },
   };
+}
+
+/**
+ * The label on Malvado's cartridge. It's never in the book: it only turns
+ * up when he swaps it in mid-game.
+ */
+export function castleCover(lcd) {
+  const { rect, ellipse, banner, ctext, px } = lcd;
+  rect(0, 0, W, H, 2);
+  ellipse(128, 18, 8, 8, 0, null);
+  for (let i = 0; i < 12; i++) px(8 + ((i * 41) % 140), 6 + ((i * 17) % 28), 0);
+  // The castle, with his hat on the tallest tower.
+  rect(30, 44, 100, 40, 3);
+  for (const [x, top, w] of [[26, 28, 20], [114, 28, 20], [68, 16, 24]]) {
+    rect(x, top, w, 84 - top, 3);
+    for (let k = 0; k < w; k += 6) rect(x + k, top - 4, 4, 4, 3);
+  }
+  rect(73, 0, 14, 12, 3); rect(69, 11, 22, 3, 3); rect(73, 8, 14, 2, 1);
+  rect(76, 26, 8, 8, 1); rect(32, 38, 4, 6, 1); rect(120, 38, 4, 6, 1);
+  rect(73, 66, 14, 18, 1); rect(79, 66, 2, 18, 3);
+  banner(["MALVADO'S", "CASTLE"], 90, 1);
+  ctext("A GAME BY THE GREAT MALVADO", 126, 0);
 }
 
 /** The label on the cartridge. */
