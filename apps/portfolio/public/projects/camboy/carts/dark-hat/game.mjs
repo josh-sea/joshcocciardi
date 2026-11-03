@@ -1,10 +1,12 @@
 /**
  * Dark Hat: Sorcerer's Escape. A game by Campbell, cartridge #3 for the Camboy.
  *
- * Overhead rooms inside the Great Malvado's top hat, side-view ladder
- * shafts between its layers. Partway down, Malvado zaps you flat and
- * swaps in a cartridge of his own: a side-on castle with doors, ledges
- * and ladders. The way out at the end is a flight up the hat on a magic
+ * Overhead rooms inside the Great Malvado's top hat. Between the layers:
+ * a hat slide down velvet hills ahead of his dark magic, and a ladder
+ * shaft. Partway down, Malvado zaps you flat and swaps in a cartridge of
+ * his own: a side-on castle with doors, ledges, ladders and two flat
+ * bosses. He throws you back in afterwards, and you freefall down a well
+ * to the bottom. The way out at the end is a flight up the hat on a magic
  * scarf. See rules.mjs for the story and the rules.
  */
 
@@ -15,6 +17,7 @@ import {
   cleanName, say, layoutLayer, neighbor, roomTiles, solidAt, boxHits, moveBox,
   drainSoul, gainSoul, newRun, validRun, upgradeRun, beatBoss, descend, dist, faceFrom, makeRng, roomEnemies,
   castleTiles, castleEnemies, SIDE, sideStep, sideMove, tileAt, standsOn, T_WALL, T_LEDGE, T_LADDER, T_SPIKES,
+  beatRoomBoss, SPARKLE_DROP, SLIDE, slideGround, slideStep, darkSpeed, WELL, makeWell,
 } from "./rules.mjs";
 import { createSound } from "./sound.mjs";
 
@@ -218,6 +221,7 @@ export function boot(hw) {
     if (LAYERS[R.layer].side) { enterCastle(false); return; }
     P.x = RW / 2; P.y = RH / 2;
     enterRoom(R.room, null);
+    if (S.ladder) P.y = S.ladder.y + 24; // pick up next to the ladder, not on it
     snd.play("layer");
     toast(LAYERS[R.layer].name, 1.6);
     setPhase("room");
@@ -327,7 +331,7 @@ export function boot(hw) {
       sfx.pop();
       puff(e.x, e.y, 6);
       if (S.practice) return;
-      if (Math.random() < 0.6) S.pickups.push({ kind: "sparkle", x: e.x, y: e.y, t: 0 });
+      if (Math.random() < SPARKLE_DROP) S.pickups.push({ kind: "sparkle", x: e.x, y: e.y, t: 0 });
       else if (Math.random() < 0.12) S.pickups.push({ kind: "heart", x: e.x, y: e.y, t: 0 });
     } else sfx.hit();
   }
@@ -895,10 +899,15 @@ export function boot(hw) {
   /* ---------- bosses ---------- */
 
   function startBoss() {
-    const kind = LAYERS[R.layer].boss;
+    const kind = S.side ? S.room.boss : LAYERS[R.layer].boss;
     S.boss = { kind, name: BOSSES[kind].name, hp: BOSSES[kind].hp, max: BOSSES[kind].hp, x: 80, y: 40, r: 10, t: 0, state: "idle", stT: 0, flash: 0, hitBy: new Map(), lands: 0, phase: 1 };
     if (kind === "king") { S.boss.r = 8; S.boss.state = "show"; S.boss.stT = 3; }
     if (kind === "flatrabbit") Object.assign(S.boss, { r: 11, x: S.rw - 50, y: (S.tiles.length - 1) * TILE - 12, stT: 1.2 });
+    if (kind === "flatking") {
+      // The same card trick, side-on: he hides among cards dealt onto the floor and the ledges.
+      const floor = (S.tiles.length - 1) * TILE - 12;
+      Object.assign(S.boss, { r: 8, state: "show", stT: 3, x: 120, y: floor, spots: [[30, floor], [130, floor], [80, floor], [36, floor - 32], [124, floor - 32]], orbit: [80, floor - 30, 50, 22] });
+    }
     if (kind === "malvado") { S.boss.r = 8; S.boss.y = 30; snd.play("malvado"); sfx.laugh(); }
     else { snd.play("boss"); sfx.roar(); }
     toast([S.boss.name], 1.6);
@@ -909,7 +918,7 @@ export function boot(hw) {
     const b = S.boss;
     if (!b) return false;
     if (b.kind === "rabbit") return b.state !== "air";
-    if (b.kind === "king") return b.state === "show";
+    if (b.kind === "king" || b.kind === "flatking") return b.state === "show";
     if (b.kind === "malvado") return b.state !== "gone";
     return true; // the flat rabbit, and Malvado chasing the scarf
   }
@@ -937,15 +946,16 @@ export function boot(hw) {
       S.enemies.forEach((e) => { e.dead = true; puff(e.x, e.y, 3); });
       S.foes = [];
       b.vortex = false;
-      const last = beatBoss(R);
+      const final = S.side && S.room.id === layout.boss;
+      const last = S.side ? beatRoomBoss(R, key(R.layer, S.room.id), final) : beatBoss(R);
       S.sealed = false;
       if (!S.side) S.tiles = roomTiles(S.room, false);
       save();
       if (last) { S.endT = 2.2; }
       else if (S.side) {
-        // No ladder in the castle: the way out is a door.
+        // No ladder in the castle. The rabbit opens the way to the Card Hall; the King opens the way out.
         snd.play("castle");
-        talk([`${name} BEAT ${b.name}! ${name}'S HEART GREW STRONGER.`, STORY.bossGift], () => openPick("boss", () => talk([STORY.castleDoor])));
+        talk([`${name} BEAT ${b.name}! ${name}'S HEART GREW STRONGER.`, STORY.bossGift], () => openPick("boss", () => talk([final ? STORY.castleDoor : STORY.castleNext])));
       } else {
         S.ladder = { x: 80, y: 64 };
         snd.play("layer");
@@ -992,9 +1002,10 @@ export function boot(hw) {
         if (b.ring.r > RABBIT.ring) b.ring = null;
       }
       if (b.state !== "air" && dist(b.x, b.y, P.x, P.y) < 12) hurtPlayer(1, b.x, b.y);
-    } else if (b.kind === "king") {
+    } else if (b.kind === "king" || b.kind === "flatking") {
       const many = b.hp < b.max / 2;
-      const spots = [[40, 36], [120, 36], [40, 96], [120, 96], [80, 64]];
+      const spots = b.spots || [[40, 36], [120, 36], [40, 96], [120, 96], [80, 64]];
+      const [ocx, ocy, orx, ory] = b.orbit || [80, 64, 50, 34];
       if (b.state === "show") {
         b.fanT = (b.fanT ?? 0.6) - dt;
         if (b.fanT <= 0) { b.fanT = many ? 0.9 : 1.3; for (let i = -2; i <= 2; i++) bolt(b.x, b.y, 70, i * 0.22); S.foes.slice(-5).forEach((f) => (f.kind = "ecard")); sfx.card(); }
@@ -1003,7 +1014,7 @@ export function boot(hw) {
           b.cards = Array.from({ length: many ? 4 : 3 }, (_, i) => ({ x: b.x, y: b.y, real: i === 0, a: i * 2 }));
         }
       } else if (b.state === "shuffle") {
-        b.cards.forEach((c, i) => { c.a += dt * 3; c.x = 80 + Math.cos(c.a + i * 1.7) * 50; c.y = 64 + Math.sin(c.a * 1.3 + i) * 34; });
+        b.cards.forEach((c, i) => { c.a += dt * 3; c.x = ocx + Math.cos(c.a + i * 1.7) * orx; c.y = ocy + Math.sin(c.a * 1.3 + i) * ory; });
         if (b.stT <= 0) {
           b.state = "deal"; b.stT = 3.5;
           const order = spots.slice().sort(() => Math.random() - 0.5);
@@ -1079,6 +1090,7 @@ export function boot(hw) {
   /* ---------- the ladder shafts ---------- */
 
   function startShaft() {
+    if (LAYERS[R.layer].down === "slide") { startSlide(); return; }
     S.ladder = null;
     sfx.ladder();
     S.shaft = { lane: 1, x: 80, prog: 0, sparks: [], spawn: 0.6, inv: 0 };
@@ -1189,9 +1201,9 @@ export function boot(hw) {
 
   function leaveCastle() {
     S.cut = null;
-    descend(R);
-    enterLayer(false);
-    talk([STORY.castleBack]);
+    S.side = false;
+    beginFall();
+    talk([STORY.castleBack, STORY.fallIntro, STORY.fallHelp]);
   }
 
   const camera = () => { S.cam = Math.round(Math.max(0, Math.min(S.rw - W, P.x - W / 2))); };
@@ -1211,20 +1223,23 @@ export function boot(hw) {
     Object.assign(P, { x: at.x, y: at.y, vx: 0, vy: 0, w: 6, h: 10, ground: true, climb: false, coyote: 0, buffer: 0, dropT: 0 });
     P.face = { x: P.x < S.rw / 2 ? 1 : -1, y: 0 };
     P.inv = Math.max(P.inv, 0.6);
-    S.sealed = room.kind === "boss" && !R.beaten[R.layer];
+    S.sealed = room.kind === "boss" && !bossDone(room);
     const k = key(R.layer, id);
     if (!R.cleared.includes(k)) for (const e of castleEnemies(R, R.layer, room)) if (dist(e.x, e.y, P.x, P.y) > 40) addEnemy(e.kind, e.x, e.y);
     if (room.spirit && !R.freed.includes(k)) S.spirit = { ...room.spirit, t: 0 };
     if (room.fountain) S.fountain = { ...room.fountain, used: R.fountains.includes(k) };
-    if (S.sealed) { sfx.door(); talk([STORY.castleBoss], () => { S.bossIn = 0.6; toast(STORY.bossDoor, 1.0); }); }
+    if (S.sealed) { sfx.door(); talk([room.boss === "flatking" ? STORY.castleKing : STORY.castleBoss], () => { S.bossIn = 0.6; toast(STORY.bossDoor, 1.0); }); }
     camera();
     save();
   }
 
-  /** The door you're standing in front of, if any. The way out only shows once the boss is beaten. */
+  /** Has this castle room's boss been beaten? (Older saves that beat the castle count the rabbit as done.) */
+  const bossDone = (room) => R.cleared.includes(key(R.layer, room.id)) || (room.boss === "flatrabbit" && R.beaten[R.layer]);
+
+  /** The door you're standing in front of, if any. The way out only shows once its room's boss is beaten. */
   function doorHere() {
     if (!S.side || !P.ground || P.climb) return null;
-    return S.room.doors.find((d) => (d.id !== "x" || R.beaten[R.layer]) && Math.abs(P.x - d.x) < 7 && Math.abs(P.y + 5 - d.foot) < 2) || null;
+    return S.room.doors.find((d) => (d.id !== "x" || bossDone(S.room)) && Math.abs(P.x - d.x) < 7 && Math.abs(P.y + 5 - d.foot) < 2) || null;
   }
 
   function updateSidePlayer(dt) {
@@ -1271,8 +1286,15 @@ export function boot(hw) {
       rect(x + 1, y + 3, 8, 14, 1); rect(x + 5, y + 3, 1, 14, 3); rect(x + 1, y + 9, 8, 1, 3);
       if (wx === 5) { rect(x + 2, y + 4, 3, 3, 0); }
     }
-    // The throne, behind the fight.
-    if (room.kind === "boss") {
+    // Giant playing cards on the Card Hall's walls; the throne behind the rabbit.
+    if (room.boss === "flatking") {
+      for (const cx of [44, 116]) {
+        const y = TOP + 26;
+        rect(cx - 10, y, 20, 28, 3); rect(cx - 9, y + 1, 18, 26, 1);
+        rect(cx - 2, y + 9, 4, 8, 3); rect(cx - 4, y + 11, 8, 4, 3); // a diamond, roughly
+        rect(cx - 7, y + 3, 2, 3, 3); rect(cx + 5, y + 21, 2, 3, 3);
+      }
+    } else if (room.kind === "boss") {
       const x = w / 2, y = TOP + RH - 8;
       rect(x - 12, y - 44, 24, 44, 3); rect(x - 9, y - 40, 18, 22, 1); rect(x - 16, y - 18, 32, 4, 3);
       rect(x - 5, y - 52, 10, 8, 3); rect(x - 8, y - 45, 16, 2, 3); // his hat on top
@@ -1306,7 +1328,7 @@ export function boot(hw) {
     const here = doorHere();
     for (const d of room.doors) {
       const out = d.id === "x";
-      if (out && !R.beaten[R.layer]) continue;
+      if (out && !bossDone(room)) continue;
       const x = d.x - 8, y = TOP + d.foot - 24;
       rect(x - 1, y + 2, 18, 22, 3); rect(x + 1, y, 14, 2, 3);
       rect(x + 1, y + 3, 14, 21, out ? 0 : 1);
@@ -1427,13 +1449,7 @@ export function boot(hw) {
     }
   }
 
-  function drawFlightBar() {
-    const p = S.flight.prog;
-    rect(16, H - 7, W - 40, 5, 3);
-    rect(17, H - 6, W - 42, 3, 2);
-    rect(17, H - 6, Math.round((W - 42) * p), 3, 0);
-    text("OUT", W - 20, H - 7, 0);
-  }
+  const drawFlightBar = () => drawProgress(S.flight.prog, "OUT");
 
   /** The magic scarf under the hero's feet, rippling. */
   function drawScarf(x, y) {
@@ -1487,6 +1503,241 @@ export function boot(hw) {
       rect(0, 0, W, hh, 3); rect(0, H - hh, W, hh, 3);
       if (k >= 1) rect(0, 0, W, H, 3);
     }
+  }
+
+  /* ---------- the hat slide: down the velvet hills, ahead of the dark ---------- */
+
+  function startSlide() {
+    S.ladder = null;
+    sfx.ladder();
+    beginSlide();
+    talk([STORY.slideIntro, STORY.slideHelp]);
+  }
+
+  function beginSlide() {
+    const gems = [], sparks = [];
+    for (let x = 220; x < SLIDE.length - 100; x += 165) gems.push({ x, y: slideGround(x) - 16 - ((x / 165) % 3) * 9 });
+    for (let x = 520; x < SLIDE.length - 200; x += 430) sparks.push({ x, y: slideGround(x) - 34 });
+    S.slide = { b: { x: 0, y: slideGround(0), vx: 50, vy: 0, ground: true }, dark: SLIDE.darkStart, gems, sparks, inv: 0, t: 0 };
+    S.fx = [];
+    P.face = { x: 1, y: 0 };
+    snd.setTempo(1);
+    snd.play("flight");
+    setPhase("slide");
+  }
+
+  function updateSlide(dt) {
+    const sl = S.slide, b = sl.b;
+    sl.t += dt;
+    R.soul = drainSoul(R.soul, dt, R.deep);
+    if (R.soul <= 0) { caught(); return; }
+    sl.inv = Math.max(0, sl.inv - dt);
+    const ev = slideStep(b, held.a || held.b || held.down, dt);
+    if (ev.nice) { word(b.x, b.y - 18, "NICE!"); sfx.sparkle(); haptic(12); }
+    else if (ev.oof) { word(b.x, b.y - 18, "OOF"); sfx.land(); haptic(8); }
+    else if (ev.landed) sfx.land();
+    sl.dark += darkSpeed(b.x) * dt;
+    for (const g of sl.gems) if (!g.got && dist(g.x, g.y, b.x, b.y - 6) < 10) { g.got = true; R.soul = gainSoul(R.soul, "sparkle"); sfx.sparkle(); }
+    for (const sp of sl.sparks) {
+      if (sp.hit || sl.inv > 0 || dist(sp.x, sp.y, b.x, b.y - 6) > 8) continue;
+      sp.hit = true; sl.inv = 1; R.hp = Math.max(0, R.hp - 1); sfx.hurt(); haptic(30); S.shake = 0.2;
+      if (R.hp <= 0) { caught(); return; }
+    }
+    if (sl.dark >= b.x - 6) { slideCaught(); return; }
+    if (b.x >= SLIDE.length) {
+      // Down the hole at the bottom of the slope, into the Catacombs.
+      S.slide = null;
+      descend(R);
+      R.hp = Math.max(R.hp, 1);
+      enterLayer(false);
+    }
+  }
+
+  function slideCaught() {
+    sfx.laugh(); haptic(40);
+    R.hp = Math.max(0, R.hp - 2);
+    if (R.hp <= 0) { caught(); return; }
+    talk([STORY.slideCaught], beginSlide);
+  }
+
+  function drawSlide() {
+    const sl = S.slide;
+    if (!sl) { rect(0, 0, W, H, 3); return; }
+    const b = sl.b, cam = Math.round(b.x - 48);
+    // The hat's lining: stitched folds sliding by slower than the ground.
+    rect(0, TOP, W, RH, 2);
+    for (let i = 0; i < 6; i++) {
+      const x = ((((i * 37 - cam * 0.35) % 222) + 222) % 222) - 20;
+      for (let y = TOP; y < H; y += 4) px(Math.round(x), y, 3);
+    }
+    // The hole at the bottom, and the ground.
+    const hx = SLIDE.length - cam;
+    for (let sx = 0; sx < W; sx++) {
+      const wx = cam + sx, gy = Math.round(slideGround(wx));
+      if (Math.abs(wx - SLIDE.length - 12) < 12) continue;
+      rect(sx, TOP + gy, 1, RH - gy, 3);
+      px(sx, TOP + gy, 1);
+      if (((wx >> 2) + (gy >> 3)) % 4 === 0) px(sx, TOP + gy + 4, 2);
+    }
+    if (hx > -30 && hx < W + 30 && Math.floor(S.t * 2) % 2) ctext("DOWN!", TOP + Math.round(slideGround(SLIDE.length)) - 22, 0, 1, hx + 12);
+    for (const g of sl.gems) if (!g.got) { const x = Math.round(g.x - cam), y = Math.round(TOP + g.y); px(x, y - 2, 0); px(x - 1, y - 1, 0); px(x + 1, y - 1, 0); px(x, y, 0); }
+    for (const sp of sl.sparks) if (!sp.hit) drawSpark(sp.x - cam, TOP + sp.y);
+    // You, riding your hat upside down like a sled.
+    const kx = Math.round(b.x - cam), ky = Math.round(TOP + b.y);
+    if (!(sl.inv > 0 && !S.dialog && Math.floor(sl.inv * 14) % 2)) {
+      rect(kx - 5, ky - 4, 10, 4, 3); rect(kx - 5, ky - 4, 10, 1, 1); rect(kx - 7, ky - 6, 14, 2, 3);
+      sprite(b.ground ? KID_SIDE : stepLegs(KID_SIDE), kx, ky - 5);
+    }
+    // The dark, rolling in from behind, with Malvado in it.
+    const dx = Math.round(sl.dark - cam);
+    if (dx > -12) {
+      for (let y = TOP; y < H; y += 2) { const w = dx + Math.round(Math.sin(S.t * 7 + y * 0.25) * 4); if (w > 0) rect(0, y, w, 2, 3); }
+      for (let k = 0; k < 5; k++) drawSpark(dx + Math.sin(S.t * 5 + k * 2) * 4, TOP + 12 + k * 24 + Math.cos(S.t * 3 + k) * 6);
+      if (dx > 14) drawMalvado(dx - 8, TOP + 50, 1);
+    }
+    for (const f of S.fx) if (f.kind === "word") { const x = Math.round(f.x - cam), y = Math.round(TOP + f.y); rect(x - Math.ceil(textW(f.w) / 2) - 1, y - 1, textW(f.w) + 2, 7, 3); ctext(f.w, y, 0, 1, x); }
+    drawHud();
+    drawProgress(b.x / SLIDE.length, "OUT");
+    if (sl.t < 4 && !S.dialog) ctext("HOLD A: DIVE", TOP + 4, 0);
+  }
+
+  /** A progress bar along the bottom of the screen. */
+  function drawProgress(p, label) {
+    const w = W - 24 - textW(label);
+    rect(16, H - 7, w, 5, 3);
+    rect(17, H - 6, w - 2, 3, 2);
+    rect(17, H - 6, Math.round((w - 2) * Math.max(0, Math.min(1, p))), 3, 0);
+    text(label, W - 4 - textW(label), H - 7, 0);
+  }
+
+  /* ---------- the freefall: down the well to the bottom of the hat ---------- */
+
+  function beginFall() {
+    const well = makeWell((R.seed ^ 0x5eed) >>> 0);
+    S.fall = {
+      tiles: well.tiles,
+      foes: well.foes.map((f) => ({ ...f, x0: f.x, hp: f.kind === "spark" ? 1 : 2, t: Math.random() * 6, flash: 0 })),
+      gems: well.gems.map((g) => ({ ...g })),
+      shots: [], ammo: WELL.ammo, cam: 0, inv: 0,
+      b: { x: 80, y: 24, w: 6, h: 10, vx: 0, vy: 0, ground: false },
+    };
+    S.fx = [];
+    P.face = { x: 1, y: 0 };
+    snd.setTempo(1);
+    snd.play("boss");
+    setPhase("fall");
+  }
+
+  function hurtFoe(f, e, dmg) {
+    e.hp -= dmg; e.flash = 0.15;
+    if (e.hp > 0) { sfx.hit(); return; }
+    e.dead = true; sfx.pop(); puff(e.x, e.y, 6);
+    if (Math.random() < SPARKLE_DROP) f.gems.push({ x: e.x, y: e.y });
+  }
+
+  function updateFall(dt) {
+    const f = S.fall, b = f.b;
+    R.soul = drainSoul(R.soul, dt, R.deep);
+    if (R.soul <= 0) { caught(); return; }
+    f.inv = Math.max(0, f.inv - dt);
+    const sx = Math.abs(stick.x) > 0.3 ? Math.sign(stick.x) : 0;
+    if (sx) P.face = { x: sx, y: 0 };
+    b.vx = sx * WELL.walk;
+    if (pressed.has("a") || pressed.has("up")) {
+      if (b.ground) { b.vy = -165; b.ground = false; sfx.jump(); }
+      else if (f.ammo > 0) {
+        // A card straight down: it hits what's below and holds you up a moment.
+        f.ammo--;
+        f.shots.push({ x: b.x, y: b.y + 6, life: 0.8 });
+        b.vy = Math.min(b.vy, 20) - 40;
+        sfx.card(); haptic(6);
+      } else sfx.blip();
+    }
+    b.vy = Math.min(WELL.fall, b.vy + WELL.gravity * dt);
+    const m = sideMove(f.tiles, b, b.vx * dt, b.vy * dt);
+    b.x = m.x; b.y = m.y;
+    if (m.landed) { if (!b.ground) { f.ammo = WELL.ammo; sfx.land(); } b.ground = true; b.vy = 0; }
+    else if (b.vy > 0) b.ground = false;
+    if (m.bonk) b.vy = 0;
+
+    for (const s of f.shots) {
+      s.y += WELL.shot * dt; s.life -= dt;
+      if (tileAt(f.tiles, Math.floor(s.x / TILE), Math.floor(s.y / TILE)) === T_WALL) { s.life = 0; puff(s.x, s.y, 2); }
+      for (const e of f.foes) if (s.life > 0 && !e.dead && dist(s.x, s.y, e.x, e.y) < 7) { s.life = 0; hurtFoe(f, e, 1); }
+    }
+    f.shots = f.shots.filter((s) => s.life > 0);
+
+    for (const e of f.foes) {
+      if (e.dead || Math.abs(e.y - b.y) > 150) continue; // only what's near wakes up
+      e.t += dt; e.flash = Math.max(0, e.flash - dt);
+      if (e.kind === "spark") {
+        e.x += (Math.sign(b.x - e.x) * 16 + Math.sin(e.t * 6) * 12) * dt;
+        e.y += (Math.sign(b.y - e.y) * 12 + Math.cos(e.t * 5) * 10) * dt;
+      } else if (e.kind === "glove") {
+        e.x = Math.max(24, Math.min(WELL.cols * TILE - 24, e.x0 + Math.sin(e.t * 1.4) * 34));
+      }
+      if (Math.abs(b.x - e.x) < 7 && Math.abs(b.y - e.y) < 9) {
+        // Land on a glove or a bunny to stomp it. Sparks can only be shot.
+        if (e.kind !== "spark" && b.vy > 10 && b.y < e.y - 2) {
+          hurtFoe(f, e, 9); b.vy = -175; f.ammo = WELL.ammo; word(e.x, e.y - 10, "STOMP!"); haptic(15);
+        } else if (f.inv <= 0) {
+          f.inv = 1.2; b.vy = -110; R.hp = Math.max(0, R.hp - 1); sfx.hurt(); haptic(30); S.shake = 0.2;
+          if (e.kind === "spark") { e.dead = true; puff(e.x, e.y, 3); }
+          if (R.hp <= 0) { caught(); return; }
+        }
+      }
+    }
+    f.foes = f.foes.filter((e) => !e.dead);
+    for (const g of f.gems) if (!g.got && dist(g.x, g.y, b.x, b.y) < 9) { g.got = true; R.soul = gainSoul(R.soul, "sparkle"); sfx.sparkle(); }
+    const depth = f.tiles.length * TILE;
+    f.cam = Math.max(0, Math.min(depth - RH, b.y - 46));
+    if (b.ground && b.y > depth - 3 * TILE) {
+      // The bottom of the hat.
+      S.fall = null;
+      descend(R);
+      R.hp = Math.max(R.hp, 1);
+      enterLayer(false);
+    }
+  }
+
+  function drawFall() {
+    const f = S.fall;
+    if (!f) { rect(0, 0, W, H, 3); return; }
+    const cam = Math.round(f.cam), b = f.b, depth = f.tiles.length * TILE;
+    rect(0, TOP, W, RH, 2);
+    lcd.g.save();
+    lcd.g.translate(ox(), -cam);
+    // Stitching in the lining rushes up past you.
+    for (let y = Math.floor(cam / 12) * 12; y < cam + RH; y += 12) { px(40, TOP + y, 3); px(120, TOP + y + 6, 3); px(80, TOP + y + 3, 1); }
+    const t0 = Math.max(0, Math.floor(cam / TILE)), t1 = Math.min(f.tiles.length - 1, Math.ceil((cam + RH) / TILE));
+    for (let ty = t0; ty <= t1; ty++) for (let tx = 0; tx < WELL.cols; tx++) {
+      if (f.tiles[ty][tx] !== T_WALL) continue;
+      const x = tx * TILE, y = TOP + ty * TILE;
+      rect(x, y, TILE, TILE, 3);
+      if (ty > 0 && f.tiles[ty - 1][tx] !== T_WALL) rect(x, y, TILE, 1, 1);
+      else if ((tx * 5 + ty * 3) % 7 === 0) px(x + 3, y + 4, 2);
+    }
+    for (const g of f.gems) if (!g.got) { const x = Math.round(g.x), y = Math.round(TOP + g.y); px(x, y - 2, 0); px(x - 1, y - 1, 0); px(x + 1, y - 1, 0); px(x, y, 0); }
+    for (const e of f.foes) {
+      if (e.flash > 0 && Math.floor(e.flash * 40) % 2) continue;
+      if (e.kind === "spark") drawSpark(e.x, TOP + e.y);
+      else {
+        const rows = e.kind === "glove" ? GLOVE : BUNNY;
+        const hop = e.kind === "bunny" ? Math.round(Math.max(0, Math.sin(e.t * 4)) * 3) : 0;
+        sprite(rows, Math.round(e.x), Math.round(TOP + e.y + 4 - hop), e.x > b.x);
+      }
+    }
+    for (const s of f.shots) drawCard(s.x, s.y);
+    if (!(f.inv > 0 && !S.dialog && Math.floor(f.inv * 14) % 2)) sprite(b.ground ? KID_SIDE : KID_DOWN, Math.round(b.x), Math.round(TOP + b.y + 5), P.face.x < 0);
+    for (const fx of S.fx) {
+      if (fx.kind === "dot") px(Math.round(fx.x), Math.round(TOP + fx.y), fx.t > 0.2 ? 0 : 1);
+      else if (fx.kind === "word") { const x = Math.round(fx.x), y = Math.round(TOP + fx.y); rect(x - Math.ceil(textW(fx.w) / 2) - 1, y - 1, textW(fx.w) + 2, 7, 3); ctext(fx.w, y, 0, 1, x); }
+    }
+    lcd.g.restore();
+    drawHud();
+    // Cards left to shoot, down the right edge.
+    for (let i = 0; i < WELL.ammo; i++) rect(W - 6, TOP + 6 + i * 6, 3, 4, i < f.ammo ? 0 : 3);
+    drawProgress(b.y / depth, "BOTTOM");
   }
 
   /* ---------- the frame ---------- */
@@ -1568,11 +1819,15 @@ export function boot(hw) {
     if (pressed.has("start")) { S.paused = true; S.sel = 0; S.song = snd.pause(); sfx.blip(); return; }
 
     if (S.phase === "shaft") { updateShaft(dt); return; }
+    if (S.phase === "slide") { updateSlide(dt); return; }
+    if (S.phase === "fall") { updateFall(dt); return; }
     if (S.flight) { updateFlight(dt); return; }
 
     // In a room.
     R.soul = drainSoul(R.soul, dt, R.deep);
     if (R.soul < 20 && (S.beatT -= dt) <= 0) { S.beatT = 1.4; sfx.heartbeat(); haptic(8); }
+    if (R.soul < 30 && !S.soulWarned) { S.soulWarned = true; toast(["YOUR SOUL IS FADING!", "FIND SPARKLES!"], 1.6); }
+    else if (R.soul > 45) S.soulWarned = false;
     if (R.soul <= 0) { caught(); return; }
     if (S.bossIn != null && (S.bossIn -= dt) <= 0) { S.bossIn = null; startBoss(); }
     if (S.endT != null && (S.endT -= dt) <= 0) { S.endT = null; startFlight(); return; }
@@ -1616,7 +1871,7 @@ export function boot(hw) {
     block(22, "A", R.attack, ATTACKS, ATTACK_ICON[R.attack.id]);
     block(58, "B", R.defense, DEFENSES, R.defense && DEFENSE_ICON[R.defense.id]);
     // Hearts from bonuses: whatever is above the three you start with and one per boss beaten.
-    const extra = Math.max(0, (R.maxHp - 6 - R.beaten.filter(Boolean).length * 2) / 2);
+    const extra = R.hearts || 0;
     const bonus = [extra && `BIG HEART X${extra}`, R.deep && `DEEP SOUL X${R.deep}`].filter(Boolean).join("  ");
     if (bonus) text(`BONUS: ${bonus}`, 8, 93, 1);
     PAUSE_ITEMS.forEach((it, i) => {
@@ -2044,7 +2299,7 @@ export function boot(hw) {
       // A grabbing hand, reaching for the end of the scarf.
       const reach = 3 + Math.round(Math.sin(S.t * 8) * 2);
       rect(x + 4, y - 3, reach + 3, 1, 3); rect(x + 7 + reach, y - 5, 3, 4, 0); px(x + 10 + reach, y - 5, 0);
-    } else if (b.kind === "king") {
+    } else if (b.kind === "king" || b.kind === "flatking") {
       if (b.state === "show") {
         const x = Math.round(b.x), y = Math.round(TOP + b.y);
         rect(x - 8, y - 12, 16, 24, 3);
@@ -2197,6 +2452,8 @@ export function boot(hw) {
     if (S.choice) return drawChoice();
     if (S.paused && S.phase !== "practice") return drawPause();
     if (S.phase === "shaft") drawShaft();
+    else if (S.phase === "slide") drawSlide();
+    else if (S.phase === "fall") drawFall();
     else drawWorld();
     if (S.toast) banner(S.toast.lines, 50);
     if (S.dialog) drawDialog();
@@ -2205,7 +2462,7 @@ export function boot(hw) {
   return {
     update,
     draw,
-    suspend() { if ((S.phase === "room" || S.phase === "shaft") && !S.paused && !S.dialog && !S.choice) { S.paused = true; S.sel = 0; S.song = snd.pause(); } save(); },
+    suspend() { if (["room", "shaft", "slide", "fall"].includes(S.phase) && !S.paused && !S.dialog && !S.choice) { S.paused = true; S.sel = 0; S.song = snd.pause(); } save(); },
     dispose() { save(); snd.dispose(); },
   };
 }
