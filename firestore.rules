@@ -1072,6 +1072,36 @@ service cloud.firestore {
     // `users` matters most: anyone can create an account, so without the
     // exclusion below every signed-in user could read every other user's
     // cached mail and OAuth tokens.
+    // ── Contact form (joshcocciardi.com/contact) ────────────────────────
+    // Visitors aren't signed in, so create is open, but only for a document
+    // with exactly these fields, sane sizes, a server timestamp and read ==
+    // false. Nobody but Josh's verified account can read, list, mark or
+    // delete messages (read at /work/inbox). Updates may only flip `read`.
+    // Keep the address in sync with src/work/access.js.
+    match /contact_messages/{id} {
+      function contactAdmin() {
+        return request.auth != null
+          && request.auth.token.email_verified == true
+          && request.auth.token.email.lower() in ['joshua.cocciardi@gmail.com'];
+      }
+      function validNew(d) {
+        return d.keys().hasOnly(['name', 'email', 'message', 'createdAt', 'read'])
+          && d.keys().hasAll(['name', 'email', 'message', 'createdAt', 'read'])
+          && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+          && d.email is string && d.email.size() <= 200
+          && d.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+          && d.message is string && d.message.size() > 0 && d.message.size() <= 5000
+          && d.createdAt == request.time
+          && d.read == false;
+      }
+
+      allow create: if validNew(request.resource.data);
+      allow read, delete: if contactAdmin();
+      allow update: if contactAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read is bool;
+    }
+
     match /{collection}/{document=**} {
       allow read, write: if request.auth != null
         && collection != 'users'
@@ -1091,7 +1121,8 @@ service cloud.firestore {
         && !collection.matches('park_.*')
         && !collection.matches('scale_.*')
         && !collection.matches('weather_.*')
-        && collection != 'work_private';
+        && collection != 'work_private'
+        && collection != 'contact_messages';
     }
   }
 }

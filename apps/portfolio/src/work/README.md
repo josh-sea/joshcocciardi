@@ -4,7 +4,11 @@ Sign-in-gated pages that are **not** part of the public site. They live outside
 `src/tools/` on purpose: that registry feeds `/tools` and `/projects`, so
 anything in it is advertised. Nothing here is ever listed anywhere.
 
-Currently: `/work/onboarding` — the Casap intake emulator.
+Currently:
+
+- `/work/onboarding`: the Casap intake emulator.
+- `/work/inbox`: messages sent from the public `/contact` form
+  (`contact_messages` in Firestore, with its own block in `firestore.rules`).
 
 ## How access works
 

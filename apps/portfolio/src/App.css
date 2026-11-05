@@ -1,9 +1,21 @@
-html, body, #root {
+/* The window is the scroller. (#root used to be, which broke scroll-to-top
+   on navigation and mobile browsers' collapsing address bar.) `clip` hides
+   sideways overflow without turning body into a scroll container. */
+/* `html > body` outranks Semantic UI's own html/body rules, which load after
+   this file and would otherwise make body (height: 100%, overflow-x: hidden)
+   the scroll container. */
+html,
+html > body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  height: auto;
+  min-height: 100%;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+#root {
+  min-height: 100vh;
 }
 
 /* Add smooth scrolling behavior */
