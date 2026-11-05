@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ALL_PROJECTS } from "../site/data";
-import { Icon, usePageTitle } from "../site/ui";
+import { usePageTitle } from "../site/ui";
 
 // Directory of the React tools. Same cards as /projects, filtered to tools.
 const ToolsIndex = () => {
@@ -10,31 +10,23 @@ const ToolsIndex = () => {
   return (
     <>
       <header className="page-head">
-        <span className="label">Tools</span>
-        <h1>Small, single-purpose tools</h1>
-        <p>Interactive tools and visualizations that each do one job in the browser.</p>
+        <h1>Tools</h1>
+        <p>Small interactive tools and visualizations that each do one job in the browser.</p>
       </header>
       <div className="card-grid" style={{ marginTop: 32 }}>
         {tools.map((t) => (
-          <Link key={t.id} to={t.link} className="panel pcard feature" style={{ padding: 16 }}>
-            <div className="pcard-top">
-              <span className="tile" aria-hidden="true">
-                {t.emoji}
-              </span>
-              <div className="pcard-title">
-                <h3>{t.title}</h3>
-                <p className="pcard-blurb">{t.blurb}</p>
-              </div>
-            </div>
+          <article key={t.id} className="card pcard">
+            <h3>{t.title}</h3>
+            <p className="pcard-blurb">{t.blurb}</p>
             <div className="pcard-foot">
               <span className="pcard-tech" style={{ marginTop: 0 }}>
                 {t.tech.slice(0, 3).join(" · ")}
               </span>
-              <span className="key key--small" aria-hidden="true">
-                Open <Icon name="arrow" size={13} />
-              </span>
+              <Link to={t.link} className="key key--small">
+                Open
+              </Link>
             </div>
-          </Link>
+          </article>
         ))}
       </div>
     </>

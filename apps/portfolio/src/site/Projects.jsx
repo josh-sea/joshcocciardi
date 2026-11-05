@@ -18,16 +18,9 @@ const ProjectCard = ({ project, onImage }) => {
   const hasMore = project.description || project.images;
 
   return (
-    <article className="panel pcard">
-      <div className="pcard-top">
-        <span className="tile" aria-hidden="true">
-          {project.emoji}
-        </span>
-        <div className="pcard-title">
-          <h3>{project.title}</h3>
-          <p className="pcard-blurb">{project.blurb}</p>
-        </div>
-      </div>
+    <article className="card pcard">
+      <h3>{project.title}</h3>
+      <p className="pcard-blurb">{project.blurb}</p>
 
       {open && (
         <div id={detailsId}>
@@ -113,7 +106,6 @@ const Projects = () => {
   return (
     <>
       <header className="page-head">
-        <span className="label">Index</span>
         <h1>Everything I've built</h1>
         <p>
           {ALL_PROJECTS.length} apps, tools, games and experiments. Most run right in the browser, so
@@ -122,7 +114,7 @@ const Projects = () => {
       </header>
 
       {browsing && (
-        <section className="section" style={{ marginTop: 32 }}>
+        <section style={{ marginTop: 32 }}>
           <div className="feature-grid">
             {FEATURED.map((p) => (
               <FeatureCard key={p.id} project={p} />
@@ -131,8 +123,8 @@ const Projects = () => {
         </section>
       )}
 
-      <div className="panel toolbar">
-        <label className="well search">
+      <div className="toolbar">
+        <label className="search">
           <Icon name="search" size={17} />
           <input
             type="search"
@@ -147,10 +139,10 @@ const Projects = () => {
             </button>
           )}
         </label>
-        <div className="seg" role="group" aria-label="Filter by kind">
+        <div className="chips-row" role="group" aria-label="Filter by kind">
           <button
             type="button"
-            className={`seg-btn${section === "all" ? " on" : ""}`}
+            className="key key--small key--pill"
             aria-pressed={section === "all"}
             onClick={() => setSection("all")}
           >
@@ -160,7 +152,7 @@ const Projects = () => {
             <button
               type="button"
               key={s.key}
-              className={`seg-btn${section === s.key ? " on" : ""}`}
+              className="key key--small key--pill"
               aria-pressed={section === s.key}
               onClick={() => setSection(s.key)}
             >
@@ -171,7 +163,7 @@ const Projects = () => {
       </div>
 
       {query && (
-        <p className="label" style={{ marginTop: 16 }} aria-live="polite">
+        <p className="muted" style={{ marginTop: 16 }} aria-live="polite">
           {shown} {shown === 1 ? "match" : "matches"}
         </p>
       )}

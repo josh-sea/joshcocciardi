@@ -1,0 +1,207 @@
+/* ==========================================================================
+   The reel viewer on the home page (see Reel.jsx for the geometry).
+
+   Everything inside .reel-toy is sized off one variable, --R (the reel's
+   radius in px), which Reel.jsx sets from the space available. Positions are
+   written as multiples of --R so the toy scales as one object.
+   ========================================================================== */
+
+html.reel-snap { scroll-snap-type: y proximity; }
+
+.reel-scroll { position: relative; }
+.reel-snap-point { position: absolute; left: 0; width: 1px; height: 1px; scroll-snap-align: start; }
+
+.reel-stage {
+  position: sticky;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  gap: 20px;
+  padding: 12px 0 20px;
+}
+@media (min-width: 860px) {
+  .reel-stage { grid-template-columns: auto minmax(0, 1fr); gap: 56px; justify-items: start; }
+}
+
+.reel-toy {
+  --paper: #f6f3ec;
+  --paper-ink: #6f6858;
+  position: relative;
+  width: calc(var(--R) * 2.5);
+  height: calc(var(--R) * 2.14);
+  flex-shrink: 0;
+}
+@media (prefers-color-scheme: dark) { .reel-toy { --paper: #e9e4d8; } }
+
+/* ── The reel ─────────────────────────────────────────────────────────────── */
+
+.reel-disc {
+  position: absolute;
+  width: calc(var(--R) * 2);
+  height: calc(var(--R) * 2);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, transparent calc(var(--R) * 0.085), rgba(0, 0, 0, 0.18) calc(var(--R) * 0.09), transparent calc(var(--R) * 0.1)),
+    radial-gradient(circle at 50% 50%, transparent calc(var(--R) * 0.5), rgba(0, 0, 0, 0.05) calc(var(--R) * 0.505), transparent calc(var(--R) * 0.515)),
+    var(--paper);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 6px 14px rgba(0, 0, 0, 0.18);
+  will-change: transform;
+}
+/* The center hole lets the page show through. */
+.reel-disc::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--R) * 0.17);
+  height: calc(var(--R) * 0.17);
+  margin: calc(var(--R) * -0.085) 0 0 calc(var(--R) * -0.085);
+  border-radius: 50%;
+  background: var(--page);
+  box-shadow: inset 1px 2px 3px rgba(0, 0, 0, 0.35);
+}
+.reel-print { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.reel-print text { fill: var(--paper-ink); font-family: var(--font); font-weight: 600; }
+
+.reel-window {
+  position: absolute;
+  left: calc(var(--R) * (1 - 0.135));
+  top: calc(var(--R) * (1 - 0.135));
+  width: calc(var(--R) * 0.27);
+  height: calc(var(--R) * 0.27);
+  padding: calc(var(--R) * 0.012);
+  background: #15171a;
+  border-radius: calc(var(--R) * 0.02);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.reel-window img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: calc(var(--R) * 0.01);
+}
+
+/* ── The viewer ───────────────────────────────────────────────────────────── */
+
+.viewer-body {
+  position: absolute;
+  left: calc(var(--R) * 0.05);
+  width: calc(var(--R) * 2.4);
+  top: calc(var(--R) * 0.66);
+  height: calc(var(--R) * 1.46);
+  border-radius: calc(var(--R) * 0.3) calc(var(--R) * 0.3) calc(var(--R) * 0.55) calc(var(--R) * 0.55);
+  background: linear-gradient(180deg, #3d97ff 0%, #007aff 38%, #0063d6 100%);
+  border-style: solid;
+  border-width: 1px 3px 3px 1px;
+  border-color: #6fb3ff #0048a8 #0048a8 #6fb3ff;
+  box-shadow: 3px 4px 10px rgba(0, 40, 100, 0.35);
+}
+/* The slot the reel drops into. */
+.viewer-body::before {
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: calc(var(--R) * 0.06);
+  height: calc(var(--R) * 0.035);
+  border-radius: 99px;
+  background: #002f6e;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+/* The nose bridge. */
+.viewer-body::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--R) * -0.22);
+  width: calc(var(--R) * 0.5);
+  height: calc(var(--R) * 0.5);
+  margin-left: calc(var(--R) * -0.25);
+  border-radius: 50%;
+  background: var(--page);
+  box-shadow: inset 0 3px 3px rgba(0, 40, 100, 0.35);
+}
+
+.viewer-lens {
+  position: absolute;
+  top: calc(var(--R) * (1.04 - 0.3));
+  width: calc(var(--R) * 0.6);
+  height: calc(var(--R) * 0.6);
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0d0f12;
+  box-shadow:
+    0 0 0 calc(var(--R) * 0.045) #12233a,
+    0 0 0 calc(var(--R) * 0.06) #4a9eff,
+    inset 0 0 calc(var(--R) * 0.08) rgba(0, 0, 0, 0.9);
+}
+.viewer-lens--l { left: calc(var(--R) * (1.25 - 0.7 - 0.3)); }
+.viewer-lens--r { left: calc(var(--R) * (1.25 + 0.7 - 0.3)); }
+/* Glass: a soft highlight and a vignette over whatever is in the lens. */
+.viewer-lens::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.35), transparent 28%),
+    radial-gradient(circle at 50% 50%, transparent 52%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+}
+.lens-disc { position: absolute; box-shadow: none; }
+
+.viewer-lever {
+  position: absolute;
+  left: calc(var(--R) * 2.36);
+  top: calc(var(--R) * 0.86);
+  width: calc(var(--R) * 0.17);
+  height: calc(var(--R) * 0.56);
+  padding: 0;
+  border-style: solid;
+  border-width: 1px 3px 3px 1px;
+  border-color: #6fb3ff #0048a8 #0048a8 #6fb3ff;
+  border-radius: 0 calc(var(--R) * 0.08) calc(var(--R) * 0.08) 0;
+  background: linear-gradient(90deg, #0067e0, #2f8fff);
+  box-shadow: 2px 3px 5px rgba(0, 40, 100, 0.35);
+  cursor: pointer;
+  transition: transform 90ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.viewer-lever:active,
+.viewer-lever.is-down { transform: translateY(calc(var(--R) * 0.16)); }
+.viewer-lever span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ── Caption ──────────────────────────────────────────────────────────────── */
+
+.reel-caption { width: 100%; max-width: 30rem; }
+.reel-count { font-size: 0.85rem; color: var(--ink-3); }
+.reel-caption h3 { font-size: clamp(1.5rem, 3.4vw, 2.1rem); margin-top: 6px; letter-spacing: -0.025em; }
+.reel-caption p { color: var(--ink-2); margin-top: 8px; font-size: 1.02rem; min-height: 3.1em; }
+.reel-host { display: block; margin-top: 10px; font: 0.8rem/1.3 var(--mono); color: var(--ink-3); }
+.reel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 18px; }
+.reel-jump { display: flex; gap: 6px; margin-top: 20px; flex-wrap: wrap; }
+.reel-jump .key { min-width: 36px; }
+.reel-hint { margin-top: 14px; font-size: 0.85rem; color: var(--ink-3); }
+@media (max-width: 859px) {
+  .reel-caption { text-align: center; }
+  .reel-actions, .reel-jump { justify-content: center; }
+  .reel-caption p { min-height: 0; }
+  .reel-jump { margin-top: 14px; }
+  .reel-hint { display: none; }
+}
+
+/* Embossed nameplate between the lenses and the nose bridge. */
+.viewer-plate {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--R) * 1.5);
+  transform: translateX(-50%);
+  font: 700 calc(var(--R) * 0.075) / 1 var(--font);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #0a5ed1;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35), 0 -1px 0 rgba(0, 30, 80, 0.45);
+  white-space: nowrap;
+  pointer-events: none;
+}

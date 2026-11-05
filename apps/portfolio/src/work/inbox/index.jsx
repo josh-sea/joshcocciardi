@@ -53,18 +53,19 @@ const Inbox = ({ user }) => {
       <main className="site-main">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <header className="page-head">
-            <span className="label">Private · {user.email}</span>
+            <p className="muted">Signed in as {user.email}</p>
             <h1>Inbox</h1>
             <p>Messages from the contact form. {msgs && `${unread} unread of ${msgs.length}.`}</p>
           </header>
 
-          <div className="seg" style={{ marginTop: 24 }} role="group" aria-label="Filter">
-            <button type="button" className={`seg-btn${filter === "all" ? " on" : ""}`} onClick={() => setFilter("all")}>
+          <div className="chips-row" style={{ marginTop: 24 }} role="group" aria-label="Filter">
+            <button type="button" className="key key--small key--pill" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
               All
             </button>
             <button
               type="button"
-              className={`seg-btn${filter === "unread" ? " on" : ""}`}
+              className="key key--small key--pill"
+              aria-pressed={filter === "unread"}
               onClick={() => setFilter("unread")}
             >
               Unread <span className="count">{unread}</span>
@@ -76,7 +77,7 @@ const Inbox = ({ user }) => {
               Couldn't load messages ({err}).
             </div>
           )}
-          {!msgs && !err && <p className="label" style={{ marginTop: 24 }}>Loading…</p>}
+          {!msgs && !err && <p className="muted" style={{ marginTop: 24 }}>Loading…</p>}
           {msgs && shown.length === 0 && (
             <div className="empty">
               <p>{filter === "unread" ? "All caught up." : "No messages yet."}</p>
@@ -85,10 +86,10 @@ const Inbox = ({ user }) => {
 
           <div style={{ display: "grid", gap: 14, marginTop: 20 }}>
             {shown.map((m) => (
-              <article key={m.id} className="panel pcard" style={{ padding: 20 }}>
+              <article key={m.id} className="card pcard" style={{ padding: 20 }}>
                 <div className="job-head">
                   <h3 style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className={m.read ? "led led--off" : "led"} title={m.read ? "Read" : "Unread"} />
+                    {!m.read && <span className="job-when now">New</span>}
                     {m.name}
                   </h3>
                   <span className="job-when">{fmt(m.createdAt)}</span>
@@ -104,7 +105,7 @@ const Inbox = ({ user }) => {
                   <button type="button" className="key key--small" onClick={() => toggleRead(m)}>
                     Mark {m.read ? "unread" : "read"}
                   </button>
-                  <a className="key key--small key--accent" href={replyHref(m)} onClick={() => !m.read && toggleRead(m)}>
+                  <a className="key key--small key--blue" href={replyHref(m)} onClick={() => !m.read && toggleRead(m)}>
                     <Icon name="send" size={13} /> Reply
                   </a>
                 </div>

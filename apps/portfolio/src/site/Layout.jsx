@@ -22,17 +22,16 @@ const Layout = () => (
     <ScrollToTop />
     <header className="site-header">
       <div className="wrap">
-        <Link to="/" className="brand" aria-label="Josh Cocciardi, home">
-          <span className="brand-badge">JC</span>
-          <span className="brand-name">{PROFILE.name}</span>
+        <Link to="/" className="brand">
+          Josh<span className="brand-long"> Cocciardi</span>
         </Link>
-        <nav className="seg" aria-label="Main">
+        <nav className="nav" aria-label="Main">
           {NAV.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
               end={n.end}
-              className={({ isActive }) => `seg-btn${isActive ? " on" : ""}`}
+              className={({ isActive }) => `key key--small key--pill${isActive ? " on" : ""}`}
             >
               {n.label}
             </NavLink>
@@ -50,7 +49,7 @@ const Layout = () => (
     <footer className="site-footer">
       <div className="wrap">
         <span>
-          © {new Date().getFullYear()} {PROFILE.name}. Built by hand, no trackers.
+          © {new Date().getFullYear()} {PROFILE.name}. No trackers on this site.
         </span>
         <div className="footer-links">
           <a className="key key--small" href={`mailto:${PROFILE.email}`}>

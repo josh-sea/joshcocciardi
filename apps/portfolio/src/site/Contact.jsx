@@ -80,17 +80,13 @@ const Contact = () => {
   return (
     <>
       <header className="page-head">
-        <span className="label">Contact</span>
         <h1>Say hello</h1>
         <p>Leave a note here and it comes straight to me, or use whichever of the direct lines you like.</p>
       </header>
 
       <div className="contact-grid">
         {status === "sent" ? (
-          <div className="panel sent" role="status">
-            <span className="tile tile--lg" style={{ margin: "0 auto" }} aria-hidden="true">
-              📬
-            </span>
+          <div className="card sent" role="status">
             <h2>Message sent</h2>
             <p>Thanks for reaching out. I'll get back to you at the address you gave.</p>
             <button
@@ -105,7 +101,7 @@ const Contact = () => {
             </button>
           </div>
         ) : (
-          <form className="panel form" onSubmit={submit} noValidate>
+          <form className="card form" onSubmit={submit} noValidate>
             <div className="form-row">
               <div className="field">
                 <label htmlFor="c-name">Name</label>
@@ -160,7 +156,7 @@ const Contact = () => {
 
             <div className="form-foot">
               <p className="form-note">No tracking, no mailing list. Your address is only used to reply.</p>
-              <button type="submit" className="key key--accent" disabled={status === "sending"}>
+              <button type="submit" className="key key--blue" disabled={status === "sending"}>
                 <Icon name="send" size={15} />
                 {status === "sending" ? "Sending…" : "Send message"}
               </button>
@@ -168,43 +164,43 @@ const Contact = () => {
           </form>
         )}
 
-        <aside className="panel direct" aria-label="Direct contact">
+        <aside className="card direct" aria-label="Direct contact">
           <div className="direct-row">
-            <span className="tile" aria-hidden="true">
+            <span className="direct-icon" aria-hidden="true">
               <Icon name="mail" size={18} />
             </span>
             <div className="direct-text">
-              <span className="label">Email</span>
+              <small>Email</small>
               <a href={`mailto:${PROFILE.email}`}>{PROFILE.email}</a>
             </div>
             <CopyButton text={PROFILE.email} />
           </div>
           <div className="direct-row">
-            <span className="tile" aria-hidden="true">
+            <span className="direct-icon" aria-hidden="true">
               <Icon name="phone" size={18} />
             </span>
             <div className="direct-text">
-              <span className="label">Phone</span>
+              <small>Phone</small>
               <a href={PROFILE.phoneHref}>{PROFILE.phone}</a>
             </div>
           </div>
           <div className="direct-row">
-            <span className="tile" aria-hidden="true">
-              in
+            <span className="direct-icon" aria-hidden="true">
+              <Icon name="link" size={18} />
             </span>
             <div className="direct-text">
-              <span className="label">LinkedIn</span>
+              <small>LinkedIn</small>
               <a href={PROFILE.linkedin} target="_blank" rel="noopener noreferrer">
                 linkedin.com/in/joshcocciardi
               </a>
             </div>
           </div>
           <div className="direct-row">
-            <span className="tile" aria-hidden="true">
-              {"</>"}
+            <span className="direct-icon" aria-hidden="true">
+              <Icon name="code" size={18} />
             </span>
             <div className="direct-text">
-              <span className="label">GitHub</span>
+              <small>GitHub</small>
               <a href={PROFILE.github} target="_blank" rel="noopener noreferrer">
                 github.com/josh-sea
               </a>

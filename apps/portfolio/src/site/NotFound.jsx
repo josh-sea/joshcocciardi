@@ -8,7 +8,7 @@ const NotFound = () => {
     <div className="nf">
       <h1>404</h1>
       <p>There's nothing at this address.</p>
-      <Link to="/" className="key key--accent">
+      <Link to="/" className="key key--blue">
         Take me home
       </Link>{" "}
       <Link to="/projects" className="key">

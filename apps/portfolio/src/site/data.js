@@ -1,4 +1,11 @@
 import { listedTools } from "../tools/registry";
+import frameGram from "../assets/reel/gramandpops.jpg";
+import frameRoy from "../assets/reel/roy.jpg";
+import frameParty from "../assets/reel/party-room.jpg";
+import frameWeather from "../assets/reel/weather.jpg";
+import frameCamboy from "../assets/reel/camboy.jpg";
+import frameSwing from "../assets/reel/swing-coach.jpg";
+import frameTophat from "../assets/reel/tophat-spears.jpg";
 
 /* ------------------------------------------------------------------------ */
 /*  Everything the public pages say about me and what I've built.           */
@@ -74,9 +81,9 @@ const PROJECTS = [
   // ── Featured: live on their own and worth a visit ─────────────────────────
   {
     id: "gramandpops",
+    frame: frameGram,
     kind: "apps",
     featured: true,
-    emoji: "🗃️",
     title: "Gram & Pop's Recipe Box",
     host: "gramandpops.com",
     blurb: "The family recipe box, digitized. No blogs, no ads, just the cards.",
@@ -87,9 +94,9 @@ const PROJECTS = [
   },
   {
     id: "roy",
+    frame: frameRoy,
     kind: "play",
     featured: true,
-    emoji: "🟥",
     title: "Roy",
     host: "josh-cocciardi-roy.web.app",
     blurb: "A two-player, turn-based territory game. Claim the grid, then talk trash.",
@@ -104,9 +111,9 @@ const PROJECTS = [
   },
   {
     id: "party-room",
+    frame: frameParty,
     kind: "play",
     featured: true,
-    emoji: "👋",
     title: "Party Room",
     host: "joshcocciardi.com/party",
     blurb: "The Houseparty games, rebuilt for the family. Everyone plays on their own phone.",
@@ -116,11 +123,24 @@ const PROJECTS = [
     link: "/projects/party-room",
   },
 
+  {
+    id: "weather",
+    kind: "apps",
+    featured: true,
+    frame: frameWeather,
+    title: "Weather",
+    host: "josh-cocciardi-weather.web.app",
+    blurb: "The forecast, plus a short summary in the voice you pick. Snarky is the default.",
+    description:
+      "Search a town or zip, or use where you are. The forecast comes from Pirate Weather through a Cloud Function that holds the key, and Claude writes the summary for now, today, tomorrow, the week or the weekend in one of several personalities. The bevelled buttons are where this site's look came from.",
+    tech: ["React Native", "Expo", "Cloud Functions", "Claude API", "Pirate Weather"],
+    link: "https://josh-cocciardi-weather.web.app",
+  },
+
   // ── Apps: real accounts, real users, live data ───────────────────────────
   {
     id: "moments",
     kind: "apps",
-    emoji: "📸",
     title: "Moment Capture",
     blurb: "Capture daily moments and stitch them into video compilations.",
     description:
@@ -131,7 +151,6 @@ const PROJECTS = [
   {
     id: "collector",
     kind: "apps",
-    emoji: "🃏",
     title: "Collector Shop",
     blurb: "Shared inventory for cards, comics and memorabilia, with profit tracking.",
     description:
@@ -141,8 +160,10 @@ const PROJECTS = [
   },
   {
     id: "swing-coach",
+    featured: true,
+    host: "joshcocciardi.com/projects/swing-coach",
+    frame: frameSwing,
     kind: "apps",
-    emoji: "🏌️",
     title: "Swing Coach",
     blurb: "A pose model reads your swing 30 times a second, plus a GPS golf caddy.",
     description:
@@ -153,7 +174,6 @@ const PROJECTS = [
   {
     id: "workbook",
     kind: "apps",
-    emoji: "📖",
     title: "Workbook Reader",
     blurb: "Snap a workbook page and tap any word to hear it read aloud.",
     description:
@@ -164,7 +184,6 @@ const PROJECTS = [
   {
     id: "psx",
     kind: "apps",
-    emoji: "🎮",
     title: "PSX Station",
     blurb: "A PlayStation 1 emulator in a browser tab, with saves that sync.",
     description:
@@ -175,7 +194,6 @@ const PROJECTS = [
   {
     id: "solra",
     kind: "apps",
-    emoji: "🎼",
     title: "Solra Trainer",
     blurb: "Practice a constructed language whose phonemes are pure tones.",
     description:
@@ -186,7 +204,6 @@ const PROJECTS = [
   {
     id: "playball",
     kind: "apps",
-    emoji: "⚾",
     title: "Playball",
     blurb: "Walk-up music manager for game day, synced to Spotify.",
     description:
@@ -197,7 +214,6 @@ const PROJECTS = [
   {
     id: "canitwo",
     kind: "apps",
-    emoji: "🚽",
     title: "CanITwo",
     blurb: "Community bathroom finder for when nature calls on the road.",
     description:
@@ -208,7 +224,6 @@ const PROJECTS = [
   {
     id: "electronic-mail",
     kind: "apps",
-    emoji: "✉️",
     title: "Electronic Mail",
     blurb: "Gmail, but it looks and feels like iMessage.",
     description:
@@ -220,8 +235,10 @@ const PROJECTS = [
   // ── Games, toys and experiments ──────────────────────────────────────────
   {
     id: "camboy",
+    featured: true,
+    host: "joshcocciardi.com/projects/camboy",
+    frame: frameCamboy,
     kind: "play",
-    emoji: "🕹️",
     title: "Camboy",
     blurb: "A pocket game console with three cartridges, named for Cam and Bo.",
     description:
@@ -232,7 +249,6 @@ const PROJECTS = [
   {
     id: "camboku",
     kind: "play",
-    emoji: "🧩",
     title: "Camboku",
     blurb: "An ad-free logic puzzle with a generator that guarantees one answer.",
     description:
@@ -243,7 +259,6 @@ const PROJECTS = [
   {
     id: "disney-trivia",
     kind: "play",
-    emoji: "🎟️",
     title: "Ticket Book",
     blurb: "Disney trivia on flip tickets, plus a private photo hunt.",
     description:
@@ -253,8 +268,10 @@ const PROJECTS = [
   },
   {
     id: "tophat-spears",
+    featured: true,
+    host: "joshcocciardi.com/tophat",
+    frame: frameTophat,
     kind: "play",
-    emoji: "🎩",
     title: "Tophat & Spears",
     blurb: "Co-op RTS and FPS in one match for up to five friends.",
     description:
@@ -265,7 +282,6 @@ const PROJECTS = [
   {
     id: "boulder-smash",
     kind: "play",
-    emoji: "🪨",
     title: "Boulder Smash",
     blurb: "A 3D smash-em-up for kids, playable on a phone.",
     description:
@@ -276,7 +292,6 @@ const PROJECTS = [
   {
     id: "deadnet",
     kind: "play",
-    emoji: "💀",
     title: "Dead Net",
     blurb: "Dead Internet Theory as a Grateful Dead fan forum. You're the only human.",
     description: "Every thread, reply and reaction is posted by a bot.",
@@ -286,7 +301,6 @@ const PROJECTS = [
   {
     id: "binary",
     kind: "play",
-    emoji: "🕰️",
     title: "Binary Flip Counter",
     blurb: "A wooden split-flap clock that counts in base 2.",
     description: "Hours, minutes and seconds each get a tray of flipping tiles, with the decimal value alongside.",
@@ -296,7 +310,6 @@ const PROJECTS = [
   {
     id: "camcoded",
     kind: "play",
-    emoji: "🔐",
     title: "Cam's Secret Decoder",
     blurb: "A retro cipher tool for passing secret messages.",
     description: "A custom A to Z substitution cipher with a full reference table.",
@@ -306,7 +319,6 @@ const PROJECTS = [
   {
     id: "writer",
     kind: "play",
-    emoji: "🔍",
     title: "Spelling Detective",
     blurb: "Spelling practice with pattern sorts and look-cover-write-check drills.",
     description: "Tricky letter identification and custom word lists, too.",
@@ -317,7 +329,6 @@ const PROJECTS = [
   {
     id: "doom-life",
     kind: "play",
-    emoji: "👾",
     title: "Conway's DOOM",
     blurb: "Game of Life meets first-person shooter.",
     description: "Navigate an evolving cellular automata maze, shoot walls, manage ammo, and survive.",
@@ -329,7 +340,6 @@ const PROJECTS = [
   {
     id: "weight-challenge",
     kind: "elsewhere",
-    emoji: "🏋️",
     title: "Weight Challenge Bros",
     blurb: "A weight-loss tracker for friends, with charts and friendly competition.",
     description: "Collaborative tracking with interactive charts.",
@@ -340,7 +350,6 @@ const PROJECTS = [
   {
     id: "never-late",
     kind: "elsewhere",
-    emoji: "⌚",
     title: "Never Late",
     blurb: "A Fitbit clock face that runs up to 15 minutes fast, at random.",
     description: "Healthy uncertainty to keep you punctual.",
@@ -350,7 +359,6 @@ const PROJECTS = [
   {
     id: "nba",
     kind: "elsewhere",
-    emoji: "🏀",
     title: "NBA Performance Predictor",
     blurb: "An LSTM that predicts player props from scraped box scores.",
     description: "Automated scraping for retraining, with interactive Streamlit dashboards.",
@@ -365,26 +373,16 @@ const PROJECTS = [
 
 // Tools come from the tools registry so this list can't drift from /tools.
 const firstSentence = (s) => {
-  const m = s.match(/^.*?[.!?](\s|$)/);
+  // A sentence ends at . ! or ? followed by a capital letter or the end, so
+  // "Money supply vs. wealth" stays whole.
+  const m = s.match(/^.*?[.!?](?=\s+[A-Z]|$)/);
   return (m ? m[0] : s).trim();
-};
-
-const TOOL_EMOJI = {
-  "income-inequality": "💵",
-  analyzer: "⚾",
-  "channel-surfer": "📺",
-  mise: "🍳",
-  "draft-night": "🏈",
-  "sunday-desk": "🗓️",
-  "meal-planner": "🥘",
-  myreadingbuddy: "📚",
 };
 
 const TOOLS = [
   ...listedTools.map((t) => ({
     id: `tool-${t.slug}`,
     kind: "tools",
-    emoji: TOOL_EMOJI[t.slug] || "🛠️",
     title: t.title,
     blurb: firstSentence(t.description),
     description: t.description,
@@ -394,7 +392,6 @@ const TOOLS = [
   {
     id: "expense-analyzer",
     kind: "tools",
-    emoji: "💳",
     title: "Expense Analyzer",
     blurb: "Upload a CSV of transactions and get categorized spending breakdowns.",
     description: "AI-powered categorization and visual analytics for your expenses.",
@@ -404,7 +401,14 @@ const TOOLS = [
 ];
 
 export const ALL_PROJECTS = [...PROJECTS, ...TOOLS];
-export const FEATURED = ALL_PROJECTS.filter((p) => p.featured);
+const KIND_LABEL = { apps: "App", tools: "Tool", play: "Game", elsewhere: "Elsewhere" };
+
+// The order they sit on the reel.
+const FEATURED_ORDER = ["gramandpops", "roy", "party-room", "weather", "camboy", "swing-coach", "tophat-spears"];
+export const FEATURED = FEATURED_ORDER.map((id) => ALL_PROJECTS.find((p) => p.id === id)).map((p) => ({
+  ...p,
+  kindLabel: KIND_LABEL[p.kind],
+}));
 
 export const SECTIONS = [
   { key: "apps", label: "Apps", blurb: "Sign in, save your stuff, come back to it." },
