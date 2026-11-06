@@ -3,9 +3,12 @@ import { useParams, Link } from "react-router-dom";
 import tools from "./registry";
 
 // Renders a registered tool full-bleed (no portfolio nav/container) so each
-// tool controls its own page styling.
-const ToolPage = () => {
-  const { slug } = useParams();
+// tool controls its own page styling. `slug` is passed in when the page was
+// served from the tool's own subdomain (see App.js); otherwise it comes from
+// the /tools/:slug route.
+const ToolPage = ({ slug: forcedSlug }) => {
+  const params = useParams();
+  const slug = forcedSlug || params.slug;
   const tool = tools.find((t) => t.slug === slug);
 
   useEffect(() => {

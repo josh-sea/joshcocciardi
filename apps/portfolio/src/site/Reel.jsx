@@ -28,7 +28,7 @@ const LENS = 0.6; // lens diameter, in R
 const MAG = (LENS / WINDOW) * 0.96; // lens magnification
 const FRAME_VH = 70; // scroll distance per frame, in vh
 
-const Disc = React.forwardRef(({ frames, R, style, className = "" }, ref) => {
+const Disc = React.forwardRef(({ frames, R, label, style, className = "" }, ref) => {
   const arcId = `reel-arc-${React.useId().replace(/:/g, "")}`;
   return (
   <div
@@ -42,7 +42,7 @@ const Disc = React.forwardRef(({ frames, R, style, className = "" }, ref) => {
         <path id={arcId} d="M 100 100 m -36 0 a 36 36 0 1 1 72 0 a 36 36 0 1 1 -72 0" />
       </defs>
       <text fontSize="7.2" letterSpacing="1.6">
-        <textPath href={`#${arcId}`}>JOSH COCCIARDI · REEL 1 · THINGS I BUILT ·</textPath>
+        <textPath href={`#${arcId}`}>{label}</textPath>
       </text>
       {Array.from({ length: WINDOWS }, (_, j) => {
         const a = j * STEP_DEG;
@@ -85,8 +85,8 @@ const useReelRadius = (stageRef) => {
       const wide = vw >= 860;
       // Width: the toy is 2.5 R wide (2.6 with the lever and some slack).
       const byWidth = wide ? Math.min(560, (Math.min(vw, 1120) - 56) * 0.55) / 2.6 : (vw - 32) / 2.6;
-      // Height: on a phone the caption sits under the toy and needs ~270px.
-      const byHeight = wide ? (vh - 120) / 2.25 : (vh - 64 - 290) / 2.2;
+      // Height: on a phone the shelf and caption sit under the toy (~330px).
+      const byHeight = wide ? (vh - 120) / 2.25 : (vh - 64 - 350) / 2.2;
       setR(Math.max(96, Math.floor(Math.min(byWidth, byHeight, 230))));
     };
     measure();
@@ -96,8 +96,16 @@ const useReelRadius = (stageRef) => {
   return R;
 };
 
-const Reel = ({ frames }) => {
+// A tiny reel for the shelf: paper, a ring of dark windows, a center hole.
+const MiniReel = () => <span className="mini-reel" aria-hidden="true" />;
+
+const Reel = ({ reels }) => {
+  const [reelIdx, setReelIdx] = useState(0);
+  const [swapped, setSwapped] = useState(false);
+  const reel = reels[reelIdx];
+  const frames = reel.frames;
   const n = frames.length;
+  const label = `JOSH COCCIARDI · REEL ${reelIdx + 1} · ${reel.name.toUpperCase()} ·`;
   const sectionRef = useRef(null);
   const stageRef = useRef(null);
   const discRef = useRef(null);
@@ -153,7 +161,7 @@ const Reel = ({ frames }) => {
       window.removeEventListener("resize", onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [n, headerH, R]);
+  }, [n, headerH, R, reelIdx]);
 
   const goTo = useCallback(
     (i) => {
@@ -165,6 +173,18 @@ const Reel = ({ frames }) => {
     },
     [headerH]
   );
+
+  // Load another reel: it drops into the viewer and starts on frame 1.
+  const load = (i) => {
+    if (i === reelIdx) return;
+    setSwapped(true);
+    setReelIdx(i);
+    const el = sectionRef.current;
+    if (el && active > 0) {
+      const top = el.getBoundingClientRect().top + window.scrollY - headerH;
+      window.scrollTo({ top, behavior: "instant" });
+    }
+  };
 
   const pull = () => {
     setLeverDown(true);
@@ -192,14 +212,38 @@ const Reel = ({ frames }) => {
 
       <div ref={stageRef} className="reel-stage" style={{ top: headerH, minHeight: stageH }}>
         <div className="reel-toy" style={{ "--R": `${R}px` }}>
-          <Disc ref={discRef} frames={frames} R={R} style={{ left: 0.25 * R, top: 0.04 * R }} />
+          <div
+            key={reel.id}
+            className={`reel-drop${swapped ? " is-dropping" : ""}`}
+            style={{ left: 0.25 * R, top: 0.04 * R }}
+          >
+            <Disc ref={discRef} frames={frames} R={R} label={label} />
+          </div>
           <div className="viewer-body" />
-          <span className="viewer-plate" aria-hidden="true">Reel 1</span>
+          <span className="viewer-plate" aria-hidden="true">
+            {reel.name}
+          </span>
           <div className="viewer-lens viewer-lens--l">
-            <Disc ref={lensL} className="lens-disc" frames={frames} R={sR} style={lensPos(1)} />
+            <Disc
+              key={reel.id}
+              ref={lensL}
+              className={`lens-disc${swapped ? " is-dropping" : ""}`}
+              frames={frames}
+              R={sR}
+              label={label}
+              style={lensPos(1)}
+            />
           </div>
           <div className="viewer-lens viewer-lens--r">
-            <Disc ref={lensR} className="lens-disc" frames={frames} R={sR} style={lensPos(-1)} />
+            <Disc
+              key={reel.id}
+              ref={lensR}
+              className={`lens-disc${swapped ? " is-dropping" : ""}`}
+              frames={frames}
+              R={sR}
+              label={label}
+              style={lensPos(-1)}
+            />
           </div>
           <button
             type="button"
@@ -210,9 +254,24 @@ const Reel = ({ frames }) => {
           </button>
         </div>
 
-        <div className="reel-caption" aria-live="polite">
+        <div className="reel-caption">
+          <div className="reel-shelf" role="group" aria-label="Choose a reel">
+            {reels.map((r, i) => (
+              <button
+                key={r.id}
+                type="button"
+                className="key shelf-reel"
+                aria-pressed={i === reelIdx}
+                onClick={() => load(i)}
+              >
+                <MiniReel />
+                {r.name}
+              </button>
+            ))}
+          </div>
+          <div aria-live="polite">
           <span className="reel-count">
-            Frame {active + 1} of {n} · {f.kindLabel}
+            {reel.name} reel · frame {active + 1} of {n} · {f.kindLabel}
           </span>
           <h3>{f.title}</h3>
           <p>{f.blurb}</p>
@@ -236,7 +295,8 @@ const Reel = ({ frames }) => {
               </button>
             ))}
           </div>
-          <p className="reel-hint">Scroll to turn the reel, or pull the lever.</p>
+          <p className="reel-hint">Scroll to turn the reel, pull the lever, or load another reel.</p>
+          </div>
         </div>
       </div>
     </section>

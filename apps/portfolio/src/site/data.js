@@ -1,11 +1,5 @@
 import { listedTools } from "../tools/registry";
-import frameGram from "../assets/reel/gramandpops.jpg";
-import frameRoy from "../assets/reel/roy.jpg";
-import frameParty from "../assets/reel/party-room.jpg";
-import frameWeather from "../assets/reel/weather.jpg";
-import frameCamboy from "../assets/reel/camboy.jpg";
-import frameSwing from "../assets/reel/swing-coach.jpg";
-import frameTophat from "../assets/reel/tophat-spears.jpg";
+import { DOMAINS, hostFor, linkFor } from "./domains";
 
 /* ------------------------------------------------------------------------ */
 /*  Everything the public pages say about me and what I've built.           */
@@ -74,16 +68,15 @@ export const STACK = [
 /*            something hosted on its own domain.                           */
 /*  blurb:    one line for the card. `description` is the long version,     */
 /*            shown when the card is opened.                                */
-/*  featured: shown large at the top of Projects and on the home page.      */
+/*  Promotion, frames and subdomains are applied below ALL_PROJECTS; the   */
+/*  addresses themselves live in domains.js.                                */
 /* ------------------------------------------------------------------------ */
 
 const PROJECTS = [
   // ── Featured: live on their own and worth a visit ─────────────────────────
   {
     id: "gramandpops",
-    frame: frameGram,
     kind: "apps",
-    featured: true,
     title: "Gram & Pop's Recipe Box",
     host: "gramandpops.com",
     blurb: "The family recipe box, digitized. No blogs, no ads, just the cards.",
@@ -94,9 +87,7 @@ const PROJECTS = [
   },
   {
     id: "roy",
-    frame: frameRoy,
     kind: "play",
-    featured: true,
     title: "Roy",
     host: "josh-cocciardi-roy.web.app",
     blurb: "A two-player, turn-based territory game. Claim the grid, then talk trash.",
@@ -111,9 +102,7 @@ const PROJECTS = [
   },
   {
     id: "party-room",
-    frame: frameParty,
     kind: "play",
-    featured: true,
     title: "Party Room",
     host: "joshcocciardi.com/party",
     blurb: "The Houseparty games, rebuilt for the family. Everyone plays on their own phone.",
@@ -126,8 +115,6 @@ const PROJECTS = [
   {
     id: "weather",
     kind: "apps",
-    featured: true,
-    frame: frameWeather,
     title: "Weather",
     host: "josh-cocciardi-weather.web.app",
     blurb: "The forecast, plus a short summary in the voice you pick. Snarky is the default.",
@@ -160,9 +147,7 @@ const PROJECTS = [
   },
   {
     id: "swing-coach",
-    featured: true,
     host: "joshcocciardi.com/projects/swing-coach",
-    frame: frameSwing,
     kind: "apps",
     title: "Swing Coach",
     blurb: "A pose model reads your swing 30 times a second, plus a GPS golf caddy.",
@@ -235,9 +220,7 @@ const PROJECTS = [
   // ── Games, toys and experiments ──────────────────────────────────────────
   {
     id: "camboy",
-    featured: true,
     host: "joshcocciardi.com/projects/camboy",
-    frame: frameCamboy,
     kind: "play",
     title: "Camboy",
     blurb: "A pocket game console with three cartridges, named for Cam and Bo.",
@@ -257,20 +240,18 @@ const PROJECTS = [
     link: "/projects/camboku",
   },
   {
-    id: "disney-trivia",
-    kind: "play",
-    title: "Ticket Book",
-    blurb: "Disney trivia on flip tickets, plus a private photo hunt.",
+    id: "parkday",
+    kind: "apps",
+    title: "Park Day",
+    blurb: "Everything for a day at Disney World: a ride planner with live waits, trivia, and games for the line.",
     description:
-      "248 trivia tickets dealt by topic or by park. Where Am I? is a password-protected photo deck: a peephole widens over three taps, then you drop a pin on the map.",
-    tech: ["Firestore", "Cloud Storage", "PBKDF2", "Web Audio", "CSS masks"],
+      "The Park Planner reads live wait times and each ride's usual daily curve, so it can say when a line is about to dip; a history tab keeps every wait it has seen. For the line itself: Ticket Book, 248 flip-to-reveal trivia tickets dealt by topic or by park; Where Am I?, a password-protected photo hunt that ends with a pin on the map; and 1 to 10, a guessing game where everyone plays on their own phone.",
+    tech: ["JavaScript", "ThemeParks.wiki", "Cloud Functions", "Firestore", "Web Audio", "PBKDF2"],
     link: "/projects/disney-trivia",
   },
   {
     id: "tophat-spears",
-    featured: true,
     host: "joshcocciardi.com/tophat",
-    frame: frameTophat,
     kind: "play",
     title: "Tophat & Spears",
     blurb: "Co-op RTS and FPS in one match for up to five friends.",
@@ -400,15 +381,89 @@ const TOOLS = [
   },
 ];
 
-export const ALL_PROJECTS = [...PROJECTS, ...TOOLS];
+// Shorter card lines for the tools that are promoted to their own address.
+const TOOL_BLURBS = {
+  "tool-mise": "A convergence chart for implementation work. Tasks bracket rightward into one outcome.",
+  "tool-channel-surfer": "Search about 40,000 TV channels by name, country or category, and open any live stream in VLC.",
+  "tool-sunday-desk": "Matchups, live scoring, both rosters and the waiver wire for a private ESPN fantasy league.",
+  "tool-myreadingbuddy": "Photograph a picture book, read it aloud, and the kids can play it back any time.",
+  "tool-meal-planner": "Recipes rated by all four of us, the week's plan, and what's in the kitchen.",
+};
+
+// Reel frames: real screenshots of each app, keyed by project id.
+const FRAMES = {
+  gramandpops: require("../assets/reel/gramandpops.jpg"),
+  roy: require("../assets/reel/roy.jpg"),
+  "party-room": require("../assets/reel/party-room.jpg"),
+  weather: require("../assets/reel/weather.jpg"),
+  camboy: require("../assets/reel/camboy.jpg"),
+  camboku: require("../assets/reel/camboku.jpg"),
+  "swing-coach": require("../assets/reel/swing-coach.jpg"),
+  "tophat-spears": require("../assets/reel/tophat-spears.jpg"),
+  parkday: require("../assets/reel/parkday.jpg"),
+  canitwo: require("../assets/reel/canitwo.jpg"),
+  collector: require("../assets/reel/collector.jpg"),
+  "boulder-smash": require("../assets/reel/boulder-smash.jpg"),
+  psx: require("../assets/reel/psx.jpg"),
+  deadnet: require("../assets/reel/deadnet.jpg"),
+  binary: require("../assets/reel/binary.jpg"),
+  "doom-life": require("../assets/reel/doom-life.jpg"),
+  "tool-mise": require("../assets/reel/mise.jpg"),
+  "tool-channel-surfer": require("../assets/reel/channel-surfer.jpg"),
+  "tool-sunday-desk": require("../assets/reel/sunday-desk.jpg"),
+  "tool-myreadingbuddy": require("../assets/reel/myreadingbuddy.jpg"),
+  "tool-meal-planner": require("../assets/reel/meal-planner.jpg"),
+};
+
 const KIND_LABEL = { apps: "App", tools: "Tool", play: "Game", elsewhere: "Elsewhere" };
 
-// The order they sit on the reel.
-const FEATURED_ORDER = ["gramandpops", "roy", "party-room", "weather", "camboy", "swing-coach", "tophat-spears"];
-export const FEATURED = FEATURED_ORDER.map((id) => ALL_PROJECTS.find((p) => p.id === id)).map((p) => ({
+// Anything with its own address (src/site/domains.js) links there once the
+// domain is live, and says so under its name.
+export const ALL_PROJECTS = [...PROJECTS, ...TOOLS].map((p) => ({
   ...p,
+  blurb: TOOL_BLURBS[p.id] || p.blurb,
+  frame: FRAMES[p.id],
+  link: DOMAINS[p.id] ? linkFor(p.id, p.link) : p.link,
+  host: DOMAINS[p.id] ? hostFor(p.id, p.host) : p.host,
+  promoted: p.id === "gramandpops" || Boolean(DOMAINS[p.id]),
   kindLabel: KIND_LABEL[p.kind],
 }));
+
+const byId = (id) => {
+  const p = ALL_PROJECTS.find((x) => x.id === id);
+  if (!p) throw new Error(`Unknown project id: ${id}`);
+  return p;
+};
+
+// The top tier on /projects: every app with its own address.
+const PROMOTED_ORDER = [
+  "gramandpops", "party-room", "parkday", "tool-meal-planner", "tool-myreadingbuddy",
+  "camboy", "camboku", "weather", "tool-mise", "tool-sunday-desk",
+  "tool-channel-surfer", "canitwo", "swing-coach", "roy", "tophat-spears",
+];
+export const PROMOTED = PROMOTED_ORDER.map(byId);
+
+// The reels on the home page. A reel holds exactly seven frames.
+export const REELS = [
+  {
+    id: "family",
+    name: "Family",
+    blurb: "Built for the four of us, and whoever else is at the table.",
+    frames: ["gramandpops", "tool-meal-planner", "tool-myreadingbuddy", "party-room", "parkday", "camboy", "camboku"].map(byId),
+  },
+  {
+    id: "everyday",
+    name: "Everyday",
+    blurb: "Tools I actually open during the week.",
+    frames: ["weather", "tool-mise", "tool-sunday-desk", "tool-channel-surfer", "canitwo", "swing-coach", "collector"].map(byId),
+  },
+  {
+    id: "games",
+    name: "Games",
+    blurb: "Built for the fun of building them.",
+    frames: ["roy", "tophat-spears", "boulder-smash", "psx", "deadnet", "binary", "doom-life"].map(byId),
+  },
+];
 
 export const SECTIONS = [
   { key: "apps", label: "Apps", blurb: "Sign in, save your stuff, come back to it." },

@@ -24,6 +24,7 @@
 #   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh party        - Test Party Room, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
+#   ./deploy.sh subdomains   - Copy the static apps, build the portfolio, deploy every <app>.joshcocciardi.com site
 #   ./deploy.sh weather      - Test + export the Weather web build, deploy its hosting site, functions, and Firestore rules
 #
 # Apps live in:
@@ -378,6 +379,24 @@ deploy_weather() {
     success "Weather deployed → https://josh-cocciardi-weather.web.app"
 }
 
+# Apps on their own subdomains. Each target in firebase.json is its own
+# Hosting site (josh-cocciardi-<target>); the static ones serve their copy
+# under apps/portfolio/build/projects/, the React tools serve the portfolio
+# build itself. Needs a portfolio build with the static apps copied in.
+SUBDOMAIN_TARGETS="partyroom canitwo parkday camboku camboy swingcoach tophat mise channelsurfer sundaydesk readingbuddy mealplanner"
+
+deploy_subdomains() {
+    log "Deploying subdomain sites..."
+    cd "$ROOT_DIR"
+    local only=""
+    for t in $SUBDOMAIN_TARGETS; do
+        firebase hosting:sites:get "josh-cocciardi-$t" >/dev/null 2>&1 || firebase hosting:sites:create "josh-cocciardi-$t"
+        only="${only:+$only,}hosting:$t"
+    done
+    firebase deploy --only "$only" || fail "Subdomain sites deploy failed"
+    success "Subdomain sites deployed (see apps/portfolio/SUBDOMAINS.md to connect the domains)"
+}
+
 deploy_firestore() {
     log "Deploying Firestore rules and indexes..."
     cd "$ROOT_DIR"
@@ -420,6 +439,18 @@ case "${1:-all}" in
         deploy_firestore
         deploy_database
         deploy_hosting
+        deploy_subdomains
+        ;;
+    subdomains)
+        echo "========================================"
+        echo "  Deploying subdomain sites"
+        echo "========================================"
+        build_canitwo
+        build_disney
+        build_tophat
+        build_party
+        build_portfolio
+        deploy_subdomains
         ;;
     ezpayze)
         echo "========================================"
@@ -604,7 +635,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|roy|weather|ezpayze|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|roy|weather|subdomains|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac

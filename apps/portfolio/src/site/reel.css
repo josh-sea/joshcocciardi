@@ -205,3 +205,65 @@ html.reel-snap { scroll-snap-type: y proximity; }
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* ── Loading a reel ───────────────────────────────────────────────────────── */
+
+.reel-drop {
+  position: absolute;
+  width: calc(var(--R) * 2);
+  height: calc(var(--R) * 2);
+}
+.reel-drop .reel-disc { left: 0; top: 0; }
+.reel-drop.is-dropping { animation: reel-drop 520ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both; }
+@keyframes reel-drop {
+  from { transform: translateY(calc(var(--R) * -1.15)); opacity: 0; }
+  35% { opacity: 1; }
+  to { transform: none; }
+}
+.lens-disc.is-dropping { animation: lens-in 300ms ease 380ms both; }
+@keyframes lens-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── The shelf ────────────────────────────────────────────────────────────── */
+
+.reel-shelf { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
+.shelf-reel { gap: 10px; padding: 0 16px 0 8px; min-height: 48px; }
+.mini-reel {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #f6f3ec;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+/* Seven windows in a ring, then the center hole. */
+.mini-reel::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(#23262b 0 14deg, transparent 14deg 25.714deg);
+  -webkit-mask: radial-gradient(circle, transparent 46%, #000 48%, #000 86%, transparent 88%);
+  mask: radial-gradient(circle, transparent 46%, #000 48%, #000 86%, transparent 88%);
+}
+.mini-reel::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: var(--key);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+.shelf-reel[aria-pressed="true"] .mini-reel::after { background: var(--blue); }
+@media (max-width: 859px) {
+  .reel-shelf { justify-content: center; margin-bottom: 14px; }
+  .shelf-reel { min-height: 42px; padding: 0 12px 0 6px; font-size: 0.86rem; }
+  .mini-reel { width: 26px; height: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reel-drop.is-dropping, .lens-disc.is-dropping { animation: none; }
+}

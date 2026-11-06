@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import headshot from "../assets/josh_headshot.JPG";
-import { ALL_PROJECTS, EDUCATION, EXPERIENCE, FEATURED, PROFILE, STACK } from "./data";
+import { ALL_PROJECTS, EDUCATION, EXPERIENCE, PROFILE, REELS, STACK } from "./data";
 import Reel from "./Reel";
 import { Icon, usePageTitle } from "./ui";
 
@@ -40,14 +40,14 @@ const Home = () => {
         <div className="section-head">
           <div>
             <h2>A few favorites</h2>
-            <p>Seven frames, seven things you can go use right now.</p>
+            <p>Three reels of seven. Pick one, then scroll to turn it.</p>
           </div>
           <Link to="/projects" className="key key--small">
             All {ALL_PROJECTS.length} <Icon name="arrow" size={13} />
           </Link>
         </div>
       </section>
-      <Reel frames={FEATURED} />
+      <Reel reels={REELS} />
 
       <section className="section">
         <div className="section-head">

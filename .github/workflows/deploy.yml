@@ -31,6 +31,11 @@
 #   - weather    → josh-cocciardi-weather.web.app (apps/weather/dist, the Expo
 #                   web export), deployed in its own step with its own
 #                   functions codebase (weather-api holds the API keys).
+#   - partyroom, canitwo, parkday, camboku, camboy, swingcoach, tophat,
+#     mise, channelsurfer, sundaydesk, readingbuddy, mealplanner
+#                → josh-cocciardi-<name>.web.app, and <name>.joshcocciardi.com
+#                   once the custom domain is connected. Deployed together in
+#                   the last step. See apps/portfolio/SUBDOMAINS.md.
 #
 # Indexes are deliberately NOT deployed from CI: the project has indexes
 # that aren't captured in firestore.indexes.json, and a non-interactive
@@ -330,3 +335,25 @@ jobs:
           npx firebase-tools@13 hosting:sites:get josh-cocciardi-weather --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
             || npx firebase-tools@13 hosting:sites:create josh-cocciardi-weather --project josh-cocciardi --non-interactive
           npx firebase-tools@13 deploy --only hosting:weather,functions:weather --project josh-cocciardi --non-interactive --force
+
+      # Apps on their own subdomains (partyroom.joshcocciardi.com and so on).
+      # Each is its own Hosting site: the static apps serve their clean copy
+      # from apps/portfolio/build/projects/<app>, and the React tools serve
+      # the portfolio build, which renders the one tool its hostname names
+      # (src/site/domains.js). Creates each site the first time. Connecting
+      # the custom domains is a one-time step in the Firebase console; see
+      # apps/portfolio/SUBDOMAINS.md.
+      - name: Deploy subdomain sites
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: |
+          targets="partyroom canitwo parkday camboku camboy swingcoach tophat mise channelsurfer sundaydesk readingbuddy mealplanner"
+          only=""
+          for t in $targets; do
+            site="josh-cocciardi-$t"
+            npx firebase-tools@13 hosting:sites:get "$site" --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
+              || npx firebase-tools@13 hosting:sites:create "$site" --project josh-cocciardi --non-interactive
+            only="${only:+$only,}hosting:$t"
+          done
+          npx firebase-tools@13 deploy --only "$only" --project josh-cocciardi --non-interactive --force

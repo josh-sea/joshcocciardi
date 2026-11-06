@@ -10,6 +10,7 @@ import ExpenseAnalyzer from "./components/ExpenseAnalyzer";
 import ToolsIndex from "./tools/ToolsIndex";
 import ToolPage from "./tools/ToolPage";
 import WorkPage from "./work/WorkPage";
+import { toolForHost } from "./site/domains";
 import "./App.css";
 
 // Routes inside <Layout> get the site header and footer. Tool pages
@@ -18,7 +19,7 @@ import "./App.css";
 //
 // Everything under /projects/<name> is a separately built static app served
 // straight by Firebase Hosting, so those never reach this router.
-const App = () => (
+const MainSite = () => (
   <Router>
     <Routes>
       <Route element={<Layout />}>
@@ -45,5 +46,19 @@ const App = () => (
     </Routes>
   </Router>
 );
+
+// Served from a tool's own subdomain (mise.joshcocciardi.com, or its web.app
+// site): that one tool is the whole site, at every path.
+const ToolSite = ({ slug }) => (
+  <Router>
+    <Routes>
+      <Route path="*" element={<ToolPage slug={slug} />} />
+    </Routes>
+  </Router>
+);
+
+const hostTool = toolForHost();
+
+const App = () => (hostTool ? <ToolSite slug={hostTool} /> : <MainSite />);
 
 export default App;
