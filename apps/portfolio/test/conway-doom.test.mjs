@@ -9,6 +9,7 @@
 import {
   CELL, TICK, FLOOR, STONE, EXIT, step, population, SCAR_TICKS, scarred, PATTERNS, orient, stamp, gunWithEater, gliderWithEater,
   LEVELS, buildLevel, endlessLevel, canFinish, moveBox, blockedAt, boxCells, faceFrom, validSave,
+  CORE, CORE_HP, coreSpawn, coreEvery, makeRng,
 } from '../public/projects/camboy/carts/conway-doom/rules.mjs';
 import { SONGS } from '../public/projects/camboy/carts/conway-doom/sound.mjs';
 import { compile, midi } from '../public/projects/camboy/js/chip.mjs';
@@ -93,7 +94,13 @@ console.log('\nlevels');
     ok(`${name}: it never boils over`, Math.max(...pops) <= Math.max(3 * pops[0], pops[0] + 150), `max ${Math.max(...pops)} from ${pops[0]}`);
     if (L.title.includes('GUN')) ok(`${name}: the guns keep firing and the eaters keep eating`, tail.every((p, k) => k < 30 || p === tail[k - 30]) && Math.max(...tail) > Math.min(...tail));
     if (L.title === 'OSCILLATORS') ok(`${name}: the pulsar and the blinkers keep going`, tail.every((p, k) => k < 6 || p === tail[k - 6]) && Math.max(...tail) > Math.min(...tail));
-    if (L.title === 'GLIDERS') ok(`${name}: every glider ends in an eater`, population(c) === 21);
+    if (L.title === 'GLIDERS') {
+      // Run it again without the three gliders: if they were all eaten cleanly, the two fields end up the same.
+      let quiet = L.cells.slice();
+      for (const gx of [2, 10, 18]) for (const [dx, dy] of [[0, 0], [2, 0], [1, 1], [2, 1], [1, 2]]) quiet[(2 + dy) * L.w + gx + dx] = 0;
+      for (let t = 0; t < 1500; t++) quiet = step(quiet, L.tiles, L.w, L.h);
+      ok(`${name}: every glider is eaten, and nothing else is disturbed`, quiet.every((v, k) => v === c[k]));
+    }
   }
   ok('an endless field is the same every time for the same game', JSON.stringify([...buildLevel(9, 5).cells]) === JSON.stringify([...buildLevel(9, 5).cells]));
   ok('and different in a different game', JSON.stringify([...buildLevel(9, 5).cells]) !== JSON.stringify([...buildLevel(9, 6).cells]));
@@ -101,6 +108,31 @@ console.log('\nlevels');
   for (let n = 1; n <= 25; n++) for (const seed of [1, 2, 3]) if (!canFinish(endlessLevel(n, seed))) all = false;
   ok('every endless field can be finished (75 of them)', all);
   ok('fields grow, up to a limit', endlessLevel(1, 1).w < endlessLevel(8, 1).w && endlessLevel(50, 1).w <= 64 && endlessLevel(50, 1).h <= 48);
+}
+
+console.log('\ncores');
+{
+  ok('the lab after the first level has cores, and the fields get more', buildLevel(1).cores.length >= 1 && buildLevel(0).cores.length === 0 && endlessLevel(8, 1).cores.length > endlessLevel(1, 1).cores.length);
+  ok('a core is a 2x2 block you can\'t walk through, with hit points', (() => { const L = buildLevel(1), c = L.cores[0]; return L.tiles[c.y * L.w + c.x] === CORE && L.tiles[(c.y + 1) * L.w + c.x + 1] === CORE && blockedAt(L, L.cells, c.x * CELL + 1, c.y * CELL + 1) && c.hp === CORE_HP; })());
+  ok('cores speed up the longer you take, down to every six ticks', coreEvery({ every: 18 }, 0) === 18 && coreEvery({ every: 18 }, 450) < 18 && coreEvery({ every: 18 }, 99999) === 6);
+  for (const i of [1, 4, 6, 9]) {
+    const L = buildLevel(i, 3), rng = makeRng(99), hero = { x: L.start.x, y: L.start.y };
+    let c = L.cells.slice(), spawns = 0, nearHero = false, over = 0;
+    const cores = L.cores.map((k) => ({ ...k }));
+    for (let gen = 0; gen < 2000; gen++) {
+      c = step(c, L.tiles, L.w, L.h);
+      for (const k of cores) {
+        if (++k.t < coreEvery(k, gen)) continue;
+        k.t = 0;
+        const put = coreSpawn(L, c, k, rng, hero, gen);
+        if (put) { spawns++; if (put.some((p) => Math.abs((p % L.w) - hero.x) < 4 && Math.abs(((p / L.w) | 0) - hero.y) < 4)) nearHero = true; }
+      }
+      over = Math.max(over, population(c) - L.cap);
+    }
+    ok(`${i + 1} ${L.title}: its cores keep feeding the field (${spawns} spawns in 2000 ticks)`, spawns > 40);
+    ok(`${i + 1} ${L.title}: they stop at the cap, so it never chokes (Life can still breed a little past it)`, over <= L.cap * 0.1, `over by ${over}`);
+    ok(`${i + 1} ${L.title}: nothing ever spawns right next to you`, !nearHero);
+  }
 }
 
 console.log('\nmoving and aiming');

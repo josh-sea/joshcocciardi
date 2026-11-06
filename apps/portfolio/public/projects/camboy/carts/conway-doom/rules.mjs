@@ -25,7 +25,7 @@ export const SPEED = 30;         // the hero, in pixels per second
 export const HEARTS = 3;
 
 /* Tiles under the cells. Stone never lives and never counts. The exit is kept clear. */
-export const FLOOR = 0, STONE = 1, EXIT = 2;
+export const FLOOR = 0, STONE = 1, EXIT = 2, CORE = 4;
 
 /* ---------- the Game of Life ---------- */
 
@@ -190,48 +190,140 @@ export function makeRng(seed) {
 function blank(w, h, title) {
   const tiles = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (!x || !y || x === w - 1 || y === h - 1) tiles[y * w + x] = STONE;
-  const L = { w, h, title, tiles, cells: new Uint8Array(w * h), items: [], tips: [], start: null, exit: null };
+  const L = { w, h, title, tiles, cells: new Uint8Array(w * h), items: [], tips: [], cores: [], start: null, exit: null, tick: TICK };
   L.stone = (x, y, sw = 1, sh = 1) => { for (let yy = y; yy < y + sh; yy++) for (let xx = x; xx < x + sw; xx++) tiles[yy * w + xx] = STONE; };
   L.floor = (x, y, sw = 1, sh = 1) => { for (let yy = y; yy < y + sh; yy++) for (let xx = x; xx < x + sw; xx++) tiles[yy * w + xx] = FLOOR; };
   L.put = (rows, x, y, k = 0) => stamp(L.cells, w, orient(rows, k), x, y);
   L.pat = (name, x, y, k = 0) => L.put(PATTERNS[name].rows, x, y, k);
   L.item = (kind, x, y) => L.items.push({ kind, x, y });
   L.exitAt = (x, y) => { L.exit = { x, y }; for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) tiles[(y + dy) * w + x + dx] = EXIT; };
+  /** A core: a 2x2 machine that keeps feeding new patterns into the field. */
+  L.core = (x, y, every = 18) => {
+    L.cores.push({ x, y, hp: CORE_HP, every, t: Math.floor(every / 2) });
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) tiles[(y + dy) * w + x + dx] = CORE;
+  };
+  /** Is this box of floor empty, with `pad` empty cells around it? */
+  L.free = (x, y, sw, sh, pad = 1) => {
+    for (let yy = y - pad; yy < y + sh + pad; yy++) for (let xx = x - pad; xx < x + sw + pad; xx++) {
+      if (xx < 1 || yy < 1 || xx >= w - 1 || yy >= h - 1) return false;
+      const i = yy * w + xx;
+      if (tiles[i] || L.cells[i]) return false;
+    }
+    return true;
+  };
+  /**
+   * A grove: blocks in a grid with one empty cell between them. Every gap
+   * cell has four neighbors, so nothing is born and the whole thing stands
+   * still, until something crashes into it. Some blocks are left out, so
+   * there are ways through. Stays clear of the start, exit, items and cores.
+   */
+  L.grove = (rng, x0, y0, gw, gh, density = 0.7, keepOut = () => false) => {
+    const cols = Math.floor((gw + 1) / 3), rows = Math.floor((gh + 1) / 3);
+    // Whole rows and columns of blocks are left out, which makes streets
+    // through the grove and never leaves three blocks round a corner.
+    const rowOn = Array.from({ length: rows }, () => rng() <= density);
+    const colOn = Array.from({ length: cols }, () => rng() <= density);
+    // Which spots could hold a block at all (not too close to the start, exit, items, cores or other life).
+    const allowed = Array.from({ length: rows }, () => Array(cols).fill(false));
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const x = x0 + c * 3, y = y0 + r * 3;
+      let ok = (Math.abs(x - L.start.x) > 3 || Math.abs(y - L.start.y) > 3) && (!L.exit || Math.abs(x - L.exit.x) > 3 || Math.abs(y - L.exit.y) > 3);
+      for (let yy = y - 2; yy <= y + 3 && ok; yy++) for (let xx = x - 2; xx <= x + 3 && ok; xx++) {
+        const inBlock = xx >= x && xx <= x + 1 && yy >= y && yy <= y + 1;
+        if (xx < 0 || yy < 0 || xx >= w || yy >= h) { if (inBlock) ok = false; continue; }
+        const i = yy * w + xx;
+        // Stone right next to a block is fine (nothing is ever born on stone); other live cells need room.
+        if (inBlock && tiles[i]) ok = false;
+        if (tiles[i] === EXIT || tiles[i] === CORE || keepOut(xx, yy)) ok = false;
+        if (L.cells[i] && (xx < x0 - 1 || yy < y0 - 1 || xx > x0 + gw || yy > y0 + gh)) ok = false;
+      }
+      if (ok && L.items.some((it) => Math.abs(it.x - x - 0.5) < 3 && Math.abs(it.y - y - 0.5) < 3)) ok = false;
+      if (ok && L.cores.some((k) => Math.abs(k.x - x) < 5 && Math.abs(k.y - y) < 5)) ok = false;
+      allowed[r][c] = ok;
+    }
+    // A gap cell where four blocks meet has four neighbors; with exactly three
+    // round it, a cell is born. Blocks only stand where their whole row and
+    // whole column are on, so that can't happen: where a spot isn't allowed,
+    // drop its row or its column, whichever loses fewer blocks.
+    for (let changed = true; changed;) {
+      changed = false;
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        if (!rowOn[r] || !colOn[c] || allowed[r][c]) continue;
+        const inRow = colOn.filter(Boolean).length, inCol = rowOn.filter(Boolean).length;
+        if (inRow <= inCol) rowOn[r] = false; else colOn[c] = false;
+        changed = true;
+      }
+    }
+    const on = rowOn.map((ro) => colOn.map((co) => ro && co));
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (on[r][c]) stamp(L.cells, w, PATTERNS.block.rows, x0 + c * 3, y0 + r * 3);
+  };
+  /**
+   * Scatter n patterns over the empty floor, each with room to live, away
+   * from the start, the exit, the items, the cores and anywhere `keepOut`
+   * says (gun lanes). This is what fills the empty space.
+   */
+  L.sprinkle = (rng, n, kinds, keepOut = () => false) => {
+    const near = (x, y, sw, sh, p, r) => x - r < p.x + 2 && p.x - r < x + sw && y - r < p.y + 2 && p.y - r < y + sh;
+    for (let tries = 0, placed = 0; placed < n && tries < n * 60; tries++) {
+      const kind = kinds[Math.floor(rng() * kinds.length)];
+      const rows = orient(PATTERNS[kind].rows, Math.floor(rng() * 8));
+      const sw = rows[0].length, sh = rows.length;
+      const x = 2 + Math.floor(rng() * (w - sw - 3)), y = 2 + Math.floor(rng() * (h - sh - 3));
+      // Room all round, so neighbors never breed into each other: two cells
+      // for still lifes, three for flappers, which stick out a cell when they flip.
+      if (!L.free(x, y, sw, sh, STILL.includes(kind) ? 2 : 3)) continue;
+      if (near(x, y, sw, sh, L.start, 4) || near(x, y, sw, sh, L.exit, 3) || L.items.some((it) => near(x, y, sw, sh, it, 2)) || L.cores.some((c) => near(x, y, sw, sh, c, 3))) continue;
+      let bad = false;
+      for (let yy = y - 1; yy <= y + sh && !bad; yy++) for (let xx = x - 1; xx <= x + sw && !bad; xx++) if (keepOut(xx, yy)) bad = true;
+      if (bad) continue;
+      L.put(rows, x, y);
+      placed++;
+    }
+  };
   return L;
 }
 
+const STILL = ["block", "beehive", "loaf", "boat"];
+const MIXED = ["block", "beehive", "loaf", "boat", "blinker", "toad", "beacon"];
+
 /** The hand-built levels, in order. Each is a function so the arrays are fresh every time. */
 export const LEVELS = [
-  // 1. Still lifes: blocks and beehives that stand still, filling the doorways.
+  // 1. Still lifes: blocks and beehives that stand still, filling the doorways, and lots of clutter.
   () => {
     const L = blank(40, 32, "STILL LIFE");
     L.stone(12, 1, 2, 30); L.floor(12, 15, 2, 2); L.pat("block", 12, 15);
     L.stone(22, 1, 2, 30); L.floor(22, 9, 2, 2); L.pat("block", 22, 9);
     L.stone(30, 1, 4, 30); L.floor(30, 20, 4, 3); L.pat("beehive", 30, 20);
-    L.pat("block", 5, 6); L.pat("beehive", 16, 24); L.pat("loaf", 17, 5); L.pat("boat", 26, 26);
     L.start = { x: 4, y: 15 };
     L.exitAt(36, 15);
     L.item("ammo", 18, 15); L.item("seed", 27, 15);
+    const g1 = makeRng(12);
+    L.grove(g1, 2, 2, 9, 11, 0.75); L.grove(g1, 2, 19, 9, 11, 0.75); L.grove(g1, 15, 2, 6, 28, 0.7); L.grove(g1, 25, 2, 4, 28, 0.7);
+    L.sprinkle(makeRng(11), 60, STILL);
     L.tips = [
       "THE WALLS HERE ARE ALIVE. EVERY TICK, EACH CELL LIVES OR DIES BY CONWAY'S GAME OF LIFE.",
-      "A SHOOTS A CELL. BUT BLOCKS ARE TOUGH: SHOOT ONE CELL AND THE OTHER THREE GROW IT BACK. HOLD A TO SHOOT TWO AT ONCE!",
+      "A SHOOTS A CELL. BUT BLOCKS ARE TOUGH: SHOOT ONE CELL AND THE OTHER THREE GROW IT BACK. SHOOT TWICE, QUICK!",
       "REACH THE CHECKERED EXIT.",
     ];
     return L;
   },
-  // 2. Oscillators: blinkers, toads and beacons flap; a pulsar pounds in the middle room.
+  // 2. Oscillators, and the first cores.
   () => {
     const L = blank(40, 48, "OSCILLATORS");
     L.stone(1, 14, 38, 2); L.floor(30, 14, 7, 2); L.pat("blinker", 32, 14);
     L.stone(1, 34, 38, 2); L.floor(3, 34, 7, 2); L.pat("blinker", 5, 34);
-    L.pat("toad", 6, 5); L.pat("beacon", 18, 7); L.pat("toad", 26, 3); L.pat("blinker", 12, 10, 1);
     L.pat("pulsar", 13, 18);
-    L.pat("beacon", 31, 22); L.pat("toad", 4, 27);
-    L.pat("blinker", 14, 39); L.pat("blinker", 22, 39); L.pat("toad", 27, 43); L.pat("beacon", 8, 42);
     L.start = { x: 6, y: 3 };
     L.exitAt(34, 44);
-    L.item("ammo", 20, 4); L.item("ammo", 34, 28); L.item("heart", 3, 20);
-    L.tips = ["OSCILLATORS FLAP BACK AND FORTH EVERY TICK. SLIP PAST THEM, OR SHOOT THEM TO BITS."];
+    L.item("ammo", 20, 4); L.item("ammo", 34, 28); L.item("heart", 3, 20); L.item("ammo", 20, 40);
+    L.core(30, 6, 20); L.core(14, 40, 18);
+    const g2 = makeRng(23);
+    L.grove(g2, 10, 2, 16, 10, 0.6); L.grove(g2, 22, 37, 15, 9, 0.6); L.grove(g2, 30, 19, 8, 13, 0.6);
+    L.sprinkle(makeRng(22), 60, MIXED, (x, y) => x >= 11 && x <= 28 && y >= 16 && y <= 32);
+    L.tips = [
+      "OSCILLATORS FLAP BACK AND FORTH EVERY TICK. SLIP PAST THEM, OR SHOOT THEM TO BITS.",
+      "THAT PULSING SQUARE IS A CORE. IT KEEPS SPITTING NEW PATTERNS INTO THE FIELD, FASTER AND FASTER. EIGHT SHOTS BREAK IT.",
+    ];
     return L;
   },
   // 3. Gliders: little ships that walk across the room, each into an eater.
@@ -244,11 +336,16 @@ export const LEVELS = [
     L.stone(30, 3, 2, 8); L.stone(8, 26, 8, 2);
     L.start = { x: 3, y: 34 };
     L.exitAt(39, 3);
-    L.item("ammo", 22, 30); L.item("seed", 40, 32);
-    L.tips = ["GLIDERS CRAWL ACROSS THE FIELD, ONE CELL EVERY FOUR TICKS. THE EATERS IN THE CORNER SWALLOW THEM.", "B DROPS A SEED CELL. THREE SEEDS IN AN L GROW INTO A BLOCK!"];
+    L.item("ammo", 22, 30); L.item("seed", 40, 32); L.item("ammo", 6, 20);
+    L.core(14, 32, 16);
+    const lane3 = (x, y) => (x - y >= -5 && x - y <= 22 && y <= 37) || (x >= 30 && y >= 17);
+    L.grove(makeRng(34), 2, 14, 22, 24, 0.8, lane3); L.grove(makeRng(35), 24, 2, 18, 14, 0.8, lane3);
+    // Keep the glider lanes and their eaters clear.
+    L.sprinkle(makeRng(33), 50, MIXED, (x, y) => (x - y >= -5 && x - y <= 22 && y <= 37) || (x >= 30 && y >= 17));
+    L.tips = ["GLIDERS CRAWL ACROSS THE FIELD, ONE CELL EVERY FOUR TICKS. THE EATERS SWALLOW THEM.", "B DROPS A SEED CELL. THREE SEEDS IN AN L GROW INTO A BLOCK!"];
     return L;
   },
-  // 4. The gun: a glider gun fires down across the corridor, forever.
+  // 4. The gun: a glider gun fires down across the corridor, forever. A core guards the corridor.
   () => {
     const L = blank(54, 40, "THE GUN");
     L.put(gunWithEater(10), 2, 2);
@@ -257,19 +354,25 @@ export const LEVELS = [
     L.stone(38, 30, 1, 9); L.stone(52, 30, 1, 9);           // the eater's pocket
     L.start = { x: 3, y: 24 };
     L.exitAt(49, 23);
-    L.item("ammo", 20, 24); L.item("heart", 30, 21);
+    L.item("ammo", 20, 24); L.item("heart", 30, 21); L.item("ammo", 10, 27);
+    L.core(22, 23, 16); L.core(46, 13, 16);
+    const lane4 = (x, y) => x - y >= 6 && x - y <= 24;
+    L.grove(makeRng(45), 41, 2, 11, 16, 0.65); L.grove(makeRng(46), 6, 20, 30, 9, 0.8, lane4); L.grove(makeRng(47), 38, 20, 14, 9, 0.8, lane4);
+    L.sprinkle(makeRng(44), 50, MIXED, (x, y) => (x < 40 && y < 13) || (x - y >= 6 && x - y <= 24) || y > 28);
     L.tips = ["A GLIDER GUN! IT FIRES A NEW GLIDER EVERY THIRTY TICKS. TIME YOUR RUN ACROSS THE STREAM."];
     return L;
   },
-  // 5. Soup: random cells, boiling away.
+  // 5. Soup: random cells, boiling away, and cores stirring it.
   () => {
     const L = blank(44, 32, "PRIMORDIAL SOUP");
     const rng = makeRng(1970);
-    for (let y = 2; y < 30; y++) for (let x = 9; x < 35; x++) if (rng() < 0.32) L.cells[y * 44 + x] = 1;
+    for (let y = 2; y < 30; y++) for (let x = 7; x < 37; x++) if (rng() < 0.4) L.cells[y * 44 + x] = 1;
     L.start = { x: 3, y: 15 };
     L.exitAt(39, 15);
-    L.item("ammo", 6, 4); L.item("ammo", 6, 26); L.item("seed", 22, 1);
-    L.tips = ["RANDOM SOUP. NOBODY KNOWS WHAT IT WILL TURN INTO. NOT EVEN CONWAY."];
+    L.item("ammo", 3, 4); L.item("ammo", 3, 26); L.item("seed", 40, 3);
+    L.core(20, 6, 14); L.core(24, 24, 14);
+    for (const c of L.cores) for (let dy = -1; dy < 3; dy++) for (let dx = -1; dx < 3; dx++) L.cells[(c.y + dy) * 44 + c.x + dx] = 0;
+    L.tips = ["RANDOM SOUP, AND CORES STIRRING IT. NOBODY KNOWS WHAT IT WILL TURN INTO. NOT EVEN CONWAY."];
     return L;
   },
   // 6. Two guns, two corridors.
@@ -285,50 +388,56 @@ export const LEVELS = [
     L.stone(51, 1, 1, 18); L.stone(51, 38, 1, 13);
     L.start = { x: 3, y: 24 };
     L.exitAt(3, 56);
-    L.item("ammo", 30, 24); L.item("heart", 53, 40); L.item("ammo", 20, 56); L.item("seed", 53, 30);
+    L.item("ammo", 30, 24); L.item("heart", 53, 40); L.item("ammo", 20, 56); L.item("seed", 53, 30); L.item("ammo", 53, 10);
+    L.core(14, 23, 15); L.core(18, 55, 15); L.core(52, 44, 16);
+    L.grove(makeRng(67), 52, 2, 3, 64, 0.5); L.grove(makeRng(68), 39, 39, 11, 11, 0.6);
+    const lane6 = (x, y) => (y <= 38 && x - y >= 4 && x - y <= 24) || (y >= 50 && x - (y - 32) >= 4 && x - (y - 32) <= 24);
+    L.grove(makeRng(69), 6, 20, 44, 9, 0.8, lane6); L.grove(makeRng(70), 6, 52, 44, 9, 0.8, lane6);
+    const lanes = (x, y) => (y < 20 && x < 40) || (y >= 30 && y < 52 && x < 40) || (y >= 19 && y <= 38 && x - y >= 4 && x - y <= 24) || (y >= 51 && x - (y - 32) >= 4 && x - (y - 32) <= 24);
+    L.sprinkle(makeRng(66), 70, MIXED, lanes);
     L.tips = ["TWO GUNS. GO RIGHT, DOWN THE SIDE, AND BACK LEFT UNDER THE SECOND ONE."];
     return L;
   },
 ];
 
 /**
- * Beyond the hand-built levels: a fresh field every time, bigger as you
- * go, with stone pillars, still lifes and oscillators, and patches of soup.
+ * Beyond the hand-built levels: a fresh field every time, bigger and
+ * busier as you go: stone pillars, thick with still lifes and
+ * oscillators, patches of soup, more cores, and a faster clock.
  */
 export function endlessLevel(n, seed) {
   const rng = makeRng((seed ^ (n * 7919)) >>> 0);
   const w = Math.min(64, 40 + n * 2), h = Math.min(48, 32 + n * 2);
   const L = blank(w, h, `FIELD ${n}`);
-  const free = (x, y, sw, sh, pad = 1) => {
-    for (let yy = y - pad; yy < y + sh + pad; yy++) for (let xx = x - pad; xx < x + sw + pad; xx++) {
-      if (xx < 1 || yy < 1 || xx >= w - 1 || yy >= h - 1) return false;
-      const i = yy * w + xx;
-      if (L.tiles[i] || L.cells[i]) return false;
-    }
-    return true;
-  };
+  L.tick = Math.max(0.2, TICK - n * 0.012);
   L.start = { x: 3, y: 3 + Math.floor(rng() * (h - 8)) };
   L.exitAt(w - 5, 3 + Math.floor(rng() * (h - 8)));
-  const safe = (x, y, sw, sh) => Math.hypot(x - L.start.x, y - L.start.y) > 6 && Math.hypot(x - L.exit.x, y - L.exit.y) > 6;
-  for (let i = 0; i < 4 + n; i++) {
+  const far = (x, y) => Math.hypot(x - L.start.x, y - L.start.y) > 7 && Math.hypot(x - L.exit.x, y - L.exit.y) > 6;
+  for (let i = 0; i < 6 + n; i++) {
     const sw = 2 + Math.floor(rng() * 5), sh = 2 + Math.floor(rng() * 5), x = 4 + Math.floor(rng() * (w - 12)), y = 2 + Math.floor(rng() * (h - 8));
-    if (free(x, y, sw, sh, 2) && safe(x, y, sw, sh)) L.stone(x, y, sw, sh);
-  }
-  const kinds = ["block", "beehive", "loaf", "boat", "blinker", "toad", "beacon"];
-  for (let i = 0; i < 10 + n * 2; i++) {
-    const rows = orient(PATTERNS[kinds[Math.floor(rng() * kinds.length)]].rows, Math.floor(rng() * 8));
-    const x = 3 + Math.floor(rng() * (w - 8)), y = 2 + Math.floor(rng() * (h - 6));
-    if (free(x, y, rows[0].length, rows.length, 2) && safe(x, y)) L.put(rows, x, y);
-  }
-  for (let p = 0; p < 1 + Math.floor(n / 3); p++) {
-    const x = 8 + Math.floor(rng() * (w - 24)), y = 3 + Math.floor(rng() * (h - 14));
-    for (let yy = y; yy < y + 8; yy++) for (let xx = x; xx < x + 10; xx++) if (!L.tiles[yy * w + xx] && rng() < 0.33) L.cells[yy * w + xx] = 1;
+    if (L.free(x, y, sw, sh, 2) && far(x, y)) L.stone(x, y, sw, sh);
   }
   for (let i = 0; i < 3; i++) {
     const x = 3 + Math.floor(rng() * (w - 6)), y = 2 + Math.floor(rng() * (h - 4));
-    if (!L.tiles[y * w + x] && !L.cells[y * w + x]) L.item(["ammo", "ammo", "heart", "seed"][Math.floor(rng() * 4)], x, y);
+    if (!L.tiles[y * w + x]) L.item(["ammo", "ammo", "heart", "seed"][Math.floor(rng() * 4)], x, y);
   }
-  L.tips = n === 1 ? ["YOU MADE IT THROUGH THE LAB. FROM HERE ON, EVERY FIELD IS NEW."] : [];
+  for (let c = 0, tries = 0; c < Math.min(5, 1 + Math.floor(n / 2)) && tries < 80; tries++) {
+    const x = 8 + Math.floor(rng() * (w - 18)), y = 3 + Math.floor(rng() * (h - 8));
+    if (L.free(x, y, 2, 2, 3) && far(x, y) && L.cores.every((k) => Math.hypot(k.x - x, k.y - y) > 10)) { L.core(x, y, Math.max(10, 18 - n)); c++; }
+  }
+  for (let p = 0; p < 2 + Math.floor(n / 2); p++) {
+    const x = 8 + Math.floor(rng() * (w - 24)), y = 3 + Math.floor(rng() * (h - 14));
+    for (let yy = y; yy < y + 10; yy++) for (let xx = x; xx < x + 12; xx++) {
+      const i = yy * w + xx;
+      if (!L.tiles[i] && far(xx, yy) && rng() < 0.38 && !L.items.some((it) => Math.abs(it.x - xx) < 2 && Math.abs(it.y - yy) < 2)) L.cells[i] = 1;
+    }
+  }
+  for (let g = 0; g < 2 + Math.floor(n / 2); g++) {
+    const gw = 8 + Math.floor(rng() * 10), gh = 6 + Math.floor(rng() * 8);
+    L.grove(rng, 3 + Math.floor(rng() * (w - gw - 6)), 2 + Math.floor(rng() * (h - gh - 4)), gw, gh, 0.55 + Math.min(0.25, n * 0.03));
+  }
+  L.sprinkle(rng, 50 + n * 6, MIXED);
+  L.tips = n === 1 ? ["YOU MADE IT THROUGH THE LAB. FROM HERE ON, EVERY FIELD IS NEW, AND EVERY ONE IS HARDER."] : [];
   return L;
 }
 
@@ -337,7 +446,60 @@ export function buildLevel(i, seed = 1) {
   const L = i < LEVELS.length ? LEVELS[i]() : endlessLevel(i - LEVELS.length + 1, seed);
   // Nothing grows on the start or under the items.
   for (const p of [L.start, ...L.items]) L.cells[p.y * L.w + p.x] = 0;
+  // The cores stop feeding once the field is this full, so it never chokes completely.
+  let open = 0;
+  for (let k = 0; k < L.tiles.length; k++) if (L.tiles[k] === FLOOR) open++;
+  L.cap = Math.max(population(L.cells) + 40, Math.round(open * 0.16));
   return L;
+}
+
+/* ---------- cores ---------- */
+
+export const CORE_HP = 8;
+
+/** What a core can spit out: mostly small things, sometimes a glider. */
+export const CORE_SPAWNS = ["block", "beehive", "blinker", "toad", "boat", "glider", "glider", "blob"];
+
+/** How many ticks between a core's spawns: it speeds up the longer you take, down to every 6. */
+export const coreEvery = (core, gen) => Math.max(6, core.every - Math.floor(gen / 45));
+
+/**
+ * One spawn from a core, into the ring 3 to 6 cells around it. Gliders
+ * fly away from the core, half the time toward the hero's side. Nothing
+ * lands within 3 cells of the hero, on anything but empty floor, or past
+ * the field's cap. Returns the stamped cell indices, or null.
+ */
+export function coreSpawn(L, cells, core, rng, hero, gen = 0) {
+  if (population(cells) >= L.cap) return null;
+  const kind = CORE_SPAWNS[Math.floor(rng() * CORE_SPAWNS.length)];
+  for (let tries = 0; tries < 10; tries++) {
+    const a = rng() * Math.PI * 2, r = 3 + rng() * 3;
+    const cx = core.x + 1 + Math.cos(a) * r, cy = core.y + 1 + Math.sin(a) * r;
+    let rows;
+    if (kind === "blob") rows = Array.from({ length: 3 }, () => Array.from({ length: 3 }, () => (rng() < 0.55 ? "O" : ".")).join(""));
+    else if (kind === "glider") {
+      // The base glider heads down-right; turn it to head away from the core, or at the hero.
+      const toward = hero && rng() < 0.5;
+      const dx = toward ? hero.x - cx : cx - core.x - 1, dy = toward ? hero.y - cy : cy - core.y - 1;
+      const k = dx >= 0 ? (dy >= 0 ? 0 : 3) : dy >= 0 ? 1 : 2; // 0 down-right, 1 down-left, 2 up-left, 3 up-right
+      rows = orient(PATTERNS.glider.rows, k);
+    } else rows = orient(PATTERNS[kind].rows, Math.floor(rng() * 8));
+    const x = Math.round(cx - rows[0].length / 2), y = Math.round(cy - rows.length / 2);
+    let ok = true;
+    const put = [];
+    rows.forEach((row, dy) => [...row].forEach((c, dx) => {
+      const X = x + dx, Y = y + dy;
+      if (X < 1 || Y < 1 || X >= L.w - 1 || Y >= L.h - 1) { ok = false; return; }
+      const i = Y * L.w + X;
+      if (L.tiles[i] !== FLOOR) ok = false;
+      if (hero && Math.abs(X - hero.x) < 4 && Math.abs(Y - hero.y) < 4) ok = false;
+      if (c === "O") put.push(i);
+    }));
+    if (!ok || !put.length) continue;
+    for (const i of put) cells[i] = 1;
+    return put;
+  }
+  return null;
 }
 
 /**
@@ -357,7 +519,7 @@ export function canFinish(L) {
       const X = x + dx, Y = y + dy;
       if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
       const j = Y * w + X;
-      if (!seen[j] && tiles[j] !== STONE) { seen[j] = 1; q.push(j); }
+      if (!seen[j] && tiles[j] !== STONE && tiles[j] !== CORE) { seen[j] = 1; q.push(j); }
     }
   }
   return false;
@@ -370,7 +532,7 @@ export function blockedAt(L, cells, px, py) {
   const x = Math.floor(px / CELL), y = Math.floor(py / CELL);
   if (x < 0 || y < 0 || x >= L.w || y >= L.h) return true;
   const i = y * L.w + x;
-  return L.tiles[i] === STONE || cells[i] === 1;
+  return L.tiles[i] === STONE || L.tiles[i] === CORE || cells[i] === 1;
 }
 
 /** The cells a box (left, top, size s pixels) covers, by index. */
@@ -389,8 +551,20 @@ export function moveBox(L, cells, box, dx, dy) {
   const hits = (X, Y) => blockedAt(L, cells, X, Y) || blockedAt(L, cells, X + s - 0.01, Y) || blockedAt(L, cells, X, Y + s - 0.01) || blockedAt(L, cells, X + s - 0.01, Y + s - 0.01);
   const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 1));
   for (let i = 0; i < n; i++) {
-    if (dx && !hits(x + dx / n, y)) x += dx / n;
-    if (dy && !hits(x, y + dy / n)) y += dy / n;
+    const sx = dx / n, sy = dy / n;
+    if (sx) {
+      if (!hits(x + sx, y)) x += sx;
+      else if (!sy) {
+        // Nearly lined up with a gap? Slip round the corner instead of sticking.
+        for (const off of [1, -1, 2, -2]) if (!hits(x + sx, y + off) && !hits(x, y + Math.sign(off) * 0.5)) { y += Math.sign(off) * 0.5; break; }
+      }
+    }
+    if (sy) {
+      if (!hits(x, y + sy)) y += sy;
+      else if (!sx) {
+        for (const off of [1, -1, 2, -2]) if (!hits(x + off, y + sy) && !hits(x + Math.sign(off) * 0.5, y)) { x += Math.sign(off) * 0.5; break; }
+      }
+    }
   }
   return { ...box, x, y };
 }
