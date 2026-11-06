@@ -79,6 +79,10 @@
           "destination": "/projects/party-room/index.html"
         },
         {
+          "source": "/projects/swarmbreak/**",
+          "destination": "/projects/swarmbreak/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -205,6 +209,15 @@
           ]
         },
         {
+          "source": "/projects/swarmbreak/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/tophat-spears/**/*.@(js|css)",
           "headers": [
             {
@@ -267,6 +280,11 @@
         {
           "source": "/tophat",
           "destination": "/projects/tophat-spears/",
+          "type": 301
+        },
+        {
+          "source": "/swarm",
+          "destination": "/projects/swarmbreak/",
           "type": 301
         },
         {

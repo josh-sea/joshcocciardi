@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Swarmbreak</title>
+<meta name="description" content="Top-down co-op alien shooter. Up to four marines on one keyboard or in an online lobby clear a station of nests, level by level.">
+<meta name="theme-color" content="#07090c">
+<meta name="robots" content="noindex">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- Title and setup -->
+<main id="menu" class="screen">
+  <div class="title">
+    <div class="eyebrow">Co-op alien sweep · 1 to 4 marines</div>
+    <h1>SWARM<em>BREAK</em></h1>
+    <p class="brief">The station went quiet a week ago. Now it's crawling. Sweep it deck by deck: burn out every nest, grab whatever heavier guns the last crew dropped, and get the whole squad onto the exit pad. Six decks down, something is laying all those eggs.</p>
+  </div>
+  <div class="cards">
+    <section class="panel">
+      <h2>One computer</h2>
+      <p class="sub">Share the keyboard (two marines), add gamepads for three or four.</p>
+      <div class="field"><label>Marines</label><div class="seg" id="lCount"><button data-n="1">1</button><button data-n="2" class="on">2</button><button data-n="3">3</button><button data-n="4">4</button></div></div>
+      <div id="lNames"></div>
+      <p class="hint" id="lPads"></p>
+      <div class="row">
+        <div class="field"><label for="lLevel">Start at</label><select id="lLevel"></select></div>
+        <div class="field"><label for="lSwarm">Swarm</label><select id="lSwarm"><option value="0.5">Light</option><option value="0.75">Thinner</option><option value="1" selected>Normal</option><option value="1.5">Heavy</option><option value="2">Infested</option></select></div>
+      </div>
+      <label class="check"><input type="checkbox" id="lFF"> Friendly fire (you can shoot each other)</label>
+      <button id="lStart" class="big">Deploy</button>
+    </section>
+    <section class="panel">
+      <h2>Online lobby</h2>
+      <p class="sub">Everyone types the same password. Up to four marines across every computer.</p>
+      <form id="joinForm" autocomplete="off">
+        <div class="field"><label for="oPw">Lobby password</label><input id="oPw" type="password" minlength="4" required placeholder="Same password, same lobby"></div>
+        <div class="field"><label for="oName">Your name</label><input id="oName" maxlength="18" required placeholder="What your squad will see"></div>
+        <label class="check"><input type="checkbox" id="oTwo"> Two of us on this keyboard</label>
+        <div class="field" id="oName2Wrap" hidden><label for="oName2">Second marine</label><input id="oName2" maxlength="18" placeholder="Name"></div>
+        <p class="err" id="joinErr" role="alert"></p>
+        <button id="oJoin" class="big" type="submit">Join lobby</button>
+      </form>
+    </section>
+  </div>
+  <section class="panel legend">
+    <h2>Field guide</h2>
+    <ul>
+      <li><b class="c1">Crawlers</b> fast, weak, many. Nests keep making them.</li>
+      <li><b class="c2">Brutes</b> slow and armoured. Back up while you shoot.</li>
+      <li><b class="c3">Spitters</b> keep their distance and lob acid.</li>
+      <li><b class="c4">Nests</b> pulse in the dark. Every one must die before the exit unlocks.</li>
+    </ul>
+    <ul>
+      <li><b>1 Pulse Carbine</b> never runs dry.</li>
+      <li><b>2 Scattergun</b> a wall of pellets up close.</li>
+      <li><b>3 Torch</b> burns through a whole crowd.</li>
+      <li><b>4 Lance</b> one beam through everything in a line.</li>
+      <li><b>5 Boomtube</b> rockets. Mind the splash.</li>
+    </ul>
+    <p class="sub">The squad shares six respawns a level. If they run out and everyone is down, you retry the deck.</p>
+  </section>
+</main>
+
+<!-- Online lobby -->
+<main id="lobby" class="screen" hidden>
+  <section class="panel lobbybox">
+    <div class="eyebrow">Lobby</div>
+    <h2>Squad</h2>
+    <ul id="roster"></ul>
+    <div class="row">
+      <div class="field"><label for="oLevel">Start at</label><select id="oLevel"></select></div>
+      <div class="field"><label for="oSwarm">Swarm</label><select id="oSwarm"><option value="0.5">Light</option><option value="0.75">Thinner</option><option value="1">Normal</option><option value="1.5">Heavy</option><option value="2">Infested</option></select></div>
+    </div>
+    <label class="check"><input type="checkbox" id="oFF"> Friendly fire</label>
+    <p class="hint" id="oWait">Waiting for the host to deploy.</p>
+    <div class="go">
+      <button id="oStart" class="big">Deploy squad</button>
+      <button id="oRejoin" class="big" hidden>Rejoin match</button>
+      <button id="oInvite" class="ghost">Copy invite link</button>
+      <button id="oLeave" class="ghost">Leave</button>
+    </div>
+  </section>
+</main>
+
+<!-- In game -->
+<div id="hud" hidden>
+  <header class="top">
+    <div class="lv"><span class="k">Deck</span><b id="hLevel"></b></div>
+    <div class="goal" id="hGoal"></div>
+    <div class="stat"><span class="k">Respawns</span><b id="hLives"></b></div>
+    <div class="stat"><span class="k">Kills</span><b id="hKills"></b></div>
+    <button id="hPause" class="ghost">Menu <kbd>Esc</kbd></button>
+  </header>
+  <div id="hBoss" hidden><span>Matriarch</span><div class="bar"><i id="hBossBar"></i></div></div>
+  <div id="banner"></div>
+  <footer id="cards"></footer>
+</div>
+
+<div id="over" class="panel modal" hidden></div>
+<div id="pause" class="panel modal" hidden>
+  <div class="eyebrow">Menu</div>
+  <h2 id="pNote">Paused.</h2>
+  <ul id="pHelp"></ul>
+  <div class="go"><button id="pResume">Resume</button><button id="pMute" class="ghost">Sound on</button><button id="pLeave" class="ghost">Leave match</button></div>
+</div>
+
+<script type="module" src="js/game.js"></script>
+</body>
+</html>
