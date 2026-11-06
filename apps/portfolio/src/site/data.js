@@ -261,6 +261,17 @@ const PROJECTS = [
     link: "/projects/tophat-spears",
   },
   {
+    id: "swarmbreak",
+    host: "joshcocciardi.com/swarm",
+    kind: "play",
+    title: "Swarmbreak",
+    blurb: "Top-down co-op alien shooter. Two on a keyboard, or four online.",
+    description:
+      "Sweep a dark station deck by deck: burn out every nest, pick up heavier guns, and get the whole squad to the exit. Share a keyboard, add gamepads, or join an online lobby with a password. Six decks, a boss at the bottom.",
+    tech: ["Canvas 2D", "Web Audio", "Gamepad API", "Firebase Realtime Database"],
+    link: "/projects/swarmbreak",
+  },
+  {
     id: "boulder-smash",
     kind: "play",
     title: "Boulder Smash",
@@ -401,6 +412,7 @@ const FRAMES = {
   camboku: require("../assets/reel/camboku.jpg"),
   "swing-coach": require("../assets/reel/swing-coach.jpg"),
   "tophat-spears": require("../assets/reel/tophat-spears.jpg"),
+  swarmbreak: require("../assets/reel/swarmbreak.jpg"),
   parkday: require("../assets/reel/parkday.jpg"),
   canitwo: require("../assets/reel/canitwo.jpg"),
   collector: require("../assets/reel/collector.jpg"),

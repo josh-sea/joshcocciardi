@@ -10,7 +10,7 @@
 #
 # What it deploys (mirrors ./deploy.sh):
 #   - copies the static apps (playball, canitwo, recipebox, psx, solra, disney-trivia,
-#     tophat-spears, party-room) into portfolio/public
+#     tophat-spears, party-room, swarmbreak) into portfolio/public
 #   - builds the mail app and copies it to portfolio/public/projects/electronic-mail
 #   - builds the portfolio (the built copy of moments is committed under
 #     apps/portfolio/public/projects/)
@@ -183,6 +183,12 @@ jobs:
       - name: Test Tophat & Spears
         run: node apps/portfolio/test/tophat-spears.test.mjs
 
+      # Swarmbreak: level generation (every deck reachable, same map from the
+      # same seed), the match rules, the wire format and lobby seats. Plain
+      # modules, no install needed.
+      - name: Test Swarmbreak
+        run: node apps/portfolio/test/swarmbreak.test.mjs
+
       # Camboy and its Sweat Boy cartridge: puddle layout, venues, power-ups,
       # the returning players' slip check and the joystick math are plain
       # modules. No install needed.
@@ -217,7 +223,7 @@ jobs:
 
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room; do
+          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room swarmbreak; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"
