@@ -22,6 +22,13 @@ const workPages = [
     pageKey: "onboarding-intake-v1",
     component: lazy(() => import("./onboarding")),
   },
+  {
+    // Messages from the public /contact form (contact_messages in Firestore).
+    slug: "inbox",
+    title: "Inbox",
+    pageKey: "contact-inbox-v1",
+    component: lazy(() => import("./inbox")),
+  },
 ];
 
 export default workPages;

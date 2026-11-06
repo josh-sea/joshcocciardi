@@ -146,3 +146,19 @@ save are refused, and every theme defines every token. No dependencies:
 cd apps/portfolio
 node test/mise-transfer.test.mjs
 ```
+
+## `contact-rules.test.mjs`
+
+Firestore security-rules tests for the public contact form
+(`contact_messages`): anyone, signed in or not, can create a message with
+exactly the expected fields, sizes and a server timestamp; nobody but Josh's
+verified account can read, list, mark or delete; Josh can only flip `read`;
+and the catch-all rule at the bottom of `firestore.rules` doesn't reopen the
+collection to other signed-in users. Same setup as the suites above:
+
+```sh
+firebase emulators:start --only firestore --project josh-cocciardi
+cd apps/portfolio
+npm i --no-save @firebase/rules-unit-testing
+node test/contact-rules.test.mjs
+```
