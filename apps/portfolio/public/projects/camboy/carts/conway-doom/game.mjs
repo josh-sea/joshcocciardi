@@ -9,7 +9,7 @@
 import {
   W, H, CELL, TOP, VIEW_COLS, VIEW_ROWS, TICK, SPEED, HEARTS, FLOOR, STONE, EXIT,
   step, PATTERNS, orient, stamp, LEVELS, buildLevel, moveBox, boxCells, faceFrom, validSave, makeRng, gunWithEater,
-  SCAR_TICKS, scarred,
+  SCAR_TICKS, scarred, CORE, CORE_HP, coreSpawn, coreEvery,
 } from "./rules.mjs";
 import { createSound } from "./sound.mjs";
 
@@ -21,7 +21,7 @@ export const meta = {
 
 const FH = H - TOP;                 // the field's height on screen, 128
 const BOX = 3;                      // the hero's body, in pixels
-const AMMO_START = 12, AMMO_MAX = 30, SEEDS_START = 3, SEEDS_MAX = 9;
+const AMMO_START = 10, AMMO_MAX = 30, SEEDS_START = 3, SEEDS_MAX = 9;
 const GUIDE = ["block", "beehive", "loaf", "boat", "blinker", "toad", "beacon", "pulsar", "glider", "lwss", "gun", "eater"];
 
 /** Wrap text to lines of at most n characters. */
@@ -68,6 +68,8 @@ export function boot(hw) {
     S.cells = S.L.cells.slice();
     S.scars = new Uint8Array(S.L.w * S.L.h);
     S.items = S.L.items.map((it) => ({ ...it }));
+    S.cores = S.L.cores.map((c) => ({ ...c, flash: 0 }));
+    S.rng = makeRng((save.seed ^ (i * 104729)) >>> 0);
     S.shots = []; S.fx = [];
     S.dirty = true; S.tickT = 0; S.gen = 0; S.levelT = 0;
     P.x = S.L.start.x * CELL + 0.5; P.y = S.L.start.y * CELL + 0.5;
@@ -115,6 +117,34 @@ export function boot(hw) {
       for (const i of hit) { S.cells[i] = 0; puff((i % S.L.w) * CELL + 2, ((i / S.L.w) | 0) * CELL + 2, 4); }
       hurt();
     }
+    // The cores feed the field, faster the longer you take.
+    const hero = { x: Math.floor((P.x + BOX / 2) / CELL), y: Math.floor((P.y + BOX / 2) / CELL) };
+    for (const c of S.cores) {
+      if (c.dead || ++c.t < coreEvery(c, S.gen)) continue;
+      c.t = 0;
+      if (coreSpawn(S.L, S.cells, c, S.rng, hero, S.gen)) { c.flash = 0.3; sfx.spawn(); S.dirty = true; }
+    }
+  }
+
+  /** A shot hit a core. Eight and it breaks, leaving ammo behind. */
+  function hitCore(i) {
+    const x = i % S.L.w, y = (i / S.L.w) | 0;
+    const c = S.cores.find((k) => !k.dead && x >= k.x && x <= k.x + 1 && y >= k.y && y <= k.y + 1);
+    if (!c) return;
+    c.hp--;
+    c.flash = 0.15;
+    sfx.thud();
+    haptic(8);
+    if (c.hp > 0) return;
+    c.dead = true;
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) S.L.tiles[(c.y + dy) * S.L.w + c.x + dx] = FLOOR;
+    S.items.push({ kind: "ammo", x: c.x, y: c.y });
+    puff(c.x * CELL + 4, c.y * CELL + 4, 14);
+    S.shake = 0.3;
+    sfx.boom();
+    haptic(30);
+    toast(["CORE DOWN!"], 1);
+    S.dirty = true;
   }
 
   function hurt() {
@@ -180,6 +210,7 @@ export function boot(hw) {
         if (!onField(cx, cy)) { s.life = 0; break; }
         const i = idx(cx, cy);
         if (S.cells[i]) { S.cells[i] = 0; S.scars[i] = SCAR_TICKS; S.dirty = true; s.life = 0; puff(cx * CELL + 2, cy * CELL + 2, 5); sfx.pop(); haptic(6); }
+        else if (S.L.tiles[i] === CORE) { s.life = 0; puff(s.x, s.y, 3); hitCore(i); }
         else if (S.L.tiles[i] === STONE) { s.life = 0; puff(s.x, s.y, 2); sfx.thud(); }
       }
       s.life -= dt;
@@ -211,7 +242,8 @@ export function boot(hw) {
 
     // The clock.
     S.tickT += dt;
-    if (S.tickT >= TICK) { S.tickT -= TICK; tick(); }
+    for (const c of S.cores) c.flash = Math.max(0, c.flash - dt);
+    if (S.tickT >= S.L.tick) { S.tickT -= S.L.tick; tick(); }
   }
 
   /* ---------- the field guide ---------- */
@@ -353,7 +385,7 @@ export function boot(hw) {
     const L = S.L, cam = camera();
     rect(0, TOP, W, FH, 0);
     // The last part of every tick shows what's coming: births dotted in, deaths fading.
-    const soon = S.tickT > TICK * 0.55;
+    const soon = S.tickT > S.L.tick * 0.55;
     if (soon) preview();
     const x0 = Math.max(0, Math.floor(cam.x / CELL)), y0 = Math.max(0, Math.floor(cam.y / CELL));
     const x1 = Math.min(L.w - 1, Math.floor((cam.x + W) / CELL)), y1 = Math.min(L.h - 1, Math.floor((cam.y + FH) / CELL));
@@ -363,6 +395,7 @@ export function boot(hw) {
       const t = L.tiles[i];
       if (t === STONE) { rect(sx, sy, CELL, CELL, 2); if ((x + y) % 2) px(sx + 1, sy + 1, 1); continue; }
       if (t === EXIT) { rect(sx, sy, CELL, CELL, ((x + y) % 2) ^ blinkOn ? 3 : 1); continue; }
+      if (t === CORE) continue; // drawn whole, below
       if (!(x % 4) && !(y % 4)) px(sx, sy, 1);
       if (S.cells[i]) {
         const dying = soon && S.diedSet.has(i);
@@ -374,6 +407,18 @@ export function boot(hw) {
         // A scar where a shot landed: an x, until it heals.
         px(sx, sy, 2); px(sx + 2, sy, 2); px(sx + 1, sy + 1, 2); px(sx, sy + 2, 2); px(sx + 2, sy + 2, 2);
       }
+    }
+    // Cores: a dark square with a beating heart, blinking fast just before it spawns, and its health along the top.
+    for (const c of S.cores) {
+      if (c.dead) continue;
+      const sx = c.x * CELL - cam.x, sy = TOP + c.y * CELL - cam.y;
+      if (sx < -8 || sy < TOP - 8 || sx > W || sy > H) continue;
+      const due = coreEvery(c, S.gen) - c.t <= 1;
+      const beat = c.flash > 0 || (due ? Math.floor(S.t * 12) % 2 : Math.floor(S.t * 3) % 2);
+      rect(sx, sy, 8, 8, 3);
+      rect(sx + 1, sy + 1, 6, 6, beat ? 1 : 2);
+      rect(sx + 3, sy + 3, 2, 2, beat ? 0 : 3);
+      for (let k = 0; k < c.hp; k++) px(sx + k, sy - 1, 3);
     }
     // Pickups.
     for (const it of S.items) {
@@ -411,7 +456,7 @@ export function boot(hw) {
     const gen = `G${S.gen}`;
     text(gen, W - 3 - textW(gen), 4, 0);
     // The clock: a bar that fills each tick.
-    rect(0, TOP - 2, Math.round(W * (S.tickT / TICK)), 1, 2);
+    rect(0, TOP - 2, Math.round(W * (S.tickT / S.L.tick)), 1, 2);
   }
 
   function drawDialog() {

@@ -86,6 +86,8 @@ export function createSound(hw) {
     empty: () => beep(200, 0.05, { vol: 0.05 }),
     exit: () => [523, 659, 784, 1047].forEach((f, i) => beep(f, 0.12, { vol: 0.07, at: i * 0.08 })),
     blip: () => beep(880, 0.05, { vol: 0.05 }),
+    spawn: () => { beep(180, 0.12, { type: "triangle", to: 520, vol: 0.05 }); burst({ dur: 0.1, peak: 0.05, attack: 0.01, f0: 900, q: 2 }); },
+    boom: () => { burst({ dur: 0.6, peak: 0.3, attack: 0.005, f0: 700, f1: 90, type: "lowpass" }); beep(110, 0.4, { to: 40, vol: 0.2 }); },
     type: () => beep(1300, 0.015, { vol: 0.02 }),
   };
   return {
