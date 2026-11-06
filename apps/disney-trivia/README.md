@@ -1,6 +1,6 @@
-# Disney trivia, Where Am I, and the Park Planner
+# Park Day: Disney trivia, Where Am I, the Park Planner and 1 to 10
 
-Three tabs in one static page, served at `/projects/disney-trivia`. The
+Several tabs in one static page, served at `parkday.joshcocciardi.com` and mirrored at `/projects/disney-trivia`. The
 ticket book is the page itself; the other two are ES modules fetched the
 first time their tab is opened, so the trivia half still loads with no
 network at all.

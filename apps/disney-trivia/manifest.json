@@ -1,6 +1,6 @@
 {
-  "name": "Where Am I?",
-  "short_name": "Where Am I",
+  "name": "Park Day",
+  "short_name": "Park Day",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#1A1330",

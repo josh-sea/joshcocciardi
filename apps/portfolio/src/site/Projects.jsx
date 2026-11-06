@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ALL_PROJECTS, FEATURED, SECTIONS, isExternal } from "./data";
+import { ALL_PROJECTS, PROMOTED, SECTIONS, isExternal } from "./data";
 import FeatureCard from "./FeatureCard";
 import { Icon, SmartLink, usePageTitle } from "./ui";
 
@@ -93,7 +93,7 @@ const Projects = () => {
         .map((s) => ({
           ...s,
           items: ALL_PROJECTS.filter(
-            (p) => p.kind === s.key && matches(p, query) && !(browsing && p.featured)
+            (p) => p.kind === s.key && matches(p, query) && !(browsing && p.promoted)
           ),
         }))
         .filter((s) => s.items.length > 0),
@@ -114,9 +114,13 @@ const Projects = () => {
       </header>
 
       {browsing && (
-        <section style={{ marginTop: 32 }}>
+        <section style={{ marginTop: 36 }}>
+          <div className="group-head">
+            <h2>Apps with their own address</h2>
+            <p>The ones worth bookmarking.</p>
+          </div>
           <div className="feature-grid">
-            {FEATURED.map((p) => (
+            {PROMOTED.map((p) => (
               <FeatureCard key={p.id} project={p} />
             ))}
           </div>

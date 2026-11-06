@@ -22,6 +22,42 @@
         ],
         "weather": [
           "josh-cocciardi-weather"
+        ],
+        "partyroom": [
+          "josh-cocciardi-partyroom"
+        ],
+        "canitwo": [
+          "josh-cocciardi-canitwo"
+        ],
+        "parkday": [
+          "josh-cocciardi-parkday"
+        ],
+        "camboku": [
+          "josh-cocciardi-camboku"
+        ],
+        "camboy": [
+          "josh-cocciardi-camboy"
+        ],
+        "swingcoach": [
+          "josh-cocciardi-swingcoach"
+        ],
+        "tophat": [
+          "josh-cocciardi-tophat"
+        ],
+        "mise": [
+          "josh-cocciardi-mise"
+        ],
+        "channelsurfer": [
+          "josh-cocciardi-channelsurfer"
+        ],
+        "sundaydesk": [
+          "josh-cocciardi-sundaydesk"
+        ],
+        "readingbuddy": [
+          "josh-cocciardi-readingbuddy"
+        ],
+        "mealplanner": [
+          "josh-cocciardi-mealplanner"
         ]
       }
     }
