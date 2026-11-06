@@ -202,6 +202,12 @@ jobs:
         working-directory: apps/portfolio
         run: node test/dark-hat.test.mjs
 
+      # Conway's DOOM on the Camboy: the Life engine, the guns and their
+      # eaters, and every level. Plain modules, no install needed.
+      - name: Test Conway's DOOM cartridge
+        working-directory: apps/portfolio
+        run: node test/conway-doom.test.mjs
+
       # Camboku: every generated board must have exactly one answer and be
       # finishable by logic alone, and hints must never point the wrong way.
       # Plain module, no install needed.

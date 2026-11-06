@@ -23,7 +23,7 @@ export const freq = (n) => 440 * 2 ** ((n - 69) / 12);
 export const CHORDS = {
   C: ["C", "E", "G"], Dm: ["D", "F", "A"], D: ["D", "F#", "A"], Em: ["E", "G", "B"], E: ["E", "G#", "B"],
   F: ["F", "A", "C"], G: ["G", "B", "D"], Gm: ["G", "A#", "D"], Am: ["A", "C", "E"], A: ["A", "C#", "E"],
-  Bb: ["A#", "D", "F"], Bm: ["B", "D", "F#"],
+  Bb: ["A#", "D", "F"], Bm: ["B", "D", "F#"], B: ["B", "D#", "F#"],
 };
 
 /** Chord tones stacked upward from the root, starting at octave oct. */
