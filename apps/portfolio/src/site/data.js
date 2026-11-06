@@ -223,9 +223,9 @@ const PROJECTS = [
     host: "joshcocciardi.com/projects/camboy",
     kind: "play",
     title: "Camboy",
-    blurb: "A pocket game console with three cartridges, named for Cam and Bo.",
+    blurb: "A pocket game console with four cartridges, named for Cam and Bo.",
     description:
-      "Flip through the cartridge book and watch one slide into the back before it boots. Sweat Boy (mop the court before the players come back), a 2D Boulder Smash, and Dark Hat: Sorcerer's Escape, Campbell's game. Chiptune music and sound are synthesized in the browser, and it installs to a home screen.",
+      "Flip through the cartridge book and watch one slide into the back before it boots. Sweat Boy (mop the court before the players come back), a 2D Boulder Smash, Dark Hat: Sorcerer's Escape (Campbell's game), and Conway's DOOM. Chiptune music and sound are synthesized in the browser, and it installs to a home screen.",
     tech: ["Canvas API", "Web Audio", "CSS 3D transforms", "PWA"],
     link: "/projects/camboy",
   },
@@ -311,10 +311,11 @@ const PROJECTS = [
     id: "doom-life",
     kind: "play",
     title: "Conway's DOOM",
-    blurb: "Game of Life meets first-person shooter.",
-    description: "Navigate an evolving cellular automata maze, shoot walls, manage ammo, and survive.",
-    tech: ["Three.js", "WebGL"],
-    link: "/doom-life-game",
+    blurb: "A maze whose walls follow Conway's Game of Life. Now a Camboy cartridge.",
+    description:
+      "Still lifes stand like walls, oscillators flap like doors, gliders drift across the room and glider guns keep firing them. Shoot a cell and the pattern carries on without it (shoot one cell of a block and it grows back), plant seed cells to grow your own, and reach the exit. Six built levels, then endless fields, plus a field guide to the patterns.",
+    tech: ["Canvas API", "Web Audio"],
+    link: "/projects/camboy/?cart=conway-doom",
   },
 
   // ── Lives somewhere else ─────────────────────────────────────────────────

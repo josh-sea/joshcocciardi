@@ -248,6 +248,7 @@ build_portfolio() {
     node test/sweat-boy.test.mjs || fail "Sweat Boy tests failed"
     node test/boulder.test.mjs || fail "Boulder Smash cartridge tests failed"
     node test/dark-hat.test.mjs || fail "Dark Hat cartridge tests failed"
+    node test/conway-doom.test.mjs || fail "Conway's DOOM cartridge tests failed"
     node test/camboku.test.mjs || fail "Camboku tests failed"
 
     log "Testing Meal Planner helpers..."
@@ -302,7 +303,7 @@ deploy_hosting() {
     echo "  Boulder Smash:  https://www.joshcocciardi.com/projects/boulder-smash"
     echo "  Tophat&Spears:  https://www.joshcocciardi.com/projects/tophat-spears"
     echo "  Party Room:     https://www.joshcocciardi.com/projects/party-room  (short link: /party)"
-    echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy, Boulder Smash, Dark Hat)"
+    echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy, Boulder Smash, Dark Hat, Conway's DOOM)"
     echo "  Camboku:        https://www.joshcocciardi.com/projects/camboku  (short link: /camboku)"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
     echo "  Reading Buddy:  https://www.joshcocciardi.com/tools/myreadingbuddy"
