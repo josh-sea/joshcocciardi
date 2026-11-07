@@ -97,3 +97,41 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 .board td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; font-family: var(--mono); }
 .board td:first-child { text-align: left; font-family: var(--font); font-weight: 600; }
 .board i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+
+/* Touch controls */
+#touch { position: fixed; inset: 0; z-index: 2; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#touch .stick { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid rgba(255,255,255,.18); background: rgba(255,255,255,.04); opacity: 0; transition: opacity .12s; pointer-events: none; }
+#touch .stick.on { opacity: 1; }
+#touch .stick i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(79,209,255,.45); box-shadow: 0 0 16px rgba(79,209,255,.4); }
+#touch #stR i { background: rgba(255,61,90,.5); box-shadow: 0 0 16px rgba(255,61,90,.4); }
+#touch .zone { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); font: 500 11px var(--mono); color: rgba(255,255,255,.22); text-transform: uppercase; letter-spacing: .14em; pointer-events: none; }
+#touch .zl { left: calc(24px + env(safe-area-inset-left)); }
+#touch .zr { right: calc(24px + env(safe-area-inset-right)); }
+#touch #tSwap { position: absolute; right: calc(16px + env(safe-area-inset-right)); top: 42%; width: 72px; height: 72px; border-radius: 50%; padding: 0; font-size: 14px; background: rgba(14,19,24,.75); color: var(--ink); border: 2px solid var(--line); touch-action: manipulation; }
+#touch #tSwap:active { background: var(--accent); color: var(--bg); }
+
+/* Phones: HUD out of the thumbs' way */
+body.touch #hud .top { padding: calc(6px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) 6px calc(10px + env(safe-area-inset-left)); gap: 10px; }
+body.touch #hud .top button { padding: 8px 12px; font-size: 14px; }
+body.touch #hud .top kbd { display: none; }
+body.touch #cards { top: 52px; bottom: auto; padding: 4px calc(10px + env(safe-area-inset-left)); background: none; gap: 6px; }
+body.touch .card { min-width: 0; padding: 4px 8px; font-size: 11px; }
+body.touch .card.big { min-width: 150px; }
+body.touch .card .nm { font-size: 13px; }
+body.touch .card .slots, body.touch .card .sc { display: none; }
+body.touch #hBoss { top: 52px; }
+@media (max-width: 700px) {
+  #hud .top b { font-size: 14px; }
+  #hud .goal { font-size: 13px; }
+  #hud .stat.kills { display: none; }
+  .title h1 { font-size: 46px; }
+}
+@media (max-height: 520px) {
+  .screen { padding-top: 12px; }
+  .title { margin: 0 0 12px; }
+  .title h1 { font-size: 40px; }
+  .brief { display: none; }
+}
+body.touch .cards > section:last-child { order: -1; }
+#touch .turn { display: none; position: absolute; left: 0; right: 0; bottom: calc(44px + env(safe-area-inset-bottom)); text-align: center; font: 500 12px var(--mono); color: rgba(255,255,255,.35); pointer-events: none; }
+@media (orientation: portrait) { #touch .turn { display: block; } }

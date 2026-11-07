@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <title>Swarmbreak</title>
 <meta name="description" content="Top-down co-op alien shooter. Up to four marines on one keyboard or in an online lobby clear a station of nests, level by level.">
 <meta name="theme-color" content="#07090c">
@@ -25,8 +28,8 @@
   </div>
   <div class="cards">
     <section class="panel">
-      <h2>One computer</h2>
-      <p class="sub">Share the keyboard (two marines), add gamepads for three or four.</p>
+      <h2 id="lTitle">One computer</h2>
+      <p class="sub" id="lSub">Share the keyboard (two marines), add gamepads for three or four.</p>
       <div class="field"><label>Marines</label><div class="seg" id="lCount"><button data-n="1">1</button><button data-n="2" class="on">2</button><button data-n="3">3</button><button data-n="4">4</button></div></div>
       <div id="lNames"></div>
       <p class="hint" id="lPads"></p>
@@ -43,7 +46,7 @@
       <form id="joinForm" autocomplete="off">
         <div class="field"><label for="oPw">Lobby password</label><input id="oPw" type="password" minlength="4" required placeholder="Same password, same lobby"></div>
         <div class="field"><label for="oName">Your name</label><input id="oName" maxlength="18" required placeholder="What your squad will see"></div>
-        <label class="check"><input type="checkbox" id="oTwo"> Two of us on this keyboard</label>
+        <label class="check" id="oTwoWrap"><input type="checkbox" id="oTwo"> Two of us on this keyboard</label>
         <div class="field" id="oName2Wrap" hidden><label for="oName2">Second marine</label><input id="oName2" maxlength="18" placeholder="Name"></div>
         <p class="err" id="joinErr" role="alert"></p>
         <button id="oJoin" class="big" type="submit">Join lobby</button>
@@ -90,13 +93,23 @@
   </section>
 </main>
 
+<!-- Touch controls (phones and tablets) -->
+<div id="touch" hidden>
+  <div class="stick" id="stL"><i></i></div>
+  <div class="stick" id="stR"><i></i></div>
+  <div class="zone zl">Move</div>
+  <div class="zone zr">Aim + fire</div>
+  <button id="tSwap">Swap</button>
+  <div class="turn">Turn sideways for a wider view</div>
+</div>
+
 <!-- In game -->
 <div id="hud" hidden>
   <header class="top">
     <div class="lv"><span class="k">Deck</span><b id="hLevel"></b></div>
     <div class="goal" id="hGoal"></div>
     <div class="stat"><span class="k">Respawns</span><b id="hLives"></b></div>
-    <div class="stat"><span class="k">Kills</span><b id="hKills"></b></div>
+    <div class="stat kills"><span class="k">Kills</span><b id="hKills"></b></div>
     <button id="hPause" class="ghost">Menu <kbd>Esc</kbd></button>
   </header>
   <div id="hBoss" hidden><span>Matriarch</span><div class="bar"><i id="hBossBar"></i></div></div>

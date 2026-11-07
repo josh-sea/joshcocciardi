@@ -7,6 +7,7 @@ import { TILE, THEMES, LEVELS, COLORS, ENEMIES, WEAPONS, PLAYER_R } from './conf
 
 export function createRenderer(canvas) {
   const ctx = canvas.getContext('2d');
+  const coarse = typeof matchMedia === 'function' && matchMedia('(any-pointer: coarse)').matches;
   const dark = document.createElement('canvas');
   const dctx = dark.getContext('2d');
   let mapKey = '', mapImg = null, decal = null, map = null, theme = THEMES[0];
@@ -16,7 +17,8 @@ export function createRenderer(canvas) {
   const cam = { x: 0, y: 0, z: 1 };
 
   function resize() {
-    dpr = Math.min(2, window.devicePixelRatio || 1);
+    // Phones get fewer pixels to fill: the lighting pass is the costly part.
+    dpr = Math.min(coarse ? 1.5 : 2, window.devicePixelRatio || 1);
     W = canvas.clientWidth; H = canvas.clientHeight;
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
     dark.width = Math.round(W / 2); dark.height = Math.round(H / 2);
@@ -122,7 +124,9 @@ export function createRenderer(canvas) {
     // Camera: frame every local marine still standing (or everyone, if none).
     const L = view.players.filter(p => local.has(p.pid) && p.alive);
     const follow = L.length ? L : view.players.filter(p => p.alive);
-    const base = Math.max(0.9, Math.min(W / (24 * TILE), H / (15 * TILE)));
+    // Small screens zoom out a little further so you can see what's coming.
+    const floor = Math.min(W, H) >= 500 ? 0.9 : W < H ? 0.85 : 0.62;
+    const base = Math.max(floor, Math.min(W / (24 * TILE), H / (15 * TILE)));
     if (follow.length) {
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const p of follow) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }

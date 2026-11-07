@@ -7,6 +7,9 @@
  *   right  arrows, Enter or / fire, Right Shift or . holds aim, , weapon
  *   pad    left stick moves, right stick aims, either trigger or A fires,
  *          bumpers or Y change weapon
+ *   touch  (phones and tablets) a thumb on the left half moves, a thumb on
+ *          the right half aims and fires while it's down, the Swap button
+ *          changes weapon. Each stick appears wherever the thumb lands.
  *
  * Keyboard marines without a mouse aim where they walk; the game nudges
  * that aim onto the nearest bug so eight directions are enough.
@@ -23,12 +26,23 @@ export const SCHEME_HELP = {
   left: 'WASD move · Space fire · L-Shift hold aim · Q/E weapon',
   right: 'Arrows move · Enter or / fire · R-Shift hold aim · , weapon',
   pad: 'Gamepad: sticks move and aim · trigger fire · bumpers weapon',
+  touch: 'Left thumb moves · right thumb aims and fires · Swap changes weapon',
 };
 
-export function schemesFor(n) { return n === 1 ? ['solo'] : ['left', 'right', 'pad', 'pad'].slice(0, n); }
-export const padFor = (i, n) => (n <= 2 ? i : i >= 2 ? i - 2 : -1);
+// Phones and tablets: a coarse pointer and no fine one.
+export const TOUCH = typeof matchMedia === 'function'
+  && matchMedia('(any-pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 
-export function createInput(target) {
+// On a touch device the first marine is the screen and the rest are gamepads.
+export function schemesFor(n, touch = TOUCH) {
+  if (touch) return ['touch', 'pad', 'pad', 'pad'].slice(0, n);
+  return n === 1 ? ['solo'] : ['left', 'right', 'pad', 'pad'].slice(0, n);
+}
+export const padFor = (i, n, touch = TOUCH) => (touch ? i - 1 : n <= 2 ? i : i >= 2 ? i - 2 : -1);
+
+const STICK_R = 56; // px of thumb travel for full speed
+
+export function createInput(target, touchLayer) {
   const down = new Set();
   const mouse = { x: 0, y: 0, down: false, seen: false };
   let wheel = 0;
@@ -47,6 +61,60 @@ export function createInput(target) {
   addEventListener('mouseup', e => { if (e.button === 0) mouse.down = false; });
   target.addEventListener('wheel', e => { wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
   target.addEventListener('contextmenu', e => e.preventDefault());
+
+  // Touch: two floating sticks and a swap button.
+  const sticks = { L: null, R: null };
+  let swaps = 0;
+  if (touchLayer) {
+    const el = { L: touchLayer.querySelector('#stL'), R: touchLayer.querySelector('#stR') };
+    const draw = side => {
+      const s = sticks[side], e = el[side];
+      e.classList.toggle('on', !!s);
+      if (!s) { e.style.transform = ''; e.firstElementChild.style.transform = ''; return; }
+      e.style.transform = `translate(${s.ox}px, ${s.oy}px)`;
+      const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), k = d > STICK_R ? STICK_R / d : 1;
+      e.firstElementChild.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+    };
+    const start = e => {
+      for (const t of e.changedTouches) {
+        if (t.target.closest && t.target.closest('button')) continue;
+        const side = t.clientX < innerWidth / 2 ? 'L' : 'R';
+        if (sticks[side]) continue;
+        sticks[side] = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: t.clientX, y: t.clientY };
+        draw(side);
+      }
+      if (e.cancelable) e.preventDefault();
+    };
+    const move = e => {
+      for (const t of e.changedTouches) for (const side of ['L', 'R']) {
+        const s = sticks[side];
+        if (!s || s.id !== t.identifier) continue;
+        s.x = t.clientX; s.y = t.clientY;
+        // Drag past the rim and the stick follows the thumb.
+        const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
+        if (d > STICK_R * 1.6) { const k = (d - STICK_R * 1.6) / d; s.ox += dx * k; s.oy += dy * k; }
+        draw(side);
+      }
+      if (e.cancelable) e.preventDefault();
+    };
+    const stop = e => {
+      for (const t of e.changedTouches) for (const side of ['L', 'R']) {
+        if (sticks[side] && sticks[side].id === t.identifier) { sticks[side] = null; draw(side); }
+      }
+    };
+    touchLayer.addEventListener('touchstart', start, { passive: false });
+    touchLayer.addEventListener('touchmove', move, { passive: false });
+    touchLayer.addEventListener('touchend', stop);
+    touchLayer.addEventListener('touchcancel', stop);
+    const swap = touchLayer.querySelector('#tSwap');
+    swap.addEventListener('touchstart', e => { swaps++; e.preventDefault(); e.stopPropagation(); }, { passive: false });
+    swap.addEventListener('click', () => { swaps++; });
+  }
+  const stickVec = s => {
+    if (!s) return null;
+    const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
+    return { x: dx / Math.max(d, STICK_R), y: dy / Math.max(d, STICK_R), m: Math.min(1, d / STICK_R), a: Math.atan2(dy, dx) };
+  };
 
   const any = codes => codes.some(c => down.has(c));
   const dz = v => (Math.abs(v) < 0.2 ? 0 : v);
@@ -68,6 +136,12 @@ export function createInput(target) {
       if (S.digits) for (let d = 1; d <= 5; d++) if (down.has('Digit' + d)) btn.digit = d - 1;
       if (S.mouse && mouse.seen) out.aimAt = { x: mouse.x, y: mouse.y };
       if (S.mouse && wheel) { out.cycle = wheel > 0 ? 1 : -1; wheel = 0; }
+    }
+    if (scheme === 'touch') {
+      const l = stickVec(sticks.L), r = stickVec(sticks.R);
+      if (l && l.m > 0.15) { out.mx = l.x; out.my = l.y; }
+      if (r && r.m > 0.3) { out.stick = r.a; out.fire = true; }
+      if (swaps) { out.cycle = 1; swaps = 0; }
     }
     const pi = padFor(i, n);
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -91,5 +165,6 @@ export function createInput(target) {
   }
 
   const padCount = () => (navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean).length : 0);
-  return { read, padCount, mouse };
+  const clearTouch = () => { sticks.L = sticks.R = null; swaps = 0; };
+  return { read, padCount, mouse, clearTouch };
 }

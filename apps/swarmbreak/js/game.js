@@ -11,14 +11,28 @@ import { TICK, SNAP_HZ, LEVELS, WEAPONS, COLORS, ENEMIES, DEFAULTS, cleanConfig,
 import { newMatch, step, snapshot, decode, interpolate, serialize, restore, mapOf, addPlayer, removePlayer, movePredict, retryLevel, startLevel } from './sim.js';
 import { buildLevel, lineClear } from './map.js';
 import { createRenderer } from './render.js';
-import { createInput, schemesFor, SCHEME_HELP } from './input.js';
+import { createInput, schemesFor, SCHEME_HELP, TOUCH } from './input.js';
 import { bodies, pickHost, cleanName, list } from './lobby.js';
 import * as sfx from './audio.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('view');
 const R = createRenderer(canvas);
-const input = createInput(canvas);
+const input = createInput(canvas, $('touch'));
+document.body.classList.toggle('touch', TOUCH);
+if (TOUCH) {
+  $('lTitle').textContent = 'This device';
+  $('lSub').textContent = 'Twin thumbs on the screen. Plug in gamepads for more marines.';
+  $('oTwoWrap').hidden = true;
+}
+
+// Phones: go full screen and sideways if the browser allows it (Android
+// does; iPhone Safari ignores both, which is fine).
+function goFull() {
+  if (!TOUCH) return;
+  const el = document.documentElement;
+  try { const r = el.requestFullscreen && el.requestFullscreen({ navigationUI: 'hide' }); if (r && r.then) r.then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); } catch {}
+}
 
 let S = null; // the running session
 
@@ -26,6 +40,7 @@ let S = null; // the running session
 function show(id) {
   for (const s of ['menu', 'lobby', 'hud']) $(s).hidden = s !== id;
   $('over').hidden = true; $('pause').hidden = true;
+  $('touch').hidden = !(id === 'hud' && TOUCH);
   document.body.classList.toggle('playing', id === 'hud');
 }
 
@@ -41,8 +56,9 @@ function drawLocalNames() {
   $('lNames').innerHTML = schemes.map((sc, i) => `
     <div class="field seat"><label><i style="background:${COLORS[i]}"></i>Marine ${i + 1}<span class="how">${SCHEME_HELP[sc]}</span></label>
     <input data-i="${i}" maxlength="18" value="${escape(savedNames[i] || '')}" placeholder="Name"></div>`).join('');
-  const pads = input.padCount(), need = Math.max(0, localCount - 2);
-  $('lPads').textContent = need ? (pads >= need ? `${pads} gamepad${pads > 1 ? 's' : ''} ready.` : `Marines 3 and 4 need gamepads: plug one in and press a button (${pads} found).`) : '';
+  const pads = input.padCount(), need = Math.max(0, localCount - (TOUCH ? 1 : 2));
+  const who = TOUCH ? 'Marines 2 to 4' : 'Marines 3 and 4';
+  $('lPads').textContent = need ? (pads >= need ? `${pads} gamepad${pads > 1 ? 's' : ''} ready.` : `${who} need gamepads: plug one in and press a button (${pads} found).`) : '';
 }
 document.querySelectorAll('#lCount button').forEach(b => b.onclick = () => { localCount = Number(b.dataset.n); drawLocalNames(); });
 addEventListener('gamepadconnected', drawLocalNames);
@@ -52,7 +68,7 @@ function escape(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', 
 function rememberNames(names) { names.forEach((n, i) => { savedNames[i] = n; }); try { localStorage.setItem('swarm:names', JSON.stringify(savedNames)); } catch {} }
 
 $('lStart').onclick = () => {
-  sfx.unlock();
+  sfx.unlock(); goFull();
   const names = [...document.querySelectorAll('#lNames input')].map((el, i) => cleanName(el.value) || `Marine ${i + 1}`);
   rememberNames(names);
   const cfg = cleanConfig({ startLevel: Number($('lLevel').value), friendlyFire: $('lFF').checked, swarm: Number($('lSwarm').value) });
@@ -71,14 +87,14 @@ $('oTwo').onchange = () => { $('oName2Wrap').hidden = !$('oTwo').checked; };
 
 $('joinForm').onsubmit = async e => {
   e.preventDefault();
-  sfx.unlock();
+  sfx.unlock(); goFull();
   const err = $('joinErr'); err.textContent = '';
   const { passwordProblem, roomKey } = await import('./keys.js');
   const pw = $('oPw').value, problem = passwordProblem(pw);
   if (problem) { err.textContent = problem; return; }
   const names = [cleanName($('oName').value)];
   if (!names[0]) { err.textContent = 'Type a name your brothers will recognise.'; return; }
-  if ($('oTwo').checked) names.push(cleanName($('oName2').value) || `${names[0]} 2`);
+  if ($('oTwo').checked && !TOUCH) names.push(cleanName($('oName2').value) || `${names[0]} 2`);
   rememberNames(names);
   $('oJoin').disabled = true; $('oJoin').textContent = 'Joining...';
   try {
@@ -172,6 +188,7 @@ function begin(sess) {
 function end() {
   if (!S) return;
   cancelAnimationFrame(S.raf);
+  input.clearTouch();
   stopPump();
   for (const u of [S.unState, S.unInputs, S.unCmd]) u && u();
   S = null;
