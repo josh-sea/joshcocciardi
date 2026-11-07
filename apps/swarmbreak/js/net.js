@@ -10,16 +10,19 @@
  *
  * The room key comes from the password (keys.js). The rules refuse to list
  * rooms, so you can only reach one whose password you know. Sign-in is
- * anonymous and kept per tab.
+ * anonymous and kept per browser (local persistence), so closing the tab or
+ * coming back from another app rejoins as the same player instead of adding
+ * a ghost copy of you to the lobby. Two tabs in one browser are one player;
+ * use a private window to test with two.
  */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
-  initializeAuth, browserSessionPersistence, onAuthStateChanged, signInAnonymously, connectAuthEmulator,
+  initializeAuth, browserLocalPersistence, onAuthStateChanged, signInAnonymously, connectAuthEmulator,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   getDatabase, ref, onValue, set, update, push, remove, runTransaction, onDisconnect,
-  serverTimestamp, onChildAdded, get, connectDatabaseEmulator,
+  serverTimestamp, onChildAdded, get, connectDatabaseEmulator, goOffline, goOnline,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js';
 import { DEFAULTS } from './config.js';
 import { seat, pickHost, list } from './lobby.js';
@@ -35,13 +38,15 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig, 'swarmbreak');
-const auth = initializeAuth(app, { persistence: browserSessionPersistence });
+const auth = initializeAuth(app, { persistence: browserLocalPersistence });
 const db = getDatabase(app);
 
 // Local testing against the emulators: open on localhost with ?emu.
 if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('emu')) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectDatabaseEmulator(db, '127.0.0.1', 9000);
+  // Tests drop the connection to act out a phone switching apps.
+  window.__swarmNet = { offline: () => goOffline(db), online: () => goOnline(db) };
 }
 
 export function signIn() {
@@ -59,7 +64,7 @@ export function openRoom(key, uid) {
   const r = p => ref(db, `${base}/${p}`);
   const unsubs = [];
   const room = {
-    uid, key, players: {}, meta: null,
+    uid, key, players: {}, meta: null, connected: false,
 
     async join(names) {
       await runTransaction(r('meta'), cur => cur || { host: uid, phase: 'lobby', config: { ...DEFAULTS }, created: Date.now() });
@@ -71,10 +76,11 @@ export function openRoom(key, uid) {
         await Promise.all(['state', 'full', 'cmds', 'inputs'].map(p => remove(r(p))));
       }
       unsubs.push(onValue(ref(db, '.info/connected'), snap => {
+        room.connected = snap.val() === true;
         if (snap.val() !== true) return;
         onDisconnect(r(`players/${uid}`)).update({ online: false, leftAt: serverTimestamp() });
         onDisconnect(r(`inputs/${uid}`)).remove();
-        update(r(`players/${uid}`), { online: true, names });
+        update(r(`players/${uid}`), { online: true, names, leftAt: null });
       }));
     },
 
@@ -89,6 +95,8 @@ export function openRoom(key, uid) {
       await update(r('meta'), { phase: 'playing', config, startedAt: serverTimestamp(), seed: (Math.random() * 2 ** 31) | 0 });
     },
     toLobby() { return update(r('meta'), { phase: 'lobby' }); },
+    // Stepping out of a match to the lobby (or back in) while staying in the room.
+    setOut(out) { return update(r(`players/${uid}`), { out: out || null }); },
 
     claimHost() {
       return runTransaction(r('meta/host'), cur => (pickHost(room.players, cur) === uid && cur !== uid ? uid : undefined))
