@@ -20,6 +20,18 @@ here (name, decks, creatures, weapons, art and sound) is original.
 | Marine 2 (shared keyboard) | Arrows move, Enter or / fire, Right Shift or . holds aim, , weapon |
 | Marines 3 and 4 | Gamepads: left stick moves, right stick aims, trigger or A fires, bumpers or Y change weapon |
 
+**Phones and tablets.** Put your left thumb down anywhere on the left half
+of the screen and drag to move. Put your right thumb down on the right half
+and drag the way you want to shoot: you fire for as long as it's held, with
+the same aim nudge as the keyboard. **Swap** changes weapon and **Menu**
+pauses. Each stick appears wherever your thumb lands. Sideways is best (the
+game says so when you're upright); Android goes full screen and turns
+sideways on its own, iPhone Safari can't. A phone is one marine, plus any
+gamepads plugged into it. The online lobby comes first on phones, since
+that's how most people will use one. Touch devices are spotted by having a
+coarse pointer and no fine one (`TOUCH` in `js/input.js`), so a laptop with a
+touchscreen keeps the keyboard controls.
+
 Marines 1 and 2 also pick up gamepads 1 and 2 if they're plugged in.
 Keyboard marines aim where they walk, and the game nudges that aim onto the
 nearest bug in front of them, so eight directions are enough. Some cheaper
@@ -102,7 +114,7 @@ the header of `js/net.js` for the shape of each node.
 | `js/lobby.js` | Seats counted in marines, host hand-over |
 | `js/keys.js` | Password to room key |
 | `js/net.js` | Firebase: sign-in, presence, inputs, state |
-| `js/input.js` | Keyboard halves, mouse and gamepads |
+| `js/input.js` | Keyboard halves, mouse, gamepads and touch sticks |
 | `js/render.js` | Canvas drawing, darkness and torch light, particles, decals |
 | `js/audio.js` | Sound effects synthesised with Web Audio |
 | `js/game.js` | Screens, the loop, host and client jobs, HUD |
