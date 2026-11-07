@@ -11,7 +11,7 @@ import { TICK, SNAP_HZ, LEVELS, WEAPONS, COLORS, ENEMIES, DEFAULTS, cleanConfig,
 import { newMatch, step, snapshot, decode, interpolate, serialize, restore, mapOf, addPlayer, removePlayer, movePredict, retryLevel, startLevel } from './sim.js';
 import { buildLevel, lineClear } from './map.js';
 import { createRenderer } from './render.js';
-import { createInput, schemesFor, SCHEME_HELP, TOUCH } from './input.js';
+import { createInput, schemesFor, SCHEME_HELP, TOUCH, setTouch } from './input.js';
 import { bodies, inMatch, pickHost, cleanName, list, STALE_MS } from './lobby.js';
 import * as sfx from './audio.js';
 
@@ -19,11 +19,39 @@ const $ = id => document.getElementById(id);
 const canvas = $('view');
 const R = createRenderer(canvas);
 const input = createInput(canvas, $('touch'));
-document.body.classList.toggle('touch', TOUCH);
-if (TOUCH) {
+function touchUI() {
+  document.body.classList.toggle('touch', TOUCH);
+  if (!TOUCH) return;
   $('lTitle').textContent = 'This device';
   $('lSub').textContent = 'Twin thumbs on the screen. Plug in gamepads for more marines.';
-  $('oTwoWrap').hidden = true;
+  $('oTwoWrap').hidden = true; $('oTwo').checked = false; $('oName2Wrap').hidden = true;
+}
+touchUI();
+
+// The browser said "not a touch device" but someone just touched the screen:
+// believe the finger. Switches the menu and, mid-match, the first marine.
+addEventListener('touchstart', e => {
+  if (TOUCH) return;
+  setTouch(true);
+  // In a match: switch now, and let this very touch start a stick.
+  if (S && !$('hud').hidden) { switchToTouch(); input.feedTouch(e); return; }
+  // On a menu: wait until this tap has landed, or the layout change would
+  // move the button out from under the finger.
+  setTimeout(switchToTouch, 400);
+}, { passive: true, capture: true });
+
+function switchToTouch() {
+  touchUI();
+  localCount = 1; drawLocalNames();
+  if (!S) return;
+  const pads = input.padCount();
+  S.seats.forEach((seat, i) => { seat.scheme = i === 0 ? 'touch' : 'pad'; });
+  if (S.mode === 'local') {
+    // Marines nobody can steer any more leave the match.
+    for (const seat of S.seats.slice(1 + pads)) removePlayer(S.sim, seat.pid);
+    S.seats = S.seats.slice(0, 1 + pads);
+  }
+  if (!$('hud').hidden) $('touch').hidden = false;
 }
 
 // Phones: go full screen and sideways if the browser allows it (Android
@@ -49,7 +77,7 @@ const levelOptions = sel => { sel.innerHTML = LEVELS.map((L, i) => `<option valu
 levelOptions($('lLevel')); levelOptions($('oLevel'));
 
 // Local setup: how many marines on this computer, and their names.
-let localCount = 2;
+let localCount = TOUCH ? 1 : 2;
 const savedNames = (() => { try { return JSON.parse(localStorage.getItem('swarm:names') || '[]'); } catch { return []; } })();
 function drawLocalNames() {
   document.querySelectorAll('#lCount button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === localCount));

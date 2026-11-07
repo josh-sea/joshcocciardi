@@ -28,9 +28,11 @@ pauses. Each stick appears wherever your thumb lands. Sideways is best (the
 game says so when you're upright); Android goes full screen and turns
 sideways on its own, iPhone Safari can't. A phone is one marine, plus any
 gamepads plugged into it. The online lobby comes first on phones, since
-that's how most people will use one. Touch devices are spotted by having a
-coarse pointer and no fine one (`TOUCH` in `js/input.js`), so a laptop with a
-touchscreen keeps the keyboard controls.
+that's how most people will use one. Touch devices are spotted by their main pointer being a finger (`TOUCH` in
+`js/input.js`), so a laptop with a touchscreen keeps the keyboard controls.
+Some Android phones (Samsungs especially) describe themselves as having a
+mouse or stylus too, so whatever the browser claims, the first real touch
+switches the game to touch controls, on the menu or mid-match.
 
 Marines 1 and 2 also pick up gamepads 1 and 2 if they're plugged in.
 Keyboard marines aim where they walk, and the game nudges that aim onto the

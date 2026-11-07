@@ -29,9 +29,15 @@ export const SCHEME_HELP = {
   touch: 'Left thumb moves · right thumb aims and fires · Swap changes weapon',
 };
 
-// Phones and tablets: a coarse pointer and no fine one.
-export const TOUCH = typeof matchMedia === 'function'
-  && matchMedia('(any-pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+// Phones and tablets: the main pointer is a finger. (Not "no fine pointer
+// at all": many Android phones, Samsungs especially, also report a fine one
+// for a stylus or mouse.) A laptop with a touchscreen has a fine main
+// pointer and keeps the keyboard. If this guesses wrong, the first real
+// touch switches it on anyway (see setTouch and game.js).
+const mq = q => typeof matchMedia === 'function' && matchMedia(q).matches;
+export let TOUCH = mq('(pointer: coarse)')
+  || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 && mq('(hover: none)'));
+export function setTouch(on) { TOUCH = !!on; }
 
 // On a touch device the first marine is the screen and the rest are gamepads.
 export function schemesFor(n, touch = TOUCH) {
@@ -64,6 +70,7 @@ export function createInput(target, touchLayer) {
 
   // Touch: two floating sticks and a swap button.
   const sticks = { L: null, R: null };
+  let feed = () => {};
   let swaps = 0;
   if (touchLayer) {
     const el = { L: touchLayer.querySelector('#stL'), R: touchLayer.querySelector('#stR') };
@@ -77,7 +84,7 @@ export function createInput(target, touchLayer) {
     };
     const start = e => {
       for (const t of e.changedTouches) {
-        if (t.target.closest && t.target.closest('button')) continue;
+        if (t.target.closest && t.target.closest('button, .modal')) continue;
         const side = t.clientX < innerWidth / 2 ? 'L' : 'R';
         if (sticks[side]) continue;
         sticks[side] = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: t.clientX, y: t.clientY };
@@ -103,9 +110,13 @@ export function createInput(target, touchLayer) {
       }
     };
     touchLayer.addEventListener('touchstart', start, { passive: false });
-    touchLayer.addEventListener('touchmove', move, { passive: false });
-    touchLayer.addEventListener('touchend', stop);
-    touchLayer.addEventListener('touchcancel', stop);
+    // A touch keeps reporting to whatever it first landed on, which isn't
+    // always this layer (see feedTouch), so follow moves at the window.
+    addEventListener('touchmove', e => { if (sticks.L || sticks.R) move(e); }, { passive: false });
+    addEventListener('touchend', stop);
+    addEventListener('touchcancel', stop);
+    // Start sticks from a touch that landed before the layer was showing.
+    feed = e => { if (!(e.target.closest && e.target.closest('button, .modal, header'))) start(e); };
     const swap = touchLayer.querySelector('#tSwap');
     swap.addEventListener('touchstart', e => { swaps++; e.preventDefault(); e.stopPropagation(); }, { passive: false });
     swap.addEventListener('click', () => { swaps++; });
@@ -166,5 +177,5 @@ export function createInput(target, touchLayer) {
 
   const padCount = () => (navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean).length : 0);
   const clearTouch = () => { sticks.L = sticks.R = null; swaps = 0; };
-  return { read, padCount, mouse, clearTouch };
+  return { read, padCount, mouse, clearTouch, feedTouch: e => feed(e) };
 }
