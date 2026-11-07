@@ -96,6 +96,19 @@ export function addPlayer(s, pid, name) {
   if (Object.keys(s.players).length >= MAX_BODIES) return null;
   const used = new Set(Object.values(s.players).map(p => p.c));
   let c = 0; while (used.has(c)) c++;
+  // Someone coming back (their phone switched apps, they stepped out to the
+  // lobby) gets their own marine back: guns, ammo, score.
+  const back = s.bench && s.bench[pid];
+  if (back) {
+    delete s.bench[pid];
+    const p = { ...back, name: String(name || back.name).slice(0, 18), c: used.has(back.c) ? c : back.c };
+    s.players[pid] = p;
+    const mate = Object.values(s.players).find(q => q !== p && q.alive);
+    if (!p.alive && p.respawnT <= 0 && s.lives > 0) { s.lives--; p.respawnT = RESPAWN_S; }
+    if (p.alive) { if (mate) dropNear(s, p, mate); else placeAtSpawn(s, p, 0); p.inv = 1.5; }
+    ev(s, 'join', pid);
+    return p;
+  }
   const p = freshMarine(pid, String(name || 'Marine').slice(0, 18), c);
   s.players[pid] = p;
   placeAtSpawn(s, p, Object.keys(s.players).length - 1);
@@ -114,7 +127,12 @@ function dropNear(s, p, mate) {
   }
 }
 
-export function removePlayer(s, pid) { delete s.players[pid]; }
+export function removePlayer(s, pid) {
+  if (!s.players[pid]) return;
+  s.bench = s.bench || {};
+  s.bench[pid] = s.players[pid];
+  delete s.players[pid];
+}
 
 /* One step. `inputs[pid]` = { mx, my, a, fire, w, px, py }:
  *   mx, my  movement, each -1..1
@@ -161,12 +179,16 @@ function stepPlayer(s, m, p, inp, dt) {
   p.inv = Math.max(0, p.inv - dt);
   if (Number.isFinite(inp.a)) p.a = inp.a;
   if (Number.isFinite(inp.px) && Number.isFinite(inp.py)) {
-    // Trust the player's own screen, within reason.
-    const d = Math.hypot(inp.px - p.x, inp.py - p.y);
-    if (d <= PLAYER_SPEED * 0.6 + 24 && !blocked(m, inp.px, inp.py, PLAYER_R - 1)) { p.x = inp.px; p.y = inp.py; }
-    else if (d > PLAYER_SPEED * 0.6 + 24) {
-      const k = (PLAYER_SPEED * dt * 1.5) / d;
-      const q = slide(m, p.x, p.y, (inp.px - p.x) * k, (inp.py - p.y) * k, PLAYER_R);
+    // A remote marine goes where its own screen says, but the host glides
+    // it there rather than jumping: positions arrive over the internet in
+    // uneven bunches, and snapping to each one makes teammates stutter.
+    const dx = inp.px - p.x, dy = inp.py - p.y, d = Math.hypot(dx, dy);
+    if (d > REMOTE_SNAP) {
+      // A respawn on their screen, or a long hitch: jump, if it's legal.
+      if (!blocked(m, inp.px, inp.py, PLAYER_R - 1)) { p.x = inp.px; p.y = inp.py; }
+    } else if (d > 0.5) {
+      const len = Math.min(d, PLAYER_SPEED * 1.3 * dt + d * 0.12);
+      const q = slide(m, p.x, p.y, dx / d * len, dy / d * len, PLAYER_R);
       p.x = q.x; p.y = q.y;
     }
   } else {
@@ -180,6 +202,8 @@ function stepPlayer(s, m, p, inp, dt) {
   p.cd -= dt;
   if (inp.fire && p.cd <= 0) fire(s, m, p);
 }
+
+export const REMOTE_SNAP = 160;
 
 export function moveVec(mx = 0, my = 0) {
   const x = Math.max(-1, Math.min(1, Number(mx) || 0)), y = Math.max(-1, Math.min(1, Number(my) || 0));
@@ -493,7 +517,7 @@ export function retryLevel(s) {
 const r1 = n => Math.round(n * 10) / 10;
 export function snapshot(s, events = s.ev) {
   return {
-    t: r1(s.t), lv: s.level, sd: s.seed, ph: s.phase, pt: r1(s.phaseT), li: s.lives, xo: s.exitOpen ? 1 : 0, kl: s.kills,
+    t: Math.round(s.t * 1000) / 1000, lv: s.level, sd: s.seed, ph: s.phase, pt: r1(s.phaseT), li: s.lives, xo: s.exitOpen ? 1 : 0, kl: s.kills,
     p: Object.fromEntries(Object.values(s.players).map(p => [p.pid,
       [Math.round(p.x), Math.round(p.y), Math.round(p.a * 100) / 100, Math.max(0, Math.round(p.hp)), p.alive ? 1 : 0, p.w, p.ammo[p.w], p.score, p.kills, r1(Math.max(0, p.respawnT)), p.c, p.name, p.ammo.map(a => (a === 0 ? 0 : 1)).join('')]])),
     f: s.foes.map(f => [f.id, FOE_TYPES.indexOf(f.type), Math.round(f.x), Math.round(f.y), Math.round(Math.max(0, f.hp) / f.max * 100), Math.round(f.a * 100) / 100, f.awake ? 1 : 0]),
@@ -540,7 +564,8 @@ export function serialize(s) { const { ev: _e, ...rest } = s; return JSON.parse(
 export function restore(d) {
   const s = { ...d, ev: [] };
   s.players = s.players || {};
-  for (const p of Object.values(s.players)) {
+  s.bench = s.bench || {};
+  for (const p of [...Object.values(s.players), ...Object.values(s.bench)]) {
     const ammo = WEAPONS.map((w, i) => (i === 0 ? -1 : 0));
     if (p.ammo) Object.entries(p.ammo).forEach(([i, v]) => { ammo[i] = v; });
     p.ammo = ammo;

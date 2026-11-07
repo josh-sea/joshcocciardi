@@ -11,19 +11,47 @@ import { TICK, SNAP_HZ, LEVELS, WEAPONS, COLORS, ENEMIES, DEFAULTS, cleanConfig,
 import { newMatch, step, snapshot, decode, interpolate, serialize, restore, mapOf, addPlayer, removePlayer, movePredict, retryLevel, startLevel } from './sim.js';
 import { buildLevel, lineClear } from './map.js';
 import { createRenderer } from './render.js';
-import { createInput, schemesFor, SCHEME_HELP, TOUCH } from './input.js';
-import { bodies, pickHost, cleanName, list } from './lobby.js';
+import { createInput, schemesFor, SCHEME_HELP, TOUCH, setTouch } from './input.js';
+import { bodies, inMatch, pickHost, cleanName, list, STALE_MS } from './lobby.js';
 import * as sfx from './audio.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('view');
 const R = createRenderer(canvas);
 const input = createInput(canvas, $('touch'));
-document.body.classList.toggle('touch', TOUCH);
-if (TOUCH) {
+function touchUI() {
+  document.body.classList.toggle('touch', TOUCH);
+  if (!TOUCH) return;
   $('lTitle').textContent = 'This device';
   $('lSub').textContent = 'Twin thumbs on the screen. Plug in gamepads for more marines.';
-  $('oTwoWrap').hidden = true;
+  $('oTwoWrap').hidden = true; $('oTwo').checked = false; $('oName2Wrap').hidden = true;
+}
+touchUI();
+
+// The browser said "not a touch device" but someone just touched the screen:
+// believe the finger. Switches the menu and, mid-match, the first marine.
+addEventListener('touchstart', e => {
+  if (TOUCH) return;
+  setTouch(true);
+  // In a match: switch now, and let this very touch start a stick.
+  if (S && !$('hud').hidden) { switchToTouch(); input.feedTouch(e); return; }
+  // On a menu: wait until this tap has landed, or the layout change would
+  // move the button out from under the finger.
+  setTimeout(switchToTouch, 400);
+}, { passive: true, capture: true });
+
+function switchToTouch() {
+  touchUI();
+  localCount = 1; drawLocalNames();
+  if (!S) return;
+  const pads = input.padCount();
+  S.seats.forEach((seat, i) => { seat.scheme = i === 0 ? 'touch' : 'pad'; });
+  if (S.mode === 'local') {
+    // Marines nobody can steer any more leave the match.
+    for (const seat of S.seats.slice(1 + pads)) removePlayer(S.sim, seat.pid);
+    S.seats = S.seats.slice(0, 1 + pads);
+  }
+  if (!$('hud').hidden) $('touch').hidden = false;
 }
 
 // Phones: go full screen and sideways if the browser allows it (Android
@@ -35,6 +63,7 @@ function goFull() {
 }
 
 let S = null; // the running session
+const PLAY_DELAY = 140; // ms clients draw behind the host
 
 // ---------------------------------------------------------------- screens
 function show(id) {
@@ -48,7 +77,7 @@ const levelOptions = sel => { sel.innerHTML = LEVELS.map((L, i) => `<option valu
 levelOptions($('lLevel')); levelOptions($('oLevel'));
 
 // Local setup: how many marines on this computer, and their names.
-let localCount = 2;
+let localCount = TOUCH ? 1 : 2;
 const savedNames = (() => { try { return JSON.parse(localStorage.getItem('swarm:names') || '[]'); } catch { return []; } })();
 function drawLocalNames() {
   document.querySelectorAll('#lCount button').forEach(b => b.classList.toggle('on', Number(b.dataset.n) === localCount));
@@ -114,7 +143,7 @@ function enterLobby(room, uid, names, pw) {
   L = { room, uid, names, pw, joinedMatch: false };
   show('lobby');
   room.watch({
-    onMeta: m => { if (!m) return; drawLobby(); syncPhase(m); },
+    onMeta: m => { if (!m) return; drawLobby(); syncPhase(m); hostCheck(); },
     onPlayers: () => { drawLobby(); if (S && S.room) hostCheck(); },
   });
 }
@@ -123,7 +152,10 @@ function drawLobby() {
   if (!L) return;
   const { room, uid } = L, meta = room.meta || {}, isHost = meta.host === uid;
   const cfg = cleanConfig(meta.config || DEFAULTS);
-  const bs = bodies(room.players);
+  // Away players linger a few minutes so a dropped brother can come back to
+  // his seat; after that they're gone from the list.
+  const now = Date.now();
+  const bs = bodies(room.players).filter(b => b.online || now - ((room.players[b.uid] || {}).leftAt || now) < STALE_MS);
   $('roster').innerHTML = bs.map((b, i) => `<li class="${b.online ? '' : 'off'}"><i style="background:${COLORS[i]}"></i>${escape(b.name)}${b.uid === meta.host ? '<span class="tag">Host</span>' : ''}${b.uid === uid ? '<span class="tag you">You</span>' : ''}${b.online ? '' : '<span class="tag">Away</span>'}</li>`).join('')
     + Array.from({ length: Math.max(0, MAX_BODIES - bs.length) }, () => '<li class="empty">Open seat</li>').join('');
   for (const [id, v] of [['oLevel', cfg.startLevel], ['oSwarm', cfg.swarm]]) { if (document.activeElement !== $(id)) $(id).value = String(v); $(id).disabled = !isHost; }
@@ -162,6 +194,7 @@ async function startOnline(meta) {
   const schemes = schemesFor(names.length);
   const seats = names.map((name, i) => ({ pid: `${uid}_${i}`, name, scheme: schemes[i] }));
   const sess = { mode: meta.host === uid ? 'host' : 'client', seats, room, uid };
+  room.setOut(false);
   if (sess.mode === 'host') {
     const full = await room.loadFull().catch(() => null);
     sess.sim = full && full.seed === meta.seed ? restore(full) : newMatch({ seed: meta.seed || 1, cfg: meta.config });
@@ -202,6 +235,16 @@ function becomeHost() {
   hostCheck();
 }
 
+function becomeClient() {
+  S.mode = 'client';
+  S.sim = null;
+  for (const u of [S.unInputs, S.unCmd]) u && u();
+  S.unInputs = S.unCmd = null;
+  S.snaps = []; S.off = null; S.lastSnapT = -1;
+  S.unState = S.room.onState(onSnapshot);
+  banner('Reconnected', 'A teammate is running the match now.');
+}
+
 function command(c) {
   if (!S || !S.sim) return;
   if (c.do === 'retry' && S.sim.phase === 'lost') retryLevel(S.sim);
@@ -213,6 +256,10 @@ function command(c) {
 async function hostCheck() {
   if (!S || !S.room || !L) return;
   const meta = L.room.meta || {};
+  // Someone else took over while this browser was away (a phone that
+  // switched apps, a sleeping laptop): stop running the match, or two hosts
+  // fight over it and everyone's teammates jump around.
+  if (S.mode === 'host' && meta.host && meta.host !== S.uid) { becomeClient(); return; }
   if (S.mode === 'client' && pickHost(L.room.players, meta.host) === S.uid && meta.host !== S.uid) {
     if (await L.room.claimHost()) {
       const full = await L.room.loadFull();
@@ -223,7 +270,7 @@ async function hostCheck() {
     return;
   }
   if (S.mode !== 'host') return;
-  const want = bodies(L.room.players).filter(b => b.online);
+  const want = inMatch(L.room.players);
   const ids = new Set(want.map(b => b.pid));
   for (const pid of Object.keys(S.sim.players)) if (!ids.has(pid)) removePlayer(S.sim, pid);
   for (const b of want) addPlayer(S.sim, b.pid, b.name);
@@ -233,9 +280,18 @@ function onSnapshot(raw) {
   if (!S) return;
   const d = decode(raw);
   if (d.t === S.lastSnapT) return;
+  // The match clock went backwards: a new host took over from its last save.
+  if (d.t < S.lastSnapT - 0.5) { S.snaps = []; S.off = null; }
   S.lastSnapT = d.t;
-  S.snaps.push({ at: performance.now(), d });
-  if (S.snaps.length > 6) S.snaps.shift();
+  const at = performance.now();
+  // Map the host's match clock onto ours. Packets arrive late by varying
+  // amounts, so track the quickest one (fast down, slow drift up) and play
+  // a fixed delay behind it: timing by arrival instead turns every late
+  // packet into a stall and every bunch into a jump.
+  const o = at - d.t * 1000;
+  S.off = S.off == null || o < S.off ? o : S.off + (o - S.off) * 0.03;
+  S.snaps.push({ at, d });
+  if (S.snaps.length > 12) S.snaps.shift();
   S.pendingEvents = (S.pendingEvents || []).concat(d.events);
 }
 
@@ -275,7 +331,11 @@ function tick(now, hidden) {
       }
     }
     S.view = decode(snapshot(S.sim, []));
-    if (S.mode === 'host') {
+    if (S.mode === 'host' && (!S.room.connected || (S.room.meta && S.room.meta.host !== S.uid))) {
+      // Offline, or no longer the host: don't queue writes that would land
+      // on top of whoever is running the match now.
+      S.netEvents = [];
+    } else if (S.mode === 'host') {
       S.netEvents.push(...events);
       if (now - S.wrote > 1000 / SNAP_HZ) {
         S.wrote = now;
@@ -285,13 +345,15 @@ function tick(now, hidden) {
       if (now - S.fulled > 2000) { S.fulled = now; S.room.writeFull(serialize(S.sim)); }
     }
   } else {
-    // Client: draw ~120 ms behind the newest snapshot, blended.
+    // Client: draw a little behind the host's clock, blended between the two
+    // snapshots either side.
     const sn = S.snaps;
     if (!sn.length) return;
-    const rt = now - 120;
-    let a = sn[0], b = sn[sn.length - 1];
-    for (let i = 0; i < sn.length - 1; i++) if (sn[i].at <= rt && sn[i + 1].at >= rt) { a = sn[i]; b = sn[i + 1]; break; }
-    const k = b.at === a.at ? 1 : Math.max(0, Math.min(1, (rt - a.at) / (b.at - a.at)));
+    const rt = (now - S.off - PLAY_DELAY) / 1000;
+    let a = sn[0], b = sn[0];
+    if (rt >= sn[sn.length - 1].d.t) { a = b = sn[sn.length - 1]; }
+    else for (let i = 0; i < sn.length - 1; i++) if (sn[i].d.t <= rt && sn[i + 1].d.t >= rt) { a = sn[i]; b = sn[i + 1]; break; }
+    const k = b.d.t === a.d.t ? 1 : Math.max(0, Math.min(1, (rt - a.d.t) / (b.d.t - a.d.t)));
     S.view = interpolate(a.d, b.d, k);
     // Shots fly on from the newest snapshot.
     const age = (now - sn[sn.length - 1].at) / 1000;
@@ -453,6 +515,9 @@ $('pLeave').onclick = quit;
 
 function quit() {
   if (S && S.room) {
+    // Step out: the host benches your marine (keeping its guns and score)
+    // until you rejoin, so it isn't left standing there eating respawns.
+    if (S.mode !== 'host') L.room.setOut(true);
     // Host ending the match sends everyone back to the lobby; anyone else
     // just steps out to the lobby screen.
     if (S.mode === 'host') L.room.toLobby();

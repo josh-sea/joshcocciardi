@@ -28,9 +28,11 @@ pauses. Each stick appears wherever your thumb lands. Sideways is best (the
 game says so when you're upright); Android goes full screen and turns
 sideways on its own, iPhone Safari can't. A phone is one marine, plus any
 gamepads plugged into it. The online lobby comes first on phones, since
-that's how most people will use one. Touch devices are spotted by having a
-coarse pointer and no fine one (`TOUCH` in `js/input.js`), so a laptop with a
-touchscreen keeps the keyboard controls.
+that's how most people will use one. Touch devices are spotted by their main pointer being a finger (`TOUCH` in
+`js/input.js`), so a laptop with a touchscreen keeps the keyboard controls.
+Some Android phones (Samsungs especially) describe themselves as having a
+mouse or stylus too, so whatever the browser claims, the first real touch
+switches the game to touch controls, on the menu or mid-match.
 
 Marines 1 and 2 also pick up gamepads 1 and 2 if they're plugged in.
 Keyboard marines aim where they walk, and the game nudges that aim onto the
@@ -94,11 +96,27 @@ Same approach as Tophat & Spears (Firebase, no new servers or bills):
   second. Everyone else draws those snapshots about 120 ms in the past,
   blended, with shots flying on from the newest one.
 - **Your own marine moves on your own screen** and tells the host where it is.
-  The host accepts it if it's plausible (not in a wall, not too far).
+  Those positions arrive over the internet in uneven bunches, so the host
+  glides a remote marine toward the latest one (a little faster than walking)
+  instead of snapping to each, and only jumps for something respawn-sized.
+- **Clients play the host's clock**, about 140 ms behind it. Each snapshot
+  carries the match time; clients map it onto their own clock using the
+  quickest-arriving snapshot, so a late packet doesn't stall the picture and
+  a bunch of them doesn't make it jump.
+- **One player per browser.** Sign-in is kept per browser, so reopening the
+  link (say, from a text message, which opens a new tab) or reloading rejoins
+  as the same player instead of adding a ghost copy to the lobby. Away
+  players drop off the list after five minutes.
+- **Stepping away keeps your marine.** If your phone switches apps or you go
+  back to the lobby, the host sets your marine aside with its guns, ammo and
+  score, and puts it back beside the squad when you return.
 - **Host hand-over.** The host saves the whole match every 2 s. If its tab
   goes, the longest-standing browser takes over from that save.
 - **Hidden host tab.** A worker timer keeps the match ticking if the host
-  switches tabs.
+  switches tabs. A phone that switches apps is frozen instead, so after a few
+  seconds another browser takes over. When the old host comes back it sees
+  that and quietly becomes a client, and it never sends snapshots while
+  offline (they would land on top of the new host's).
 
 Room data lives at `swarm/rooms/{key}`, where `key` is PBKDF2 of the password
 (`js/keys.js`). The rules in `database.rules.json` refuse to list rooms. See
@@ -136,7 +154,8 @@ To play a real multi-browser match locally against the Firebase emulators:
 ```sh
 npx firebase-tools@13 emulators:start --only database,auth --project josh-cocciardi
 cd apps/swarmbreak && python3 -m http.server 8765
-# open http://localhost:8765/?emu in a few tabs
+# open http://localhost:8765/?emu in a few browsers (tabs in one browser
+# are one player now: use private windows or different browsers)
 ```
 
 ## Ideas not built yet

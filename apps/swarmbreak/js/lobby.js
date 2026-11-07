@@ -14,13 +14,18 @@ export const namesOf = p => (Array.isArray(p && p.names) ? p.names : Object.valu
 // Every marine in the room: [{ pid, uid, name }], oldest browser first.
 export function bodies(players) {
   const out = [];
-  for (const p of list(players)) namesOf(p).forEach((name, i) => out.push({ pid: `${p.uid}_${i}`, uid: p.uid, name, online: p.online !== false }));
+  for (const p of list(players)) namesOf(p).forEach((name, i) => out.push({ pid: `${p.uid}_${i}`, uid: p.uid, name, online: p.online !== false, out: !!p.out }));
   return out;
 }
 
 // Seats a newcomer (or a returning browser with a new head count) can take.
 // Offline browsers' seats are freed if that's what it takes to fit.
-export function seat(players, uid, names, now = Date.now(), staleMs = 10 * 60 * 1000) {
+export const STALE_MS = 5 * 60 * 1000;
+
+// The marines that should be in the match right now.
+export const inMatch = players => bodies(players).filter(b => b.online && !b.out);
+
+export function seat(players, uid, names, now = Date.now(), staleMs = STALE_MS) {
   const next = JSON.parse(JSON.stringify(players || {}));
   for (const [id, p] of Object.entries(next)) if (id !== uid && !p.online && p.leftAt != null && now - p.leftAt > staleMs) delete next[id];
   const others = () => list(next).filter(p => p.uid !== uid).reduce((n, p) => n + namesOf(p).length, 0);
@@ -31,6 +36,7 @@ export function seat(players, uid, names, now = Date.now(), staleMs = 10 * 60 * 
   }
   next[uid] = { ...(next[uid] || {}), names, joined: (next[uid] && next[uid].joined) || now, online: true };
   delete next[uid].leftAt;
+  delete next[uid].out;
   return next;
 }
 

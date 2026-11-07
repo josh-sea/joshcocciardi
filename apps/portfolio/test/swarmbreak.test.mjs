@@ -10,9 +10,9 @@
 import { LEVELS, TILE, WEAPONS, MAX_BODIES, TEAM_LIVES, cleanConfig, DEFAULTS } from '../../swarmbreak/js/config.js';
 import { buildLevel, flood, blocked } from '../../swarmbreak/js/map.js';
 import {
-  newMatch, step, addPlayer, removePlayer, snapshot, decode, interpolate, serialize, restore, mapOf, nestsLeft, retryLevel, onExit, startLevel,
+  newMatch, step, addPlayer, REMOTE_SNAP, removePlayer, snapshot, decode, interpolate, serialize, restore, mapOf, nestsLeft, retryLevel, onExit, startLevel,
 } from '../../swarmbreak/js/sim.js';
-import { bodies, seat, pickHost, cleanName } from '../../swarmbreak/js/lobby.js';
+import { bodies, seat, pickHost, cleanName, inMatch } from '../../swarmbreak/js/lobby.js';
 
 let failures = 0;
 const ok = (name, cond, extra = '') => {
@@ -208,6 +208,40 @@ console.log('\njoining mid-match');
   ok('leaving removes the marine', !s.players.b_0);
 }
 
+console.log('\ndropping out and coming back');
+{
+  const s = newMatch({ seed: 4, players: [{ pid: 'a_0', name: 'A' }, { pid: 'b_0', name: 'B' }] });
+  const b = s.players.b_0;
+  b.ammo[3] = 7; b.w = 3; b.score = 420; b.kills = 9;
+  removePlayer(s, 'b_0');
+  ok('a marine whose phone drops leaves the match', !s.players.b_0);
+  const saved = restore(JSON.parse(JSON.stringify(serialize(s))));
+  addPlayer(saved, 'b_0', 'B');
+  const back = saved.players.b_0;
+  ok('and comes back with its guns and score, even across a host hand-over', back && back.ammo[3] === 7 && back.score === 420 && back.kills === 9);
+  ok('beside the squad', Math.hypot(back.x - saved.players.a_0.x, back.y - saved.players.a_0.y) < 40);
+}
+
+console.log('\nremote marines on the host');
+{
+  // Positions arrive in bunches: nothing for a while, then a jump. The host
+  // should glide, never teleport, for anything short of a respawn.
+  const s = newMatch({ seed: 5, players: [{ pid: 'a_0', name: 'A' }] });
+  s.foes = [];
+  const p = s.players.a_0, m = mapOf(s);
+  const dir = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !blocked(m, p.x + dx * 80, p.y + dy * 80, 12));
+  const target = { px: p.x + dir[0] * 80, py: p.y + dir[1] * 80 };
+  let worst = 0, prev = { x: p.x, y: p.y };
+  for (let i = 0; i < 30; i++) {
+    step(s, { a_0: target }, DT);
+    worst = Math.max(worst, Math.hypot(p.x - prev.x, p.y - prev.y)); prev = { x: p.x, y: p.y };
+  }
+  ok('an 80 px jump in reported position is glided over several steps', worst < 20, `largest step ${worst.toFixed(1)} px`);
+  ok('and gets there', Math.hypot(p.x - target.px, p.y - target.py) < 2);
+  const far = { px: p.x - dir[0] * (REMOTE_SNAP + 40), py: p.y - dir[1] * (REMOTE_SNAP + 40) };
+  if (!blocked(m, far.px, far.py, 12)) { step(s, { a_0: far }, DT); ok('a respawn-sized jump snaps', Math.hypot(p.x - far.px, p.y - far.py) < 1); }
+}
+
 console.log('\nlobby');
 {
   let players = seat({}, 'u1', ['Josh', 'Dan'], 1000);
@@ -223,6 +257,10 @@ console.log('\nlobby');
   const room = { u1: { names: ['A'], joined: 1, online: false }, u2: { names: ['B'], joined: 2, online: true }, u3: { names: ['C'], joined: 3, online: true } };
   ok('host passes to the longest-standing online browser', pickHost(room, 'u1') === 'u2');
   ok('an online host keeps it', pickHost(room, 'u3') === 'u3');
+  const r2 = { u1: { names: ['A'], online: true, joined: 1 }, u2: { names: ['B'], online: true, out: true, joined: 2 }, u3: { names: ['C'], online: false, joined: 3 } };
+  ok('only online marines who have not stepped out are in the match', inMatch(r2).map(b => b.uid).join() === 'u1');
+  ok('rejoining clears stepping out', !seat(r2, 'u2', ['B'], 5).u2.out);
+  ok('rejoining from the same browser keeps one seat', bodies(seat(seat({}, 'u1', ['Dan'], 1), 'u1', ['Dan'], 2)).length === 1);
   ok('names are cleaned', cleanName('  <Cam>\n   the   Great  ') === 'Cam the Great' && cleanName('x'.repeat(40)).length === 18);
 }
 
