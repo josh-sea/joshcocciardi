@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Casino</title>
+<meta name="description" content="Blackjack to practise and to play with friends: pick your bankroll, turn on hints, and pull out the odds as you play. Strategy and card counting drills too.">
+<meta name="theme-color" content="#0b3d2a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/casino.css">
+</head>
+<body data-screen="home">
+<main id="app">
+
+  <section id="home" class="screen">
+    <div class="brand">
+      <div class="suits" aria-hidden="true"><span>♠</span><span class="red">♥</span><span>♣</span><span class="red">♦</span></div>
+      <h1>Casino</h1>
+      <p>Table games to learn on and to play with friends. Play money only.</p>
+    </div>
+
+    <div class="card game-card">
+      <div class="game-head"><span class="game-icon" aria-hidden="true">🂡</span><div><h2>Blackjack</h2><p class="muted small">Hints, a live odds panel, a coach and a count.</p></div></div>
+
+      <h3>Bankroll</h3>
+      <div id="bankPills" class="pills"></div>
+
+      <button id="practice" class="btn big gold"></button>
+      <button id="newSession" class="btn ghost small" hidden>New session</button>
+
+      <details class="rules">
+        <summary>Table rules</summary>
+        <div id="homeRules"></div>
+      </details>
+
+      <div class="or"><span>or play with friends, up to 5 seats</span></div>
+      <p class="invite-note">You've been invited to table <b id="inviteCode"></b>. Add your name and tap Join.</p>
+      <label class="field">Your name
+        <input id="name" maxlength="16" autocomplete="nickname" placeholder="Cam, Bo, Grammy…" enterkeyhint="go">
+      </label>
+      <div class="joinrow">
+        <button id="create" class="btn">Open a table</button>
+        <input id="code" maxlength="8" placeholder="CODE" autocapitalize="characters" autocomplete="off" spellcheck="false" enterkeyhint="go" aria-label="Table code">
+        <button id="join" class="btn">Join</button>
+      </div>
+      <p id="homeErr" class="err" role="alert"></p>
+    </div>
+
+    <div class="card trainers">
+      <h2>Trainers</h2>
+      <div class="trainer-grid">
+        <button id="drillBtn" class="trainer"><span>🎯</span><b>Strategy drill</b><small>A hand and a dealer card. What does the chart say?</small></button>
+        <button id="countBtn" class="trainer"><span>🧮</span><b>Count drill</b><small>Keep the Hi-Lo count as cards flash by.</small></button>
+        <button id="statsBtn" class="trainer"><span>📈</span><b>Your stats</b><small id="homeLeak">Accuracy, leaks, bankroll.</small></button>
+      </div>
+    </div>
+    <p class="muted small center">More tables coming.</p>
+  </section>
+
+  <section id="table" class="screen" hidden>
+    <header class="bar">
+      <button id="tLeave" class="ghost">← Lobby</button>
+      <span id="tTitle" class="ttitle"></span>
+      <span class="right">
+        <span id="live" class="offline" hidden>Reconnecting…</span>
+        <b id="tBank" class="tbank"></b>
+        <button id="tStats" class="ghost icon" aria-label="Stats" title="Stats">📈</button>
+        <button id="tSettings" class="ghost icon" aria-label="Settings" title="Settings">⚙️</button>
+      </span>
+    </header>
+    <div class="felt">
+      <div id="shoeMeter" class="shoe-meter" aria-hidden="true"></div>
+      <div id="dealer" class="dealer"></div>
+      <div id="feltPrint" class="felt-print"></div>
+      <div id="others" class="others"></div>
+      <div id="mine" class="mine"></div>
+    </div>
+    <div id="coach" class="coach" aria-live="polite"></div>
+    <div id="controls" class="controls"></div>
+  </section>
+
+  <section id="drill" class="screen" hidden></section>
+  <section id="count" class="screen" hidden></section>
+  <section id="stats" class="screen" hidden></section>
+
+</main>
+
+<button id="oddsTab" class="odds-tab" hidden aria-controls="odds">Odds</button>
+<aside id="odds" class="drawer" aria-hidden="true" aria-label="Odds and strategy"></aside>
+<div id="sheet" class="sheet" hidden></div>
+<div id="toast" class="toast" hidden role="status"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

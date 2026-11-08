@@ -1,0 +1,9 @@
+{
+  "name": "Casino",
+  "short_name": "Casino",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#061f16",
+  "theme_color": "#0b3d2a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

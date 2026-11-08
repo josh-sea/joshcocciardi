@@ -272,6 +272,17 @@ const PROJECTS = [
     link: "/projects/swarmbreak",
   },
   {
+    id: "casino",
+    host: "joshcocciardi.com/casino",
+    kind: "play",
+    title: "Casino",
+    blurb: "Blackjack to learn on: hints, live odds, a coach, and tables with friends.",
+    description:
+      "Pick a bankroll and practise one on one with the dealer, or open a table for up to five friends. Hints show the basic strategy move, a coach grades every decision, and an odds drawer swipes in with what each move is worth from the cards left in the shoe. Strategy and card counting drills on the side.",
+    tech: ["JavaScript", "Web Audio", "Firebase Realtime Database"],
+    link: "/projects/casino",
+  },
+  {
     id: "boulder-smash",
     kind: "play",
     title: "Boulder Smash",
@@ -413,6 +424,7 @@ const FRAMES = {
   "swing-coach": require("../assets/reel/swing-coach.jpg"),
   "tophat-spears": require("../assets/reel/tophat-spears.jpg"),
   swarmbreak: require("../assets/reel/swarmbreak.jpg"),
+  casino: require("../assets/reel/casino.jpg"),
   parkday: require("../assets/reel/parkday.jpg"),
   canitwo: require("../assets/reel/canitwo.jpg"),
   collector: require("../assets/reel/collector.jpg"),

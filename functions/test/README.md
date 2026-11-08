@@ -148,6 +148,31 @@ node functions/test/party-rules.test.mjs
 
 Same test-only dependencies as `scale-rules.test.mjs` above.
 
+## `casino-rules.test.mjs`
+
+The Realtime Database rules behind Casino tables with friends, against the
+database emulator.
+
+Every phone at a blackjack table reads the table, so the only thing keeping
+the shoe and the dealer's hole card private is the rules. This checks that
+tables cannot be listed, that the vault is readable only by whoever is host
+right now, that only the host writes the table and players can only post
+moves to the inbox as themselves once they have joined, and that the host's
+seat can be taken only once the host has gone offline (after which the old
+host loses the vault).
+
+Verified by mutation: opening the vault to every signed-in user makes three
+checks fail.
+
+```sh
+# from the repo root, in one terminal
+npx firebase-tools@13 emulators:start --only database --project casino-rules-test
+# in another
+node functions/test/casino-rules.test.mjs
+```
+
+Same test-only dependencies as `scale-rules.test.mjs` above.
+
 ## `scale-race.test.mjs`
 
 Concurrent writes in a "1 to 10" room, against the Firestore emulator.

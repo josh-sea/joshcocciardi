@@ -83,6 +83,10 @@
           "destination": "/projects/swarmbreak/index.html"
         },
         {
+          "source": "/projects/casino/**",
+          "destination": "/projects/casino/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -218,6 +222,15 @@
           ]
         },
         {
+          "source": "/projects/casino/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/tophat-spears/**/*.@(js|css)",
           "headers": [
             {
@@ -285,6 +298,11 @@
         {
           "source": "/swarm",
           "destination": "/projects/swarmbreak/",
+          "type": 301
+        },
+        {
+          "source": "/casino",
+          "destination": "/projects/casino/",
           "type": 301
         },
         {

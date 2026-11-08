@@ -1,0 +1,9 @@
+{
+  "name": "casino",
+  "private": true,
+  "type": "module",
+  "description": "Casino games. Lets node load the pure modules as ES modules for the tests.",
+  "scripts": {
+    "test": "node ../portfolio/test/casino.test.mjs"
+  }
+}
