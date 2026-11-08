@@ -1,7 +1,8 @@
 # Casino
 
 Table games to learn on and to play with friends, for play money. Live at
-`/projects/casino` (short link: `/casino`). Blackjack is the first table.
+`/projects/casino` (short link: `/casino`). Two tables so far: blackjack and
+craps. Your bankroll is picked once on the home screen and used by both.
 
 ## Blackjack
 
@@ -37,7 +38,48 @@ can split to four hands; split aces get one card each. The cut card sits at
 Keyboard: H hit, S stand, D double, P split, R surrender, I/N insurance,
 Space deal, O odds drawer.
 
+## Craps
+
+For someone who has never played. Start with **Learn to play**: nine short
+lessons (the 36 ways, the come-out, the point, odds, come bets, place bets,
+don't pass, the field and the middle, how to play it well), each with real
+dice to roll on the page and a question to check it stuck. The last one
+drops you at a practice table with the narrator on.
+
+- **Practice**: you are always the shooter. Your chips, bets and the point
+  survive a reload.
+- **Tables with friends**: up to 8 at the rail. The dice pass to the next
+  player on a seven-out, or if the shooter steps away; a shooter who stalls
+  for 40 seconds has the dice rolled for them.
+
+Bets: pass line and don't pass with odds, come and don't come (they move to
+their number, with odds), place 4 to 10, field, hardways, and the one-roll
+props (any 7, any craps, yo, aces, ace-deuce, twelve). Rules: odds 1x, 2x,
+3-4-5x, 5x or 10x; field 12 pays 3:1 or 2:1; minimum bet. Place bets, come
+odds and hardways are off on the come-out, as at most casinos. Winning bets
+are paid and stay up; odds and come bets on a number come back with the win.
+
+### Learning aids
+
+| Aid | What it does |
+|---|---|
+| **Edge on every spot** | Each bet on the layout shows its house edge, green (odds, 0%) through red (any 7, 16.7%). |
+| **Smart bets** | One tap for the good plays: pass line, max odds behind everything, a come bet with odds, place 6 & 8 in $6 units, don't pass. |
+| **Hints** | Nudges at the right moment: "take odds now", "your come bet moved to the 9, back it", "place the 6 in multiples of $6", and a warning naming the worst bet you have down. |
+| **Narrator** | Every roll in plain English ("9. The point is still 6: nothing happens to the pass line"), then what it did to each of your bets and your net. |
+| **Coach** | A note the first time you put money on a high-edge bet, and when you first take odds. |
+| **Odds drawer** | *Your bets*: for each bet, the chance it wins or loses on the next roll, the chance it wins in the end, and what it is worth from here; plus what your bets cost in house edge. *Edges*: every bet ranked. *Dice*: the 36 ways, point-before-7 chances against the odds payouts, and how the last rolls compare (the dice have no memory). |
+| **Payouts drill** | "$30 on place 6 wins. What's the pay?" with the working shown. The maths dealers learn. |
+| **Stats** | Rolls, net, and the **edge you paid**: every settled bet times its house edge, which is what a betting style really costs once luck evens out. Also how much of your action was on good bets, and net by bet. |
+
+Keyboard: Space rolls, O opens the drawer.
+
 ## How it works
+
+`js/craps.js` is craps as the same kind of pure state machine, run by the
+same Host. `js/craps-odds.js` works every edge, chance and payout out from
+the 36 ways rather than typing them in, and the tests check those against
+the published figures. `js/craps-lessons.js` is the tutorial as data.
 
 `js/blackjack.js` is the whole game as three pure functions, `start`,
 `act` and `tick`, over `{ pub, vault }`: `pub` is the table everyone sees,
@@ -71,6 +113,8 @@ hand the host's seat over only once the host has gone offline.
 | `js/strategy.js` | The chart, count deviations, the reason for each move. Pure |
 | `js/odds.js` | Dealer outcomes, move values, insurance, house edge. Pure |
 | `js/blackjack.js` | The game. Pure |
+| `js/craps.js`, `js/craps-odds.js`, `js/craps-lessons.js` | Craps: the game, its maths and advice, the tutorial. Pure |
+| `js/craps-view.js`, `js/craps-learn.js` | The craps table and drawer; the tutorial and payouts drill |
 | `js/host.js` | Runs the game and writes it out |
 | `js/stats.js`, `js/drills.js`, `js/lobby.js` | Your record, the trainers' questions, table codes. Pure |
 | `js/net.js` | Firebase: sign-in, presence, the table |
@@ -91,7 +135,14 @@ the cut card, seat order, turn and betting timers, a player whose phone
 dies mid-hand, a new host resuming after a database round trip, and 3,000
 rounds of random play at a three-seat table where the chips must always add
 up. Also the chart against the odds engine, the count plays, the drills and
-the stats. Runs in CI.
+the stats.
+
+Craps is checked roll by roll with forced dice: every bet's win, loss,
+push and move, odds and lay payouts, bets that are off on the come-out,
+rounding, bet limits and contract bets, shooters passing the dice, the
+roll timer, a table resumed from the database, and 20,000 random rolls
+where bank plus chips on the table must always equal buy-in plus winnings.
+Every house edge is checked against the published figure. Runs in CI.
 
 The rules have their own suite against the database emulator:
 `functions/test/casino-rules.test.mjs` (see `functions/test/README.md`).

@@ -5,7 +5,10 @@
  * `room` needs writeGame(pub) and writeVault(vault). `players()` returns
  * who is online now as [{ uid }], `now()` the clock everyone shares.
  */
-import * as bj from './blackjack.js';
+import * as blackjack from './blackjack.js';
+import * as craps from './craps.js';
+
+export const ENGINES = { blackjack, craps };
 
 const clone = (x) => JSON.parse(JSON.stringify(x === undefined ? null : x));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -23,9 +26,11 @@ export class Host {
 
   ctx() { return { now: this.now(), rand: this.rand, players: this.players(), hostUid: this.hostUid }; }
 
-  start(opts) {
+  /* opts.game picks the table: 'blackjack' (the default) or 'craps'. */
+  start(opts = {}) {
     this.written = { pub: null, vault: null };
-    this.world = bj.start(this.players(), opts, this.ctx());
+    this.engine = ENGINES[opts.game] || blackjack;
+    this.world = this.engine.start(this.players(), opts, this.ctx());
     return this.flush();
   }
 
@@ -33,22 +38,23 @@ export class Host {
    * a practice table after a reload.
    */
   resume(pub, vault) {
-    if (!pub || pub.game !== 'blackjack') { this.world = null; return false; }
+    if (!pub || !ENGINES[pub.game]) { this.world = null; return false; }
+    this.engine = ENGINES[pub.game];
     this.world = { pub: clone(pub), vault: clone(vault) || {}, fx: [] };
-    bj.normalise(this.world.pub);
+    this.engine.normalise(this.world.pub);
     this.written = { pub: clone(pub), vault: clone(vault) };
     return true;
   }
 
   act(uid, msg) {
     if (!this.world) return Promise.resolve();
-    this.world = bj.act(clone(this.world), uid, msg, this.ctx());
+    this.world = this.engine.act(clone(this.world), uid, msg, this.ctx());
     return this.flush();
   }
 
   tick() {
     if (!this.world) return Promise.resolve();
-    this.world = bj.tick(clone(this.world), this.ctx());
+    this.world = this.engine.tick(clone(this.world), this.ctx());
     return this.flush();
   }
 

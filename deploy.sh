@@ -24,7 +24,7 @@
 #   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh party        - Test Party Room, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh swarm        - Test Swarmbreak, copy (no build), deploy hosting + Realtime Database rules
-#   ./deploy.sh casino       - Test Casino (blackjack), copy (no build), deploy hosting + Realtime Database rules
+#   ./deploy.sh casino       - Test Casino (blackjack, craps), copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
 #   ./deploy.sh subdomains   - Copy the static apps, build the portfolio, deploy every <app>.joshcocciardi.com site
 #   ./deploy.sh weather      - Test + export the Weather web build, deploy its hosting site, functions, and Firestore rules
@@ -49,7 +49,7 @@
 #                       (static, Realtime Database) → served at /projects/party-room
 #   apps/swarmbreak/    - Swarmbreak top-down co-op alien shooter (static, Realtime Database)
 #                       → served at /projects/swarmbreak
-#   apps/casino/        - Casino: blackjack practice and tables with friends (static, Realtime Database)
+#   apps/casino/        - Casino: blackjack and craps, practice and tables with friends (static, Realtime Database)
 #                       → served at /projects/casino
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
@@ -262,7 +262,7 @@ build_swarm() {
 }
 
 build_casino() {
-    # No build step. Cards, strategy, odds and the blackjack engine are pure
+    # No build step. Cards, strategy, odds and both game engines are pure
     # modules with a dependency-free suite.
     log "Testing Casino..."
     cd "$ROOT_DIR"

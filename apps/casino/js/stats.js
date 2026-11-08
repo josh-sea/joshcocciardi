@@ -94,3 +94,49 @@ export function drillResult(s, kind, ok, streak = 0) {
   if (ok) d.ok++;
   if (kind === 'strategy' && streak > d.best) d.best = streak;
 }
+
+/* ── craps ──────────────────────────────────────────────────────────────
+ * Every roll's settled bets. The "edge paid" is what each settled bet cost
+ * on average (amount × its house edge): the real price of a betting style,
+ * which a lucky or unlucky night hides.
+ */
+export function emptyCraps() {
+  return { rolls: 0, net: 0, action: 0, edgePaid: 0, goodAction: 0, points: 0, sevenOuts: 0, biggest: 0, history: [], byBet: {}, drill: { n: 0, ok: 0, best: 0 }, lessons: {} };
+}
+
+export function loadCraps(raw) {
+  const base = emptyCraps();
+  if (!raw || typeof raw !== 'object') return base;
+  return {
+    ...base, ...raw,
+    history: Array.isArray(raw.history) ? raw.history.slice(-MAX_HISTORY) : [],
+    byBet: raw.byBet && typeof raw.byBet === 'object' ? raw.byBet : {},
+    drill: { ...base.drill, ...(raw.drill || {}) },
+    lessons: raw.lessons && typeof raw.lessons === 'object' ? raw.lessons : {},
+  };
+}
+
+/* `edgeOf(key)` is the house edge in percent (craps-odds.js). */
+export function recordCrapsRoll(c, seat, event, edgeOf) {
+  c.rolls++;
+  if (event === 'hit') c.points++;
+  if (event === 'sevenout') c.sevenOuts++;
+  if (!seat) return;
+  for (const l of seat.lines || []) {
+    if (l.out === 'move' || l.out === 'back') continue;
+    const key = l.key.replace(/\d+$/, (m) => (/^(place|hard|comeOdds|dcOdds)/.test(l.key) ? m : ''));
+    const e = edgeOf(l.key);
+    c.action = r2(c.action + l.amt);
+    c.edgePaid = r2(c.edgePaid + l.amt * e / 100);
+    if (e <= 1.6) c.goodAction = r2(c.goodAction + l.amt);
+    const b = c.byBet[key] || { n: 0, net: 0, action: 0 };
+    b.n++; b.net = r2(b.net + (l.profit || 0)); b.action = r2(b.action + l.amt);
+    c.byBet[key] = b;
+  }
+  c.net = r2(c.net + (seat.net || 0));
+  if ((seat.net || 0) > c.biggest) c.biggest = seat.net;
+  if (seat.lines && seat.lines.length) {
+    c.history.push(r2(seat.bank + Object.values(seat.bets || {}).reduce((a, v) => a + v, 0)));
+    if (c.history.length > MAX_HISTORY) c.history.splice(0, c.history.length - MAX_HISTORY);
+  }
+}

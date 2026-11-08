@@ -191,7 +191,8 @@ jobs:
 
       # Casino: the blackjack engine through rigged shoes (payouts, insurance,
       # splits, doubles, surrender, timeouts, host hand-over), the strategy
-      # chart checked cell by cell against the odds engine, and the drills.
+      # chart checked cell by cell against the odds engine, the craps engine
+      # roll by roll with every house edge checked, and the drills.
       # Plain modules, no install needed. The database rules behind tables
       # with friends have an emulator suite CI does not run; see
       # functions/test/casino-rules.test.mjs.
