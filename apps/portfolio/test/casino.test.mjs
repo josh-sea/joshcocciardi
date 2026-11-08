@@ -22,6 +22,8 @@ import { Host } from '../../casino/js/host.js';
 import * as craps from '../../casino/js/craps.js';
 import * as co from '../../casino/js/craps-odds.js';
 import { LESSONS, explain } from '../../casino/js/craps-lessons.js';
+import * as phys from '../../casino/js/dice-physics.js';
+import * as voice from '../../casino/js/craps-voice.js';
 import { emptyStats, loadStats, recordDecision, recordRound, leaks, accuracy } from '../../casino/js/stats.js';
 import { strategyQuestion, gradeStrategy, countRun, cardsForCell, parseKey, trueCountQuestion } from '../../casino/js/drills.js';
 import { makeCode, codeProblem, normaliseCode, CODE_ALPHABET, cleanName, pickHost, seeded } from '../../casino/js/lobby.js';
@@ -661,6 +663,53 @@ console.log('\ncraps odds');
   ok('payout of $30 on place 6 is $35', co.payout('place6', 30) === 35);
   ok('every lesson\'s quiz answer is one of its options', LESSONS.every((l) => !l.quiz || (l.quiz.answer >= 0 && l.quiz.answer < l.quiz.options.length)));
   ok('the narrator explains a seven-out', /seven-out/.test(explain({ total: 7, hard: false, before: 6, after: 0, event: 'sevenout' })));
+}
+
+/* ── the 3D table's dice, and the stickman ────────────────────────────── */
+console.log('\ndice and voice');
+{
+  let bad = 0;
+  for (let f = 0; f < 6; f++) for (let v = 1; v <= 6; v++) {
+    const L = phys.faceLabels(f, v);
+    if (L[f] !== v || new Set(L).size !== 6 || L[0] + L[1] !== 7 || L[2] + L[3] !== 7 || L[4] + L[5] !== 7) bad++;
+  }
+  ok('face labels put the engine\'s value on top, with opposite faces adding to 7', !bad);
+  ok('an unrotated die has +y on top', phys.upFace({ x: 0, y: 0, z: 0, w: 1 }).face === 2);
+  ok('a die rolled a quarter turn about x has +z on top', phys.upFace({ x: -Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 }).face === 4);
+  const th = phys.cleanThrow({ a: 9, p: -3, s: 'x' }, seeded(2));
+  ok('a throw from the wire is clamped', th.a === 1 && th.p === 0.5 && Number.isInteger(th.s) && th.s >= 1);
+  let w = craps.start(['a'], {}, { now: 0 });
+  w = craps.act(w, 'a', { t: 'sit', bank: 100 }, { players: [{ uid: 'a' }] });
+  w = craps.act(w, 'a', { t: 'roll', throw: { a: 0.3, p: 1, s: 42 } }, { now: 0, rand: seeded(1), players: [{ uid: 'a' }] });
+  ok('the shooter\'s flick goes on the table for every phone to replay', w.pub.throw.a === 0.3 && w.pub.throw.s === 42);
+
+  // The physics itself needs cannon-es, which the browser loads from the
+  // CDN. Run it when it is installed (npm i cannon-es), skip it otherwise.
+  let CANNON = null;
+  try { CANNON = await import(process.env.CANNON_ES || 'cannon-es'); } catch { /* not installed */ }
+  if (CANNON) {
+    let flat = 0, right = 0, longest = 0;
+    for (let i = 0; i < 120; i++) {
+      const v = [1 + (i % 6), 1 + ((i * 5) % 6)];
+      const r = phys.simulate(CANNON, phys.cleanThrow({ a: (i % 7) / 3 - 1, p: 0.5 + (i % 5) * 0.18, s: 500 + i }), v);
+      if (r.ok) flat++;
+      if (r.labels[0][r.faces[0]] === v[0] && r.labels[1][r.faces[1]] === v[1]) right++;
+      longest = Math.max(longest, r.frames.length);
+    }
+    ok('120 physical throws all settle flat on the table, past the middle', flat === 120, String(flat));
+    ok('...and every one shows the engine\'s dice', right === 120);
+    ok('...within the tumble time', longest / 60 * 1000 <= craps.TIMES.tumble, `${longest} frames`);
+    const a = phys.simulate(CANNON, { a: 0.2, p: 1, s: 99 }, [3, 4]), b = phys.simulate(CANNON, { a: 0.2, p: 1, s: 99 }, [3, 4]);
+    ok('the same throw rolls the same way on every phone', JSON.stringify(a.frames) === JSON.stringify(b.frames));
+  } else console.log('  skip physics (cannon-es is not installed here)');
+
+  const r = seeded(4);
+  ok('the stickman calls a seven-out', /Seven out/.test(voice.dealerCall({ total: 7, before: 6, after: 0, event: 'sevenout' }, r)));
+  ok('...a hard eight by name', /Hard eight/.test(voice.dealerCall({ total: 8, hard: true, before: 5, after: 5, event: '' }, r)));
+  ok('...and the new point', /point is 9/.test(voice.dealerCall({ total: 9, before: 0, after: 9, event: 'point' }, r)));
+  ok('the rail cheers a point and groans a seven-out', voice.crowd({ total: 6, before: 6, event: 'hit' }, r).mood === 'cheer' && voice.crowd({ total: 7, before: 6, event: 'sevenout' }, r).mood === 'groan');
+  ok('every total has slang', [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].every((t) => voice.SLANG[t] && voice.SLANG[t].length));
+  ok('the same seed says the same thing', voice.dealerCall({ total: 5, before: 6, event: '' }, seeded(9)) === voice.dealerCall({ total: 5, before: 6, event: '' }, seeded(9)));
 }
 
 /* ── lobby ─────────────────────────────────────────────────────────────── */

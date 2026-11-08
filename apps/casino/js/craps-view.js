@@ -10,10 +10,12 @@
  * app.js owns the table (send, the room, the host); this module turns
  * taps into messages and the table into pixels.
  */
-import { $, esc, money, toast, sound, buzz, setHtml, pct } from './ui.js';
+import { $, esc, money, toast, sound, buzz, setHtml, pct, diceClick, crowdSound, speak } from './ui.js';
 import { POINTS, WAYS, parseKey, betName, betProblem, canTakeDown, maxOdds, TRUE_ODDS, LAY_ODDS, PLACE_PAYS, HARD_PAYS, PROP_PAYS, MAX_SEATS } from './craps.js';
 import { houseEdge, edgeClass, EDGE_WORD, eventual, nextRoll, advice, presetBets, PRESETS, edgeTable, beforeSeven, P } from './craps-odds.js';
 import { explain } from './craps-lessons.js';
+import { dealerCall, crowd, beforeRoll, onBet, CROWD } from './craps-voice.js';
+import { seeded } from './lobby.js';
 
 export const CHIPS = [1, 5, 25, 100, 500];
 const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
@@ -43,6 +45,8 @@ function chip(amt, cls = '') {
 
 export function mountCraps(root, drawerEl, hooks) {
   let chipVal = 5, takeDown = false, last = null, lastRolls = -1, tumble = 0, warned = new Set(), drawerTab = 'roll', narration = '';
+  // The 3D table: 'off' until first needed, then 'loading', 'on' or 'failed'.
+  let t3d = null, t3dState = 'off', thrownFor = -1, callTimer = 0;
 
   root.innerHTML = `<header class="bar">
       <button class="ghost" data-c="leave">← Lobby</button>
@@ -56,6 +60,14 @@ export function mountCraps(root, drawerEl, hooks) {
         <div class="puckbox"><span class="puck off" data-puck>OFF</span><small data-shooter></small></div>
       </div>
       <div class="history" data-history></div>
+      <div class="stage-wrap">
+        <div class="stage" data-stage></div>
+        <div class="dealer-says" data-dealer hidden></div>
+        <div class="bubbles" data-bubbles></div>
+        <div class="chooser" data-chooser hidden></div>
+        <p class="flick-hint" data-flick hidden>↑ Flick up to throw</p>
+        <div class="stage-puck"><span class="puck off small2" data-puck3>OFF</span><small data-shooter3></small></div>
+      </div>
       <div class="narr" data-narr aria-live="polite"></div>
       <div class="layout" data-layout></div>
     </div>
@@ -214,7 +226,31 @@ export function mountCraps(root, drawerEl, hooks) {
       else if (pub.dice.length) narration = '';
     }
     const rolling = pub.phase === 'rolling';
-    if (rolling && !tumble) {
+    const want3d = s.settings.table3d !== false;
+    if (want3d && t3dState === 'off') load3d();
+    const use3d = want3d && t3dState === 'on';
+    root.classList.toggle('three', want3d && t3dState !== 'failed');
+    if (use3d) {
+      if (rolling && thrownFor !== pub.rolls) {
+        thrownFor = pub.rolls;
+        q('[data-chooser]').hidden = true;
+        t3d.throwDice(pub.throw || {}, pub.dice);
+        sound('card');
+      }
+      const others = {};
+      for (const u of pub.order) {
+        if (u === me) continue;
+        for (const [k, v] of Object.entries((pub.seats[u] || {}).bets || {})) others[k] = (others[k] || 0) + v;
+      }
+      t3d.update({ bets: seat ? seat.bets : {}, others, point: pub.point, lines: seat ? seat.lines : [], rolls: pub.rolls, rules: pub.rules });
+      const shooter = pub.shooter === me;
+      q('[data-flick]').hidden = !(shooter && pub.phase === 'betting');
+      const p3 = q('[data-puck3]');
+      p3.textContent = pub.point ? `ON ${pub.point}` : 'OFF';
+      p3.className = `puck small2 ${pub.point ? 'on' : 'off'}`;
+      q('[data-shooter3]').textContent = shooter ? 'Your dice' : `${s.names[pub.shooter] || (pub.seats[pub.shooter] || {}).name || ''} shooting`;
+    }
+    if (rolling && !tumble && !use3d) {
       sound('card');
       tumble = setInterval(() => {
         const dice = q('[data-dice]');
@@ -234,7 +270,7 @@ export function mountCraps(root, drawerEl, hooks) {
       return `<span class="h ${cls}" title="${h.d[0]}+${h.d[1]}">${t}</span>`;
     }).join(''));
     setHtml(q('[data-narr]'), s.settings.narrate && narration ? narration : '');
-    setHtml(q('[data-layout]'), layoutHtml(s));
+    if (!use3d) setHtml(q('[data-layout]'), layoutHtml(s));
     setHtml(q('[data-coach]'), coachHtml(s));
     setHtml(q('[data-controls]'), controlsHtml(s));
     renderDrawer(s);
@@ -262,6 +298,106 @@ export function mountCraps(root, drawerEl, hooks) {
     narration = `<div class="story">🎲 ${dieHtml(d1, 'tiny')}${dieHtml(d2, 'tiny')} ${esc(story)}</div>${mine}`;
     if (!s.settings.narrate && seat && seat.net) toast(`${total}: ${seat.net > 0 ? '+' : '−'}${money(Math.abs(seat.net))}`);
     hooks.onLanded && hooks.onLanded(pub, seat);
+
+    // The stickman calls it and the rail reacts. Seeded by the throw, so
+    // every phone at the table hears the same thing.
+    const r = seeded(((pub.throw && pub.throw.s) || 1) + pub.rolls * 97);
+    const info = { total, hard: d1 === d2, before: pub.lastPoint || 0, after: pub.point, event: pub.event, streak: pub.streak || 0 };
+    showDealer(dealerCall(info, r), s);
+    const names = [...CROWD, ...pub.order.filter((u) => u !== me).map((u) => s.names[u] || (pub.seats[u] || {}).name).filter(Boolean)];
+    const c = crowd(info, r, names);
+    c.lines.forEach((l, i) => setTimeout(() => bubble(l.who, l.text, i), 350 + i * 650));
+    if (c.mood) setTimeout(() => crowdSound(c.mood), 150);
+    clearTimeout(callTimer);
+    callTimer = setTimeout(() => {
+      const now = last && last.pub;
+      if (!now || now.phase !== 'betting' || now.rolls !== pub.rolls) return;
+      const shooterName = now.shooter === last.me ? 'you' : last.names[now.shooter] || (now.seats[now.shooter] || {}).name;
+      showDealer(beforeRoll({ point: now.point, newShooter: pub.event === 'sevenout', shooterName }, r), last, { quiet: true });
+    }, 4200);
+  }
+
+  /* ── the stickman and the rail ── */
+
+  let dealerHide = 0;
+  function showDealer(text, s, { quiet = false, speakIt = true } = {}) {
+    const el = q('[data-dealer]');
+    el.innerHTML = `<b>Stickman</b> ${esc(text)}`;
+    el.hidden = false;
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    clearTimeout(dealerHide);
+    dealerHide = setTimeout(() => { el.hidden = true; }, quiet ? 4500 : 6000);
+    if (speakIt && s && s.settings.voice !== false && s.settings.sound !== false) speak(text);
+  }
+  let side = 0;
+  function bubble(who, text) {
+    const layer = q('[data-bubbles]');
+    const b = document.createElement('div');
+    b.className = `crowd ${side++ % 2 ? 'right' : 'left'}`;
+    b.style.top = `${18 + Math.random() * 40}%`;
+    b.innerHTML = `<b>${esc(who)}</b>${esc(text)}`;
+    layer.appendChild(b);
+    setTimeout(() => b.remove(), 3200);
+  }
+
+  /* ── the 3D table ── */
+
+  function webglOK() {
+    try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
+  }
+  function load3d() {
+    if (!webglOK()) { t3dState = 'failed'; return; }
+    t3dState = 'loading';
+    import('./craps-table3d.js')
+      .then((m) => m.mountTable(q('[data-stage]'), { onTap: tap3d, onFlick: flick, onHit: (v) => diceClick(v) }))
+      .then((t) => {
+        t3d = t;
+        t3dState = 'on';
+        if (last && last.pub.dice.length) { t.showDiceAt(last.pub.dice); thrownFor = last.pub.phase === 'rolling' ? -1 : last.pub.rolls; }
+        if (last) render(last);
+      })
+      .catch((e) => {
+        console.warn('3D table', e);
+        t3dState = 'failed';
+        toast('The 3D table could not load here, so this is the classic layout.');
+        if (last) render(last);
+      });
+  }
+
+  function flick(th) {
+    const s = last;
+    if (!s) return;
+    const { pub, me } = s;
+    if (pub.shooter !== me) { toast(`${s.names[pub.shooter] || 'Someone else'} has the dice`); return; }
+    if (pub.phase !== 'betting') return;
+    hooks.send({ t: 'roll', throw: th });
+  }
+
+  function tap3d(key, x, y) {
+    const s = last;
+    if (!s) return;
+    const { pub, me } = s;
+    const seat = pub.seats[me];
+    if (!seat) return;
+    const ch = q('[data-chooser]');
+    if (!/^num/.test(key)) { ch.hidden = true; placeBet(key); return; }
+    const n = Number(key.slice(3));
+    const b = seat.bets;
+    const opts = [];
+    if (takeDown) {
+      for (const k of [`place${n}`, `comeOdds${n}`, `dcOdds${n}`]) if (b[k]) opts.push([k, `Take down ${betName(k).toLowerCase()} (${money(b[k])})`]);
+      if (!opts.length) { toast(b[`come${n}`] || b[`dc${n}`] ? 'Come bets stay up until they win or lose.' : `Nothing of yours on the ${n}.`); return; }
+    } else {
+      opts.push([`place${n}`, `Place ${n} · ${money(chipVal)}`]);
+      if (b[`come${n}`]) opts.push([`comeOdds${n}`, `Odds on your come ${n}`]);
+      if (b[`dc${n}`]) opts.push([`dcOdds${n}`, `Lay odds on your don't come ${n}`]);
+    }
+    if (opts.length === 1) { ch.hidden = true; placeBet(opts[0][0]); return; }
+    ch.innerHTML = opts.map(([k, l]) => `<button class="btn small" data-pick="${k}">${esc(l)}</button>`).join('') + '<button class="btn small ghost" data-pick="">Cancel</button>';
+    const wrap = q('.stage-wrap').getBoundingClientRect();
+    ch.style.left = `${Math.max(8, Math.min(wrap.width - 220, x - 110))}px`;
+    ch.style.top = `${Math.max(8, y - 20)}px`;
+    ch.hidden = false;
   }
 
   /* ── taps ── */
@@ -292,6 +428,8 @@ export function mountCraps(root, drawerEl, hooks) {
     }
     hooks.send({ t: 'bet', key, amt: chipVal });
     sound('chip');
+    const quip = onBet(key);
+    if (quip && Math.random() < 0.6) showDealer(quip, s, { quiet: true, speakIt: false });
     const e = houseEdge(key, pub.rules);
     if (s.settings.coach && e > 4.1 && !warned.has(key)) {
       warned.add(key);
@@ -306,6 +444,7 @@ export function mountCraps(root, drawerEl, hooks) {
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
     if (b.dataset.spot) { placeBet(b.dataset.spot); return; }
+    if (b.dataset.pick !== undefined) { q('[data-chooser]').hidden = true; if (b.dataset.pick) placeBet(b.dataset.pick); return; }
     if (b.dataset.chip) { chipVal = Number(b.dataset.chip); takeDown = false; sound('chip'); last && render(last); return; }
     if (b.dataset.rebuy) { hooks.send({ t: 'rebuy', amt: Number(b.dataset.rebuy) }); return; }
     if (b.dataset.preset) {
@@ -315,7 +454,7 @@ export function mountCraps(root, drawerEl, hooks) {
       return;
     }
     const c = b.dataset.c;
-    if (c === 'roll') { hooks.send({ t: 'roll' }); return; }
+    if (c === 'roll') { hooks.send({ t: 'roll', throw: { a: Math.random() * 1.2 - 0.6, p: 0.75 + Math.random() * 0.35, s: Math.floor(Math.random() * 2 ** 30) + 1 } }); return; }
     if (c === 'take') { takeDown = !takeDown; last && render(last); return; }
     if (c === 'sit') { hooks.sit(); return; }
     if (c && hooks[c]) hooks[c]();
@@ -354,7 +493,11 @@ export function mountCraps(root, drawerEl, hooks) {
     render,
     open, close,
     toggle() { if (document.body.classList.contains('cdrawer-open')) close(); else open(); },
-    reset() { lastRolls = -1; narration = ''; warned = new Set(); clearInterval(tumble); tumble = 0; },
+    reset() {
+      lastRolls = -1; narration = ''; warned = new Set(); clearInterval(tumble); tumble = 0; thrownFor = -1;
+      // A fresh table gets a fresh 3D scene (the chips and puck start over).
+      if (t3d) { t3d.dispose(); t3d = null; t3dState = 'off'; }
+    },
     key(e) {
       if (!last) return;
       if (e.key === ' ' || e.key === 'Enter') {

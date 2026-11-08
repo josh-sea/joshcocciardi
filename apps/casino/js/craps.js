@@ -32,8 +32,12 @@ export const POINTS = [4, 5, 6, 8, 9, 10];
 export const WAYS = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1];
 export const DEFAULT_RULES = { odds: '345', field12: 3, min: 5, max: 5000 };
 export const ODDS_CHOICES = ['1', '2', '345', '5', '10'];
-export const TIMES = { roll: 40000, tumble: 1100 };
+/* tumble: how long the dice are in the air. Long enough for the 3D table's
+ * physics to play out (dice-physics.js settles inside 2.4 s). */
+export const TIMES = { roll: 40000, tumble: 2700 };
 export const MAX_SEATS = 8;
+
+import { cleanThrow } from './dice-physics.js';
 
 const money = (n) => Math.round(n * 100) / 100;
 /* Casinos round a payout down to the cent (really to the chip). */
@@ -335,17 +339,21 @@ export function act(world, uid, msg = {}, ctx = {}) {
   }
   if (t === 'roll') {
     if (uid !== pub.shooter) return world;
-    roll(world, ctx);
+    roll(world, ctx, msg.throw);
     return world;
   }
   return world;
 }
 
-function roll(world, ctx) {
+/* `how` is the shooter's flick (aim, power, spin seed), which only
+ * decides how the dice travel on screen. What they show is decided here.
+ */
+function roll(world, ctx, how) {
   const { pub } = world;
   const rand = ctx.rand || Math.random;
   const forced = ctx.dice;
   pub.dice = forced || [1 + Math.floor(rand() * 6), 1 + Math.floor(rand() * 6)];
+  pub.throw = cleanThrow(how || {}, rand);
   pub.phase = 'rolling';
   pub.wait = (ctx.now || 0) + TIMES.tumble;
   pub.deadline = 0;
