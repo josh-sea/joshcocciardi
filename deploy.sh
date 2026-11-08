@@ -24,6 +24,7 @@
 #   ./deploy.sh tophat       - Test Tophat & Spears, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh party        - Test Party Room, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh swarm        - Test Swarmbreak, copy (no build), deploy hosting + Realtime Database rules
+#   ./deploy.sh casino       - Test Casino (blackjack), copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
 #   ./deploy.sh subdomains   - Copy the static apps, build the portfolio, deploy every <app>.joshcocciardi.com site
 #   ./deploy.sh weather      - Test + export the Weather web build, deploy its hosting site, functions, and Firestore rules
@@ -48,6 +49,8 @@
 #                       (static, Realtime Database) → served at /projects/party-room
 #   apps/swarmbreak/    - Swarmbreak top-down co-op alien shooter (static, Realtime Database)
 #                       → served at /projects/swarmbreak
+#   apps/casino/        - Casino: blackjack practice and tables with friends (static, Realtime Database)
+#                       → served at /projects/casino
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
 # (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
@@ -70,6 +73,7 @@ DISNEY_DIR="$ROOT_DIR/apps/disney-trivia"
 TOPHAT_DIR="$ROOT_DIR/apps/tophat-spears"
 PARTY_DIR="$ROOT_DIR/apps/party-room"
 SWARM_DIR="$ROOT_DIR/apps/swarmbreak"
+CASINO_DIR="$ROOT_DIR/apps/casino"
 WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
@@ -257,6 +261,22 @@ build_swarm() {
     success "swarmbreak copied"
 }
 
+build_casino() {
+    # No build step. Cards, strategy, odds and the blackjack engine are pure
+    # modules with a dependency-free suite.
+    log "Testing Casino..."
+    cd "$ROOT_DIR"
+    node apps/portfolio/test/casino.test.mjs || fail "Casino tests failed"
+
+    log "Copying casino to portfolio/public/projects/casino (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/casino"
+    rm -rf "$PORTFOLIO_DIR/public/projects/casino"/*
+    cp -r "$CASINO_DIR"/* "$PORTFOLIO_DIR/public/projects/casino/"
+    rm -f "$PORTFOLIO_DIR/public/projects/casino/README.md" \
+          "$PORTFOLIO_DIR/public/projects/casino/package.json"
+    success "casino copied"
+}
+
 build_portfolio() {
     # Swing Coach ships as a single static page inside public/, with its swing
     # geometry inlined. The suite lifts that engine out of the page and runs
@@ -324,6 +344,7 @@ deploy_hosting() {
     echo "  Tophat&Spears:  https://www.joshcocciardi.com/projects/tophat-spears"
     echo "  Party Room:     https://www.joshcocciardi.com/projects/party-room  (short link: /party)"
     echo "  Swarmbreak:     https://www.joshcocciardi.com/projects/swarmbreak  (short link: /swarm)"
+    echo "  Casino:         https://www.joshcocciardi.com/projects/casino  (short link: /casino)"
     echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy, Boulder Smash, Dark Hat, Conway's DOOM)"
     echo "  Camboku:        https://www.joshcocciardi.com/projects/camboku  (short link: /camboku)"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
@@ -457,6 +478,7 @@ case "${1:-all}" in
         build_tophat
         build_party
         build_swarm
+        build_casino
         build_workbook
         build_portfolio
         deploy_firestore
@@ -665,9 +687,18 @@ case "${1:-all}" in
         deploy_database
         deploy_hosting
         ;;
+    casino)
+        echo "========================================"
+        echo "  Deploying Casino"
+        echo "========================================"
+        build_casino
+        build_portfolio
+        deploy_database
+        deploy_hosting
+        ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|swarm|roy|weather|subdomains|ezpayze|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|swarm|casino|roy|weather|subdomains|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac
