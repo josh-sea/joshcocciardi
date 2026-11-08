@@ -242,6 +242,47 @@ const maxWait = await page.$eval('#pl-maxwait', (e) => e.value);
 ok('the walking pace is still what it was', pace === '95', pace);
 ok('and the wait limit', maxWait === '45', maxWait);
 
+/* ── signed out is still the default, and still offline ───────────────────
+ *
+ * The planner's first promise is that it starts with no network at all.
+ * Loading 300KB of auth SDK on every open, to discover that nobody is
+ * signed in, would quietly break that. So the test is not "does sign-in
+ * work" but "was Firebase left alone".
+ */
+const sdk = [];
+page.on('request', (r) => { if (/gstatic\.com\/firebasejs/.test(r.url())) sdk.push(r.url()); });
+await openPlanner();
+ok('signed out, no Firebase SDK is fetched at all', sdk.length === 0, sdk.slice(0, 2));
+
+const says = await page.$eval('#pl-acct-says', (e) => e.textContent);
+ok('and the page says the plan is only on this device', /this device only/i.test(says), says);
+ok('offering a way to fix that', await page.$('#pl-acct-google') !== null, null);
+ok('with the sign-out button hidden', await page.$eval('#pl-acct-out', (e) => e.hidden), null);
+ok('and no history section, since there is nothing to show',
+  await page.$eval('#pl-history-fold', (e) => e.hidden), null);
+
+// The email form is a second step rather than two fields competing with the
+// Google button.
+ok('the email field is out of the way until asked for',
+  await page.$eval('#pl-acct-email', (e) => e.hidden), null);
+await page.click('#pl-acct-email-open');
+ok('and appears when it is', !(await page.$eval('#pl-acct-email', (e) => e.hidden)), null);
+
+// A bad address is refused locally, without a round trip. This loads the
+// SDK, which is the point at which loading it is justified.
+await page.fill('#pl-acct-address', 'not-an-address');
+await page.click('#pl-acct-send');
+await page.waitForFunction(() => document.getElementById('pl-acct-error').textContent.length > 0,
+  null, { timeout: 15000 });
+const addrErr = await page.$eval('#pl-acct-error', (e) => e.textContent);
+ok('an address with no @ is refused with a reason', /email address/i.test(addrErr), addrErr);
+ok('and the SDK is only fetched once sign-in is actually asked for', sdk.length > 0, sdk.length);
+
+// Everything above still has to be true with the account block present.
+const overflow = await page.evaluate(() =>
+  document.documentElement.scrollWidth - document.documentElement.clientWidth);
+ok('no horizontal overflow on a phone', overflow <= 1, overflow);
+
 ok('no uncaught exceptions and no console errors', errors.length === 0, errors.slice(0, 3));
 
 await browser.close();

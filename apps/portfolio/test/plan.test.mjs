@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import {
   PREFS_KEY, dayKey, parseDayKey, freshPrefs, freshDay, readPrefs, readDay,
   llWindow, byStart, migrate, LL_MINUTES,
+  dayDocId, withStamp, stampOf, pickNewer, adopt,
 } from '../../disney-trivia/js/plan.js';
 import { DEFAULT_PACE } from '../../disney-trivia/js/park.js';
 
@@ -165,6 +166,63 @@ is(migrate([{ key: 'k', date: '2026-01-01', value: {} }]).prefs.mustDo, [],
   is(thin.prefs.pace, DEFAULT_PACE,
     'a newest day with no pace falls back to the default rather than inventing one');
   is(thin.prefs.mustDo.sort(), ['a', 'b'], 'while the stars from both days still come across');
+}
+
+/* ── keeping two copies honest ────────────────────────────────────────────
+ *
+ * Last write wins per record. Not a union: a union cannot represent a
+ * removal, so un-ticking a ride on one phone and merging with a cloud copy
+ * that still has it would bring it back, which is a worse bug than the one
+ * it fixes.
+ */
+
+is(dayDocId('2026-11-06', 'mk'), '2026-11-06_mk', 'a day document is named for its date and park');
+
+is(stampOf(null), 0, 'nothing has no stamp');
+is(stampOf({}), 0, 'and neither does a record written before stamping existed');
+is(stampOf({ updatedAt: 'soon' }), 0, 'a stamp that is not a number is no stamp');
+is(withStamp({ done: ['a'] }, 1000), { done: ['a'], updatedAt: 1000 }, 'stamping keeps the record');
+
+{
+  const local = { done: ['a'], updatedAt: 200 };
+  const remote = { done: ['b'], updatedAt: 100 };
+  is(pickNewer(local, remote).from, 'local', 'the newer copy wins');
+  is(pickNewer(remote, local).from, 'remote', 'whichever side it is on');
+}
+{
+  // The case that matters: the removal. A union would hand back both.
+  const local = { done: [], updatedAt: 200 };
+  const remote = { done: ['a'], updatedAt: 100 };
+  is(pickNewer(local, remote).value.done, [],
+    'un-ticking a ride is not undone by a cloud copy that still has it');
+}
+is(pickNewer({ done: [] }, null).from, 'local', 'with no cloud copy the phone wins');
+is(pickNewer(null, { done: [] }).from, 'remote', 'and with no local copy the cloud does');
+is(pickNewer(null, null).value, null, 'neither is nothing');
+
+// Ties go local: the same record on both sides is the normal case, and
+// preferring the cloud would write back on every load for no change.
+is(pickNewer({ a: 1, updatedAt: 5 }, { a: 2, updatedAt: 5 }).from, 'local',
+  'an equal stamp keeps the local copy rather than writing back for nothing');
+
+/* First sign-in. Everything set before signing in has to come up, or
+ * signing in reads as "it forgot my stars".
+ */
+{
+  const local = { mustDo: ['space'] };           // set before signing in, unstamped
+  const got = adopt(local, null, 7000);
+  is(got.from, 'local', 'with an empty cloud the phone is adopted');
+  is(got.value.mustDo, ['space'], 'keeping what was there');
+  is(got.value.updatedAt, 7000, 'and gaining a stamp so later merges have something to compare');
+}
+is(adopt({ a: 1, updatedAt: 3 }, null, 9).value.updatedAt, 3,
+  'an already stamped record keeps its own stamp rather than being re-dated');
+is(adopt(null, null).from, 'neither', 'nothing on either side is nothing');
+{
+  // An unstamped local record is adopted, not treated as infinitely old: it
+  // predates stamping rather than losing a race.
+  const got = adopt({ mustDo: ['a'] }, { mustDo: ['b'], updatedAt: 500 });
+  is(got.from, 'remote', 'but against a stamped cloud copy the cloud still wins');
 }
 
 console.log(`plan: ${checks} assertions passed`);

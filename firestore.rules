@@ -1048,9 +1048,17 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
-    // A day plan belongs to the person who made it: must-dos, Lightning Lane
-    // windows, what they have ridden and where they walked.
+    // A day plan belongs to the person who made it: Lightning Lane windows,
+    // what they have ridden and where they walked.
     match /park_plans/{uid}/days/{date} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // The same person's preferences, which outlive any one day: must-dos,
+    // walking pace, the wait limit. They sit on the parent document rather
+    // than inside a day because they are not facts about a date, and that
+    // needs its own rule: the catch-all below excludes every park_
+    // collection, so without this the document is simply unwritable.
+    match /park_plans/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
     match /park_secrets/{docId} {

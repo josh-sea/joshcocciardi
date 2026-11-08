@@ -131,3 +131,54 @@ export function migrate(entries) {
     days: usable.map((e) => ({ key: e.key, value: readDay(e.value) })),
   };
 }
+
+/* ── keeping two copies honest ─────────────────────────────────────────────
+ *
+ * Signed in, a record exists twice: on this phone and in Firestore. The
+ * phone stays the one the app reads and writes, because ticking a ride off
+ * has to work in a queue with no signal; the cloud copy is what survives
+ * the browser clearing its storage, which is the actual complaint.
+ *
+ * So they have to be reconciled on load, and the rule is last write wins per
+ * record, on a stamp set when the record changes.
+ *
+ * Not a union, which is the tempting one for two lists of ride ids. A union
+ * cannot represent a removal: un-tick a ride on your phone, merge with a
+ * cloud copy that still has it, and it comes back. Making un-ticking
+ * impossible is a worse bug than the one it would fix.
+ *
+ * Whole records, not fields. These are four ride ids and three settings; a
+ * field-level merge would be more code than the thing it guards.
+ */
+export const dayDocId = (date, park) => `${date}_${park}`;
+
+export function withStamp(value, at = Date.now()) {
+  return { ...value, updatedAt: at };
+}
+
+export const stampOf = (v) => (v && Number.isFinite(v.updatedAt) ? v.updatedAt : 0);
+
+/* Which copy to keep. Ties go to the local one: the same record on both
+ * sides is the normal case, and preferring the cloud would mean a write
+ * back on every load for no change.
+ */
+export function pickNewer(local, remote) {
+  if (!remote) return { value: local, from: 'local' };
+  if (!local) return { value: remote, from: 'remote' };
+  return stampOf(remote) > stampOf(local)
+    ? { value: remote, from: 'remote' }
+    : { value: local, from: 'local' };
+}
+
+/* First sign-in, where the cloud is empty and the phone is not.
+ *
+ * Everything set before signing in has to come up, or signing in reads as
+ * "it forgot my stars", which is the complaint arriving by a different
+ * route. An unstamped local record is adopted rather than treated as
+ * infinitely old, because it predates stamping rather than losing a race.
+ */
+export function adopt(local, remote, at = Date.now()) {
+  if (remote) return pickNewer(local, remote);
+  if (!local) return { value: null, from: 'neither' };
+  return { value: stampOf(local) ? local : withStamp(local, at), from: 'local' };
+}

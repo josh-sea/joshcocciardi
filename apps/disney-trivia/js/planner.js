@@ -16,7 +16,7 @@ import { liveFor, hoursFor, parkDate, parkClock, ageWords } from './parkdata.js'
 import { nudge as nudgeArchive } from './history.js';
 import {
   PREFS_KEY, dayKey, parseDayKey, freshPrefs, freshDay, readPrefs, readDay,
-  llWindow, byStart, migrate,
+  llWindow, byStart, migrate, withStamp, pickNewer, adopt,
 } from './plan.js';
 
 const $ = (id) => document.getElementById(id);
@@ -53,10 +53,20 @@ const write = (key, value) => {
 };
 
 const loadPrefs = () => { prefs = readPrefs(read(PREFS_KEY)); };
-const savePrefs = () => write(PREFS_KEY, prefs);
-
 const loadDay = () => { day = readDay(read(keyForToday())); };
-const saveDay = () => write(keyForToday(), day);
+
+/* Both saves write the phone synchronously and then push upward without
+ * being waited on. A tick-off must not wait for a round trip: that is the
+ * whole reason the phone stayed the copy the app reads and writes.
+ */
+const savePrefs = () => {
+  write(PREFS_KEY, withStamp(prefs));
+  pushUp('prefs').catch(() => {});
+};
+const saveDay = () => {
+  write(keyForToday(), withStamp(day));
+  pushUp('day').catch(() => {});
+};
 
 /* Move what is already stored into the new shape, once.
  *
@@ -78,6 +88,138 @@ function migrateOnce() {
   const moved = migrate(entries);
   write(PREFS_KEY, moved.prefs);
   for (const d of moved.days) write(d.key, d.value);
+}
+
+/* ── signed in, so the plan outlives this browser ──────────────────────────
+ *
+ * Firebase is loaded only when it is going to be used: on a device that has
+ * signed in before, or one opening an emailed link. The planner's first
+ * promise is that it starts with no network at all, and 300KB of auth SDK
+ * on every open to discover that nobody is signed in would break it.
+ *
+ * Whether to even try is therefore a local flag, not a question for
+ * Firebase, because asking Firebase means loading it.
+ */
+const WANTS_SYNC = 'parkPlanner.signedIn';
+const wantsSync = () => { try { return localStorage.getItem(WANTS_SYNC) === 'yes'; } catch { return false; } };
+const setWantsSync = (on) => {
+  try {
+    if (on) localStorage.setItem(WANTS_SYNC, 'yes');
+    else localStorage.removeItem(WANTS_SYNC);
+  } catch { /* private mode */ }
+};
+// An emailed link comes back with its one-time code in the query string.
+const looksLikeLink = () => /[?&](oobCode=|mode=signIn)/.test(location.search);
+
+let account = null;    // the account.js module, once loaded
+let sync = null;       // the plansync.js module, once loaded
+let user = null;       // the signed-in user, or null
+let syncNote = '';     // what to tell them about the last sync
+let syncStarted = false;
+
+async function firebase() {
+  if (!account) [account, sync] = await Promise.all([import('./account.js'), import('./plansync.js')]);
+  return { account, sync };
+}
+
+/* Pull the cloud copy and reconcile it with this device. See plan.js: last
+ * write wins per record, and on a first sign-in an empty cloud adopts
+ * whatever is already here, so signing in never reads as "it forgot".
+ */
+async function pullDown() {
+  if (!user || !sync) return;
+  const today = parkDate();
+
+  const [remotePrefs, remoteDay] = await Promise.all([
+    sync.fetchPrefs(user.uid),
+    sync.fetchDay(user.uid, today, park),
+  ]);
+
+  const p = adopt(read(PREFS_KEY), remotePrefs);
+  if (p.value) {
+    prefs = readPrefs(p.value);
+    write(PREFS_KEY, p.value);
+    if (p.from === 'local') await sync.pushPrefs(user.uid, withStamp(prefs));
+  }
+
+  const d = adopt(read(keyForToday()), remoteDay);
+  if (d.value) {
+    day = readDay(d.value);
+    write(keyForToday(), d.value);
+    if (d.from === 'local') await sync.pushDay(user.uid, today, park, withStamp(day));
+  }
+
+  paintAccount();
+  renderLL();
+  render();
+  drawHistory();
+}
+
+/* Writes go to the phone first and always, then upward. A failed push is
+ * said out loud rather than swallowed: the one thing worse than not syncing
+ * is telling someone their plan is saved when it is not.
+ */
+async function pushUp(what) {
+  if (!user || !sync) return;
+  const ok = what === 'prefs'
+    ? await sync.pushPrefs(user.uid, withStamp(prefs))
+    : await sync.pushDay(user.uid, parkDate(), park, withStamp(day));
+  syncNote = ok ? '' : 'Saved on this device. Could not reach your account just now.';
+  paintAccount();
+}
+
+function paintAccount() {
+  const says = $('pl-acct-says');
+  const inBox = $('pl-acct-in');
+  const out = $('pl-acct-out');
+  if (!says) return;
+
+  if (user) {
+    says.textContent = syncNote
+      || `Saved to your account (${user.email || 'signed in'}), so it survives this browser.`;
+    inBox.hidden = true;
+    $('pl-acct-email').hidden = true;
+    out.hidden = false;
+  } else {
+    says.textContent = 'Saved on this device only. Sign in and your stars, '
+      + 'Lightning Lanes and what you have ridden follow you to any phone.';
+    inBox.hidden = false;
+    out.hidden = true;
+  }
+}
+
+async function drawHistory() {
+  const fold = $('pl-history-fold');
+  if (!fold) return;
+  if (!user || !sync) { fold.hidden = true; return; }
+
+  const days = await sync.fetchHistory(user.uid);
+  const withAny = days.filter((d) => d.done.length);
+  fold.hidden = !withAny.length;
+  $('pl-history-count').textContent = withAny.length ? `${withAny.length}` : '';
+
+  const name = (id) => {
+    for (const k of PARK_ORDER) {
+      const hit = ((catalogue.parks[k] || {}).rides || []).find((r) => r.id === id);
+      if (hit) return hit.name;
+    }
+    return null;
+  };
+
+  $('pl-history').replaceChildren(...withAny.map((d) => {
+    const row = document.createElement('div');
+    row.className = 'pl-histrow';
+    const short = (catalogue.parks[d.park] || {}).short || d.park;
+    const rides = d.done.map(name).filter(Boolean);
+    const head = document.createElement('b');
+    head.textContent = `${d.date} · ${short}`;
+    const body = document.createElement('span');
+    body.textContent = rides.length
+      ? `${rides.length} ridden: ${rides.join(', ')}`
+      : `${d.done.length} ridden`;
+    row.append(head, body);
+    return row;
+  }));
 }
 
 /* ── where you are ───────────────────────────────────────────────────────── */
@@ -642,6 +784,105 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 
+/* ── the sign-in controls ──────────────────────────────────────────────── */
+
+const acctError = (msg) => { const e = $('pl-acct-error'); if (e) e.textContent = msg || ''; };
+
+/* Load Firebase, watch the account, and reconcile whenever it changes.
+ *
+ * Also finishes a sign-in that was in flight: a Google redirect coming back,
+ * or an emailed link being opened. A link opened on a device that never
+ * asked for one cannot be resolved without the address, so that case asks
+ * for it rather than failing.
+ */
+async function startSync() {
+  const { account: acc } = await firebase();
+  // Once only: both init and the sign-in buttons call this, and two
+  // watchers would reconcile the same change twice.
+  if (syncStarted) return;
+  syncStarted = true;
+
+  acc.watch((u) => {
+    user = u;
+    setWantsSync(!!u);
+    syncNote = '';
+    paintAccount();
+    if (u) pullDown().catch(() => {});
+    else { $('pl-history-fold').hidden = true; }
+  });
+
+  try {
+    const done = await acc.finishSignIn();
+    if (done === 'need-email') {
+      $('pl-acct-in').hidden = true;
+      $('pl-acct-email').hidden = false;
+      $('pl-acct-address').value = '';
+      acctError('Confirm the address that link was sent to.');
+      $('pl-acct-send').dataset.finishing = 'yes';
+    }
+  } catch (err) {
+    acctError(`That link did not work: ${err.message}. Ask for a new one.`);
+  }
+}
+
+function wireAccount() {
+  const g = $('pl-acct-google');
+  if (!g) return;
+
+  g.onclick = async () => {
+    acctError('');
+    g.disabled = true;
+    try {
+      const { account: acc } = await firebase();
+      await startSync();
+      await acc.signInGoogle();
+    } catch (err) {
+      acctError(`Could not sign in: ${err.message}`);
+    } finally { g.disabled = false; }
+  };
+
+  $('pl-acct-email-open').onclick = () => {
+    acctError('');
+    $('pl-acct-in').hidden = true;
+    $('pl-acct-email').hidden = false;
+    $('pl-acct-address').focus();
+  };
+
+  $('pl-acct-send').onclick = async () => {
+    const btn = $('pl-acct-send');
+    const address = $('pl-acct-address').value;
+    acctError('');
+    btn.disabled = true;
+    try {
+      const { account: acc } = await firebase();
+      // Finishing a link opened on another device: the address confirms it
+      // is being opened by whoever asked for it.
+      if (btn.dataset.finishing === 'yes') {
+        await acc.completeLink(address);
+        delete btn.dataset.finishing;
+        return;
+      }
+      await startSync();
+      await acc.sendLink(address);
+      $('pl-acct-says').textContent = `Link sent to ${address}. Open it on this phone and you are in.`;
+      $('pl-acct-email').hidden = true;
+    } catch (err) {
+      acctError(err.message);
+    } finally { btn.disabled = false; }
+  };
+
+  $('pl-acct-out').onclick = async () => {
+    try {
+      const { account: acc } = await firebase();
+      await acc.signOutNow();
+    } catch { /* already gone */ }
+    setWantsSync(false);
+    user = null;
+    paintAccount();
+    $('pl-history-fold').hidden = true;
+  };
+}
+
 export async function init() {
   catalogue = await fetch('parks/attractions.json').then((r) => r.json());
 
@@ -657,6 +898,11 @@ export async function init() {
   drawParkPicker();
   renderLL();
   paintWhere();
+
+  wireAccount();
+  paintAccount();
+  // Only now, and only if there is a reason to: see the note on WANTS_SYNC.
+  if (wantsSync() || looksLikeLink()) startSync().catch(() => {});
 
   $('pl-curve-close').onclick = () => { $('pl-curve').hidden = true; $('pl-hour').hidden = true; };
   $('pl-hour-close').onclick = () => { $('pl-hour').hidden = true; };
