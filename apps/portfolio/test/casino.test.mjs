@@ -1,4 +1,4 @@
-/* Casino: blackjack played through in node.
+/* Casino: blackjack and craps played through in node.
  *
  * The same engine runs the practice table on your phone and a table with
  * friends on the host's phone, so it is a pure state machine that can be
@@ -19,6 +19,9 @@ import { basic, chart, advise, deviation, UPS, cellFor, cellName, why } from '..
 import { moveEVs, dealerOdds, standOdds, insuranceOdds, nextCard, houseEdge } from '../../casino/js/odds.js';
 import * as bj from '../../casino/js/blackjack.js';
 import { Host } from '../../casino/js/host.js';
+import * as craps from '../../casino/js/craps.js';
+import * as co from '../../casino/js/craps-odds.js';
+import { LESSONS, explain } from '../../casino/js/craps-lessons.js';
 import { emptyStats, loadStats, recordDecision, recordRound, leaks, accuracy } from '../../casino/js/stats.js';
 import { strategyQuestion, gradeStrategy, countRun, cardsForCell, parseKey, trueCountQuestion } from '../../casino/js/drills.js';
 import { makeCode, codeProblem, normaliseCode, CODE_ALPHABET, cleanName, pickHost, seeded } from '../../casino/js/lobby.js';
@@ -32,11 +35,14 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
 
 // A write to the database and back: undefined keys and empty objects and
 // arrays vanish.
-const viaDb = (x) => JSON.parse(JSON.stringify(x, (k, v) => {
-  if (v && typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length) return undefined;
-  if (Array.isArray(v) && !v.length) return undefined;
-  return v;
-}));
+const viaDb = (x) => {
+  const s = JSON.stringify(x, (k, v) => {
+    if (v && typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length) return undefined;
+    if (Array.isArray(v) && !v.length) return undefined;
+    return v;
+  });
+  return s === undefined ? null : JSON.parse(s);
+};
 
 const card = (v) => (v === 1 ? 'As' : v === 10 ? 'Kd' : `${v}h`);
 
@@ -513,6 +519,149 @@ const run = countRun(52, rand);
 ok('a whole-deck count run counts to zero', run.count === 0 && run.cards.length === 52);
 ok('a count run of 20 counts right', (() => { const r = countRun(20, rand); return r.count === r.cards.reduce((a, c) => a + hiLo(c), 0); })());
 ok('true count questions have whole answers', Array.from({ length: 50 }, () => trueCountQuestion(rand)).every((q) => Number.isInteger(q.answer)));
+
+/* ── craps ───────────────────────────────────────────────────────────── */
+console.log('\ncraps');
+{
+  const R = craps.DEFAULT_RULES;
+  const S = (bets, dice, point = 0, bank = 1000) => craps.settle(bets, bank, dice, point, R);
+  const line = (r, key) => r.lines.find((l) => l.key === key) || {};
+
+  // The line on the come-out.
+  ok('come-out 7: pass wins even money and stays up', (() => { const r = S({ pass: 10 }, [3, 4]); return line(r, 'pass').out === 'win' && r.bank === 1010 && r.bets.pass === 10; })());
+  ok('come-out 11: pass wins, don\'t pass loses', (() => { const r = S({ pass: 10, dp: 10 }, [5, 6]); return line(r, 'pass').out === 'win' && line(r, 'dp').out === 'lose' && !r.bets.dp; })());
+  ok('come-out 2 and 3: pass loses, don\'t pass wins', [[1, 1], [1, 2]].every((d) => { const r = S({ pass: 10, dp: 10 }, d); return line(r, 'pass').out === 'lose' && line(r, 'dp').out === 'win'; }));
+  ok('come-out 12: pass loses, don\'t pass ties (bar 12)', (() => { const r = S({ pass: 10, dp: 10 }, [6, 6]); return line(r, 'pass').out === 'lose' && line(r, 'dp').out === 'push' && r.bets.dp === 10; })());
+  ok('come-out 6 sets the point and settles nothing', (() => { const r = S({ pass: 10 }, [2, 4]); return r.point === 6 && !r.lines.length; })());
+
+  // With a point.
+  ok('point made: pass wins, odds win true odds and come down', (() => { const r = S({ pass: 10, passOdds: 25 }, [4, 2], 6); return line(r, 'passOdds').profit === 30 && r.bank === 1000 + 10 + 30 + 25 && !r.bets.passOdds && r.bets.pass === 10 && r.point === 0; })());
+  ok('odds pay 2:1 on 4, 3:2 on 9', S({ passOdds: 10 }, [2, 2], 4).lines[0].profit === 20 && S({ passOdds: 10 }, [4, 5], 9).lines[0].profit === 15);
+  ok('seven-out: pass and odds lose, don\'t pass and lay odds win', (() => { const r = S({ pass: 10, passOdds: 20, dp: 10, dpOdds: 12 }, [1, 6], 8); return line(r, 'pass').out === 'lose' && line(r, 'passOdds').out === 'lose' && line(r, 'dp').profit === 10 && line(r, 'dpOdds').profit === 10; })());
+  ok('lay odds pay 1:2 on 4', S({ dpOdds: 20 }, [3, 4], 4).lines[0].profit === 10);
+  ok('other numbers do nothing to the line', S({ pass: 10, passOdds: 10 }, [2, 3], 8).lines.length === 0);
+
+  // Come bets.
+  ok('a come bet moves to its number', (() => { const r = S({ come: 10 }, [4, 5], 6); return line(r, 'come').out === 'move' && r.bets.come9 === 10 && !r.bets.come; })());
+  ok('a come bet wins on 11, loses on 3', S({ come: 10 }, [5, 6], 6).lines[0].out === 'win' && S({ come: 10 }, [1, 2], 6).lines[0].out === 'lose');
+  ok('a come bet on 9 wins on 9 and comes down with its odds', (() => { const r = S({ come9: 10, comeOdds9: 20 }, [4, 5], 6); return r.bank === 1000 + 10 + 10 + 30 + 20 && !r.bets.come9 && !r.bets.comeOdds9; })());
+  ok('come odds are off on the come-out: 7 loses the come bet, returns the odds', (() => { const r = S({ come9: 10, comeOdds9: 20 }, [3, 4], 0); return line(r, 'come9').out === 'lose' && line(r, 'comeOdds9').out === 'back' && r.bank === 1020; })());
+  ok('...and its number on the come-out wins the come bet, returns the odds', (() => { const r = S({ come9: 10, comeOdds9: 20 }, [4, 5], 0); return line(r, 'come9').out === 'win' && line(r, 'comeOdds9').out === 'back' && r.bank === 1000 + 20 + 20; })());
+  ok('don\'t come on 5 wins on a 7', (() => { const r = S({ dc5: 10, dcOdds5: 15 }, [3, 4], 8); return line(r, 'dc5').profit === 10 && line(r, 'dcOdds5').profit === 10; })());
+
+  // Place, hardways, field, props.
+  ok('place 6 pays 7:6 and stays up', (() => { const r = S({ place6: 12 }, [3, 3], 8); return line(r, 'place6').profit === 14 && r.bets.place6 === 12; })());
+  ok('place 4 pays 9:5, place 5 pays 7:5', S({ place4: 10 }, [1, 3], 8).lines[0].profit === 18 && S({ place5: 10 }, [1, 4], 8).lines[0].profit === 14);
+  ok('place bets are off on the come-out', S({ place6: 12 }, [3, 4], 0).lines.length === 0 && S({ place6: 12 }, [3, 3], 0).lines.length === 0);
+  ok('a $5 place 6 is paid $5.83, rounded down', S({ place6: 5 }, [2, 4], 8).lines[0].profit === 5.83);
+  ok('hard 8 pays 9:1 on 4+4, loses on 6+2', S({ hard8: 5 }, [4, 4], 6).lines[0].profit === 45 && S({ hard8: 5 }, [6, 2], 6).lines[0].out === 'lose');
+  ok('hardways are off on the come-out', S({ hard8: 5 }, [3, 4], 0).lines.length === 0);
+  ok('field: 2 pays double, 12 triple, 9 even, 7 loses', S({ field: 10 }, [1, 1]).lines[0].profit === 20 && S({ field: 10 }, [6, 6]).lines[0].profit === 30 && S({ field: 10 }, [4, 5]).lines[0].profit === 10 && S({ field: 10 }, [3, 4]).lines[0].out === 'lose');
+  ok('one-roll bets win or lose on every roll', S({ seven: 5, yo: 5 }, [5, 6], 4).lines.every((l) => (l.key === 'yo' ? l.profit === 75 : l.out === 'lose')));
+  ok('a fresh come bet wins on a 7 (its own come-out)', S({ come: 10 }, [3, 4], 6).lines.some((l) => l.key === 'come' && l.out === 'win'));
+
+  // Bet rules.
+  const seat = { bank: 1000, bets: { pass: 10 } };
+  ok('pass line goes on only before the come-out', !!craps.betProblem(seat, 'pass', 10, 6, R) && !craps.betProblem({ bank: 1000, bets: {} }, 'pass', 10, 0, R));
+  ok('3-4-5x odds: max $50 on 6 behind $10', craps.maxOdds(10, 6, '345') === 50 && craps.maxOdds(10, 4, '345') === 30 && !!craps.betProblem(seat, 'passOdds', 51, 6, R) && !craps.betProblem(seat, 'passOdds', 50, 6, R));
+  ok('3-4-5x lay: 6x the flat bet', craps.maxOdds(10, 4, '345', true) === 60);
+  ok('10x lay on 6: lay enough to win $100', craps.maxOdds(10, 6, '10', true) === 120);
+  ok('come bets need a point', !!craps.betProblem({ bank: 100, bets: {} }, 'come', 10, 0, R));
+  ok('table minimum on flat bets, not on odds', !!craps.betProblem({ bank: 100, bets: {} }, 'pass', 2, 0, R) && !craps.betProblem(seat, 'passOdds', 2, 6, R));
+  ok('contract bets stay up once there is a point', !craps.canTakeDown('pass', 6) && craps.canTakeDown('pass', 0) && !craps.canTakeDown('come5', 6) && craps.canTakeDown('place6', 6));
+  ok('nonsense bets are refused', !!craps.betProblem(seat, 'place7', 5, 6, R) && !!craps.betProblem(seat, 'hard5', 5, 6, R) && !craps.validKey('evil'));
+
+  // A table: shooters, forced dice, timers.
+  const U = ['ann', 'ben'];
+  const ctx = (extra = {}) => ({ now: clock, rand: seeded(3), players: U.map((uid) => ({ uid })), hostUid: 'ann', ...extra });
+  let w = craps.start(U, { timed: true }, ctx());
+  for (const u of U) w = craps.act(w, u, { t: 'sit', bank: 500, name: u }, ctx());
+  ok('first to sit shoots', w.pub.shooter === 'ann');
+  w = craps.act(w, 'ann', { t: 'bet', key: 'pass', amt: 10 }, ctx());
+  w = craps.act(w, 'ben', { t: 'bets', list: [['dp', 10], ['place6', 12]] }, ctx());
+  ok('bets come out of the bank', w.pub.seats.ann.bank === 490 && w.pub.seats.ben.bank === 478);
+  w = craps.act(w, 'ben', { t: 'roll' }, ctx());
+  ok('only the shooter rolls', w.pub.phase === 'betting');
+  w = craps.act(w, 'ann', { t: 'roll' }, ctx({ dice: [2, 2] }));
+  ok('the dice tumble before they land', w.pub.phase === 'rolling');
+  w = craps.act(w, 'ann', { t: 'bet', key: 'field', amt: 5 }, ctx());
+  ok('no bets while the dice are in the air', !w.pub.seats.ann.bets.field);
+  clock += craps.TIMES.tumble;
+  w = craps.tick(w, ctx());
+  ok('come-out 4 sets the point', w.pub.point === 4 && w.pub.event === 'point' && w.pub.phase === 'betting');
+  w = craps.act(w, 'ann', { t: 'bet', key: 'passOdds', amt: 30 }, ctx());
+  w = craps.act(w, 'ann', { t: 'take', key: 'pass' }, ctx());
+  ok('odds go on; the pass line can\'t come off', w.pub.seats.ann.bets.passOdds === 30 && w.pub.seats.ann.bets.pass === 10);
+  w = craps.act(w, 'ann', { t: 'roll' }, ctx({ dice: [3, 3] }));
+  clock += craps.TIMES.tumble; w = craps.tick(w, ctx());
+  ok('a 6 pays ben\'s place 6 and nothing else', w.pub.seats.ben.net === 14 && w.pub.seats.ann.lines.length === 0);
+  w = craps.act(w, 'ann', { t: 'roll' }, ctx({ dice: [6, 1] }));
+  clock += craps.TIMES.tumble; w = craps.tick(w, ctx());
+  ok('seven-out: ann loses $40, ben wins on don\'t pass but loses the 6', w.pub.seats.ann.net === -40 && w.pub.seats.ben.net === 10 - 12 && w.pub.event === 'sevenout');
+  ok('the dice pass to the next player', w.pub.shooter === 'ben' && w.pub.point === 0);
+  clock += craps.TIMES.roll + 1;
+  w = craps.tick(w, ctx());
+  ok('a shooter who stalls has the dice rolled for them', w.pub.phase === 'rolling');
+  clock += craps.TIMES.tumble; w = craps.tick(w, ctx());
+  w = craps.tick(w, ctx({ players: [{ uid: 'ann' }] }));
+  ok('a shooter who leaves passes the dice', w.pub.shooter === 'ann');
+
+  // Through the database and a new host.
+  const room = { game: null, vault: null, writeGame(p) { this.game = viaDb(p); return Promise.resolve(); }, writeVault(v) { this.vault = viaDb(v); return Promise.resolve(); } };
+  const h = new Host(room, { players: () => [{ uid: 'ann' }], now: () => clock, rand: seeded(4), hostUid: 'ann' });
+  await h.start({ game: 'craps' });
+  await h.act('ann', { t: 'sit', bank: 100, name: 'Ann' });
+  const h2 = new Host(room, { players: () => [{ uid: 'ann' }], now: () => clock, rand: seeded(5), hostUid: 'ann' });
+  ok('a craps table resumes from the database', h2.resume(room.game, room.vault) && h2.engine === craps);
+  await h2.act('ann', { t: 'bet', key: 'pass', amt: 10 });
+  ok('...and takes bets', room.game.seats.ann.bets.pass === 10);
+
+  // Soak: random bets and rolls, the money never leaks.
+  const rand = seeded(77);
+  let t = craps.start(['x'], {}, { now: 0 });
+  t = craps.act(t, 'x', { t: 'sit', bank: 1000000 }, { players: [{ uid: 'x' }] });
+  const keys = ['pass', 'dp', 'passOdds', 'dpOdds', 'come', 'dc', 'field', 'seven', 'anyCraps', 'yo', 'aces', 'aceDeuce', 'twelve',
+    ...[4, 5, 6, 8, 9, 10].flatMap((n) => [`place${n}`, `comeOdds${n}`, `dcOdds${n}`]), 'hard4', 'hard6', 'hard8', 'hard10'];
+  let leak = '';
+  let net = 0;
+  const start0 = 1000000;
+  for (let i = 0; i < 20000 && !leak; i++) {
+    const c = { now: i * 10000, rand, players: [{ uid: 'x' }] };
+    for (let j = 0; j < 3; j++) t = craps.act(t, 'x', { t: 'bet', key: keys[Math.floor(rand() * keys.length)], amt: 5 + Math.floor(rand() * 30) }, c);
+    if (rand() < 0.1) t = craps.act(t, 'x', { t: 'take', key: '*' }, c);
+    t = craps.act(t, 'x', { t: 'roll' }, c);
+    t = craps.tick(t, { ...c, now: c.now + 5000 });
+    net += t.pub.seats.x.net;
+    const s = t.pub.seats.x;
+    const onTable = Object.values(s.bets).reduce((a, b) => a + b, 0);
+    if (Math.abs(s.bank + onTable - (start0 + net)) > 0.01) leak = `roll ${i}: ${s.bank + onTable} vs ${start0 + net}`;
+    if (Object.keys(s.bets).some((k) => !craps.validKey(k))) leak = 'bad key ' + Object.keys(s.bets);
+  }
+  ok('20,000 random rolls: bank plus chips on the table always equals buy-in plus winnings', !leak, leak);
+}
+
+console.log('\ncraps odds');
+{
+  const edge = (k, r) => co.houseEdge(k, r);
+  const want = { pass: 1.41, dp: 1.36, come: 1.41, dc: 1.36, place6: 1.52, place5: 4.0, place4: 6.67, field: 2.78, hard6: 9.09, hard4: 11.11, seven: 16.67, anyCraps: 11.11, yo: 11.11, aces: 13.89, aceDeuce: 11.11, passOdds: 0, comeOdds5: 0 };
+  const off = Object.entries(want).filter(([k, v]) => Math.abs(edge(k, { field12: 3 }) - v) > 0.006);
+  ok('every house edge matches the published figure', !off.length, off.map(([k]) => `${k} ${edge(k, { field12: 3 }).toFixed(3)}`).join(', '));
+  ok('field with a double 12 is 5.56%', Math.abs(edge('field', { field12: 2 }) - 5.56) < 0.006);
+  ok('pass line wins 49.29% of the time', Math.abs(co.PASS_WIN - 0.4929) < 0.0001);
+  ok('the 36 ways add up', co.P.reduce((a, b) => a + b, 0) > 0.9999999);
+  ok('6 before 7 is 5/11', Math.abs(co.beforeSeven(6) - 5 / 11) < 1e-12);
+  ok('advice: take odds when there is a point', co.advice({ bets: { pass: 10 } }, 6, craps.DEFAULT_RULES)[0].kind === 'odds');
+  ok('advice: warns about any 7', co.advice({ bets: { pass: 10, passOdds: 50, seven: 5 } }, 6, craps.DEFAULT_RULES).some((x) => x.kind === 'warn'));
+  ok('preset max odds fills to the limit', JSON.stringify(co.presetBets('odds', { bets: { pass: 10, come9: 5 } }, 6, craps.DEFAULT_RULES)) === JSON.stringify([['passOdds', 50], ['comeOdds9', 20]]));
+  ok('preset 6 & 8 uses $6 units', JSON.stringify(co.presetBets('six8', { bets: {} }, 6, craps.DEFAULT_RULES)) === JSON.stringify([['place6', 6], ['place8', 6]]));
+  const q = Array.from({ length: 200 }, () => co.payoutQuestion(seeded(8)));
+  const rq = seeded(9);
+  const qs = Array.from({ length: 300 }, () => co.payoutQuestion(rq, { field12: 3 }));
+  ok('payout drill: four distinct options with the answer among them', qs.every((x) => x.options.length === 4 && new Set(x.options).size === 4 && x.options.includes(x.answer)) && q.length === 200);
+  ok('payout of $30 on place 6 is $35', co.payout('place6', 30) === 35);
+  ok('every lesson\'s quiz answer is one of its options', LESSONS.every((l) => !l.quiz || (l.quiz.answer >= 0 && l.quiz.answer < l.quiz.options.length)));
+  ok('the narrator explains a seven-out', /seven-out/.test(explain({ total: 7, hard: false, before: 6, after: 0, event: 'sevenout' })));
+}
 
 /* ── lobby ─────────────────────────────────────────────────────────────── */
 console.log('\nlobby');

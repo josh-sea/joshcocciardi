@@ -200,14 +200,38 @@ function block(title, s, startBank) {
   </div>`;
 }
 
+const BET_LABEL = { pass: 'Pass line', dp: 'Don\'t pass', passOdds: 'Pass odds', dpOdds: 'Lay odds', come: 'Come', dc: 'Don\'t come', field: 'Field', seven: 'Any 7', anyCraps: 'Any craps', yo: 'Yo', aces: 'Aces', aceDeuce: 'Ace-deuce', twelve: 'Twelve' };
+const betLabel = (k) => BET_LABEL[k] || k.replace(/^place/, 'Place ').replace(/^hard/, 'Hard ').replace(/^comeOdds/, 'Come odds ').replace(/^dcOdds/, 'Lay odds ');
+
+function crapsBlock(title, c) {
+  if (!c || !c.rolls) return '';
+  const good = c.action ? c.goodAction / c.action : 0;
+  const rows = Object.entries(c.byBet).sort((a, b) => b[1].action - a[1].action).slice(0, 10);
+  return `<div class="card stats-card"><h3>🎲 Craps · ${title}</h3>
+    <div class="kpis">
+      <div><span>Rolls</span><b>${c.rolls}</b></div>
+      <div><span>Net</span><b class="${c.net > 0 ? 'up' : c.net < 0 ? 'down' : ''}">${money(c.net, { sign: true })}</b></div>
+      <div><span>Edge you paid</span><b>${money(c.edgePaid)}</b></div>
+      <div><span>On good bets</span><b>${c.action ? pct(good) : '–'}</b></div>
+    </div>
+    <p class="small">"Edge you paid" is what your bets cost on average, ${money(c.action)} of action at their house edges. Luck decides any one night; this is what your betting style costs over many.
+      ${good < 0.8 && c.action > 50 ? ' <b>Most of it comes from the high-edge bets:</b> moving that money to odds would cut it sharply.' : ''}</p>
+    <p class="small muted">${c.points} point${c.points === 1 ? '' : 's'} made · ${c.sevenOuts} seven-out${c.sevenOuts === 1 ? '' : 's'} · biggest roll ${money(c.biggest, { sign: true })}</p>
+    ${rows.length ? `<table class="odds-t">${rows.map(([k, b]) => `<tr><th>${esc(betLabel(k))}</th><td class="num">${money(b.action)}</td><td class="num ${b.net > 0 ? 'rich' : b.net < 0 ? 'poor' : ''}">${money(b.net, { sign: true })}</td></tr>`).join('')}</table><p class="small muted">Bet, money settled on it, and what it won or lost.</p>` : ''}
+    ${c.history.length > 1 ? `<h4>Bankroll</h4>${sparkline(c.history)}` : ''}
+  </div>`;
+}
+
 export function statsScreen(el, { get, onBack, onDrill, onReset }) {
   function draw() {
-    const { session, life, startBank } = get();
+    const { session, life, startBank, game } = get();
     const lk = leaks(life);
+    const bjAny = life.hands > 0 || life.mistakes.length > 0 || life.drills.strategy.n > 0 || game !== 'craps';
     el.innerHTML = `<header class="bar"><button class="ghost" data-back>← Back</button><b>Your stats</b><span></span></header>
       <div class="stats">
-        ${block('This session', session, startBank)}
-        <div class="card"><h3>Your leaks</h3>
+        ${game === 'craps' ? crapsBlock('this session', session.craps) : ''}
+        ${session.hands || game !== 'craps' ? block('Blackjack · this session', session, startBank) : ''}
+        ${bjAny ? `        <div class="card"><h3>Blackjack leaks</h3>
           ${lk.length ? `<p class="small muted">The chart cells you miss most, at the table and in the drill.</p>
             <ol class="leaks">${lk.map((x) => `<li><b>${esc(x.name)}</b><span>${x.miss} of ${x.n} missed</span></li>`).join('')}</ol>
             <button class="btn gold" data-drill>Drill these</button>` : '<p class="muted">No leaks yet. Play with Coach on, or try the strategy drill.</p>'}
@@ -215,10 +239,15 @@ export function statsScreen(el, { get, onBack, onDrill, onReset }) {
         <div class="card"><h3>Recent mistakes</h3>
           ${life.mistakes.length ? `<ul class="mistakes">${life.mistakes.slice(0, 12).map((m) => `<li><b>${esc(m.name)}</b>: you played ${ACTION_NAME[m.did] || m.did}, the chart says ${ACTION_NAME[m.should] || m.should}${m.loss ? ` <span class="muted">(−${Math.round(m.loss * 100)}¢/$1)</span>` : ''}${m.drill ? ' <em class="tag">drill</em>' : ''}</li>`).join('')}</ul>` : '<p class="muted">None yet.</p>'}
         </div>
-        ${block('All time', life, null)}
+` : ''}
+        ${bjAny ? block('Blackjack · all time', life, null) : ''}
+        ${game !== 'craps' ? crapsBlock('this session', session.craps) : ''}
+        ${crapsBlock('all time', life.craps)}
         <div class="card"><h3>Drills</h3>
-          <p>Strategy: ${life.drills.strategy.ok} of ${life.drills.strategy.n} right · best streak ${life.drills.strategy.best}</p>
-          <p>Count: ${life.drills.count.ok} of ${life.drills.count.n} right</p></div>
+          <p>Blackjack strategy: ${life.drills.strategy.ok} of ${life.drills.strategy.n} right · best streak ${life.drills.strategy.best}</p>
+          <p>Count: ${life.drills.count.ok} of ${life.drills.count.n} right</p>
+          ${life.craps ? `<p>Craps payouts: ${life.craps.drill.ok} of ${life.craps.drill.n} right · best streak ${life.craps.drill.best}</p>
+          <p>Craps lessons: ${Object.keys(life.craps.lessons || {}).length} of 9</p>` : ''}</div>
         <p class="center"><button class="btn ghost small" data-reset>Reset all stats</button></p>
         <p class="small muted center">Kept on this device only.</p>
       </div>`;

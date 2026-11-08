@@ -276,9 +276,9 @@ const PROJECTS = [
     host: "joshcocciardi.com/casino",
     kind: "play",
     title: "Casino",
-    blurb: "Blackjack to learn on: hints, live odds, a coach, and tables with friends.",
+    blurb: "Blackjack and craps to learn on: hints, live odds, a coach, and tables with friends.",
     description:
-      "Pick a bankroll and practise one on one with the dealer, or open a table for up to five friends. Hints show the basic strategy move, a coach grades every decision, and an odds drawer swipes in with what each move is worth from the cards left in the shoe. Strategy and card counting drills on the side.",
+      "Pick a bankroll and practise alone or open a table for friends. Blackjack has strategy hints, a coach that grades every decision and an odds drawer with what each move is worth from the cards left in the shoe. Craps has a hands-on tutorial, a narrator for every roll, and the house edge on every bet. Strategy, counting and payout drills on the side.",
     tech: ["JavaScript", "Web Audio", "Firebase Realtime Database"],
     link: "/projects/casino",
   },
