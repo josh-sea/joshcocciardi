@@ -26,7 +26,7 @@ import { strategyDrill, countDrill, statsScreen } from './trainers.js';
 import { $, esc, money, toast, unlockAudio, sound, setMuted, store, signed, buzz, setHtml } from './ui.js';
 
 const ME = 'me';
-const DEFAULT_SETTINGS = { hints: true, coach: true, showCount: false, deviations: false, sound: true, narrate: true };
+const DEFAULT_SETTINGS = { hints: true, coach: true, showCount: false, deviations: false, sound: true, narrate: true, table3d: true, voice: true };
 const SOLO_KEY = { blackjack: 'casino.solo', craps: 'casino.solo.craps' };
 const TABLE_SCREEN = { blackjack: 'table', craps: 'craps' };
 
@@ -627,6 +627,8 @@ const TOGGLES = [
 ];
 
 const CRAPS_TOGGLES = [
+  ['table3d', '3D table', 'A real table: flick up to throw the dice, tap the felt to bet. Off for the simple stacked layout.'],
+  ['voice', 'Stickman voice', 'The stickman calls each roll out loud, slang and all (uses the phone\'s built-in voice).'],
   ['hints', 'Hints and smart bets', 'Nudges like "take odds now", warnings about high-edge bets, and one-tap setups for the good bets.'],
   ['narrate', 'Narrator', 'Explain every roll in plain English, and what it did to each of your bets.'],
   ['coach', 'Coach', 'A quick note the first time you put money on a high-edge bet.'],

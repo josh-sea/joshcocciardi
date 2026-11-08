@@ -59,6 +59,32 @@ props (any 7, any craps, yo, aces, ace-deuce, twelve). Rules: odds 1x, 2x,
 odds and hardways are off on the come-out, as at most casinos. Winning bets
 are paid and stay up; odds and come bets on a number come back with the win.
 
+### The table
+
+Craps plays on a real 3D table (three.js): felt with the full layout
+printed on it, wooden rails, and a back wall with rubber pyramids. **Flick
+up** from the bottom of the table to throw (or tap Roll); how hard and which
+way you flick decides how the dice fly. They roll with rigid-body physics
+(cannon-es), click off the felt and the wall, and settle. **Tap the felt** to
+bet; a number box asks whether you mean a place bet or odds on your come
+bet. Chips slide out from your rail, get swept to the dealer when they lose,
+and get paid beside the bet before coming back to you. The puck moves to the
+point. Everyone else's chips show as smaller stacks.
+
+The dice are fair: the engine decides what they show, every phone replays
+the shooter's actual flick through the same simulation, and the faces are
+numbered once the dice settle so the face that landed up shows the engine's
+number (opposite faces still add to 7). See `js/dice-physics.js`.
+
+The **stickman** calls every roll in the table's slang ("Eighter from
+Decatur, the point is eight!", "Yo-leven!", "Seven out, line away, pay the
+don'ts"), out loud if the phone has a voice, and the **rail** cheers, groans
+and heckles in speech bubbles, with cheers and groans to match. At a table
+with friends, every phone hears the same calls.
+
+Settings turn off the 3D table (for the simple stacked layout), the voice,
+or the narrator. Without WebGL the stacked layout is used.
+
 ### Learning aids
 
 | Aid | What it does |
@@ -115,6 +141,9 @@ hand the host's seat over only once the host has gone offline.
 | `js/blackjack.js` | The game. Pure |
 | `js/craps.js`, `js/craps-odds.js`, `js/craps-lessons.js` | Craps: the game, its maths and advice, the tutorial. Pure |
 | `js/craps-view.js`, `js/craps-learn.js` | The craps table and drawer; the tutorial and payouts drill |
+| `js/craps-table3d.js` | The 3D table: felt, chips, puck, dice playback, tap and flick. Loaded on demand |
+| `js/dice-physics.js` | The throw, simulated with cannon-es, and the face numbering |
+| `js/craps-voice.js` | The stickman's calls, the rail's shouts, the slang. Pure |
 | `js/host.js` | Runs the game and writes it out |
 | `js/stats.js`, `js/drills.js`, `js/lobby.js` | Your record, the trainers' questions, table codes. Pure |
 | `js/net.js` | Firebase: sign-in, presence, the table |
@@ -142,7 +171,13 @@ push and move, odds and lay payouts, bets that are off on the come-out,
 rounding, bet limits and contract bets, shooters passing the dice, the
 roll timer, a table resumed from the database, and 20,000 random rolls
 where bank plus chips on the table must always equal buy-in plus winnings.
-Every house edge is checked against the published figure. Runs in CI.
+Every house edge is checked against the published figure. The dice face
+numbering, throw clamping and the stickman's calls are checked too. With
+cannon-es installed (`npm i cannon-es`, or `CANNON_ES=<path to
+cannon-es.js>`) the suite also throws 120 dice for real: every one settles
+flat on the table, shows the engine's numbers, finishes inside the tumble
+time, and plays out identically from the same throw. Runs in CI (the
+physics part is skipped there).
 
 The rules have their own suite against the database emulator:
 `functions/test/casino-rules.test.mjs` (see `functions/test/README.md`).

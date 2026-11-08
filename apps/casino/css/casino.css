@@ -553,3 +553,41 @@ table.chart td.on { outline: 3px solid var(--gold); outline-offset: 0; position:
 .btn.ans.right { box-shadow: 0 0 0 3px var(--good); opacity: 1; }
 .btn.ans.wrong { box-shadow: 0 0 0 3px var(--bad); opacity: 1; }
 .lesson-nav { margin-top: 18px; }
+
+/* ── the 3D craps table ─────────────────────────────────────────────── */
+
+.stage-wrap { position: relative; }
+.stage { height: 0; }
+#craps.three .stage { height: min(66vh, 640px); border-radius: 12px; overflow: hidden; touch-action: none; background: #061f16; }
+#craps.three .dicebar, #craps.three [data-layout] { display: none; }
+#craps.three .cfelt { padding: 6px; }
+.table3d { display: block; width: 100%; height: 100%; }
+.stage-puck { display: none; }
+#craps.three .stage-puck { display: flex; flex-direction: column; align-items: center; gap: 2px; position: absolute; right: 8px; top: 8px; pointer-events: none; }
+.stage-puck small { font-size: 0.68rem; color: #fff7d6; text-shadow: 0 1px 2px #000; }
+.puck.small2 { width: 44px; height: 44px; font-size: 0.68rem; }
+.dealer-says {
+  margin: 6px 0; padding: 8px 12px; border-radius: 14px 14px 14px 4px; background: #fffaf0; color: #1b1b1b; font-size: 0.9rem;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35); line-height: 1.35;
+}
+.dealer-says b { display: block; font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: #a5101f; }
+#craps.three .dealer-says { position: absolute; top: 6px; left: 6px; right: 62px; margin: 0; z-index: 3; padding: 6px 10px; font-size: 0.82rem; background: rgba(255, 250, 240, 0.93); }
+.dealer-says.pop, .crowd { animation: bubble 0.28s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes bubble { from { transform: scale(0.6) translateY(8px); opacity: 0; } }
+.bubbles { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.crowd {
+  position: absolute; max-width: 46%; padding: 6px 10px; border-radius: 14px; background: rgba(20, 20, 20, 0.85); color: #fff;
+  font-size: 0.82rem; font-weight: 600; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4); animation: bubble 0.28s cubic-bezier(0.2, 1.4, 0.4, 1), fade 3.2s ease forwards;
+}
+.crowd b { display: block; font-size: 0.64rem; color: var(--gold); letter-spacing: 0.06em; }
+.crowd.left { left: 6px; border-bottom-left-radius: 4px; }
+.crowd.right { right: 6px; border-bottom-right-radius: 4px; text-align: right; }
+@keyframes fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
+.chooser { position: absolute; z-index: 4; display: grid; gap: 4px; width: 220px; padding: 6px; border-radius: 12px; background: rgba(8, 30, 21, 0.95); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5); }
+.chooser[hidden] { display: none; }
+.flick-hint {
+  position: absolute; left: 8px; bottom: 6px; margin: 0; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  background: rgba(0, 0, 0, 0.55); color: #fff7d6; font-size: 0.78rem; font-weight: 700; pointer-events: none; animation: nudge 1.6s ease-in-out infinite;
+}
+@keyframes nudge { 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .flick-hint, .crowd, .dealer-says.pop { animation: none; } }

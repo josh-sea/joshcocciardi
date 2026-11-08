@@ -138,3 +138,83 @@ export function sparkline(values, { w = 300, h = 64, start = null } = {}) {
     ${base !== null ? `<line x1="0" x2="${w}" y1="${base}" y2="${base}" class="base"/>` : ''}
     <polyline points="${pts.join(' ')}"/></svg>`;
 }
+
+/* ── the craps table's noise ─────────────────────────────────────────── */
+
+function noiseBuffer(sec) {
+  const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * sec), ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+
+/* A die hitting felt or the wall: a short click, louder for harder hits. */
+export function diceClick(strength = 0.5) {
+  if (!ac || muted) return;
+  const t0 = ac.currentTime;
+  const src = ac.createBufferSource();
+  src.buffer = noiseBuffer(0.05);
+  const bp = ac.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 2200 + Math.random() * 1800; bp.Q.value = 4;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.15 + 0.5 * strength, t0 + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+  src.connect(bp).connect(g).connect(ac.destination);
+  src.start(t0);
+}
+
+/* The rail: a cheer is a swell of bright noise with a few whoops on top;
+ * a groan is a dark, falling murmur.
+ */
+export function crowdSound(kind) {
+  if (!ac || muted) return;
+  const t0 = ac.currentTime;
+  const dur = kind === 'cheer' ? 1.8 : 1.4;
+  const src = ac.createBufferSource();
+  src.buffer = noiseBuffer(dur);
+  const f = ac.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.setValueAtTime(kind === 'cheer' ? 900 : 500, t0);
+  f.frequency.linearRampToValueAtTime(kind === 'cheer' ? 1400 : 250, t0 + dur);
+  f.Q.value = 0.8;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(kind === 'cheer' ? 0.35 : 0.22, t0 + 0.25);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f).connect(g).connect(ac.destination);
+  src.start(t0);
+  const voices = kind === 'cheer' ? 4 : 3;
+  for (let i = 0; i < voices; i++) {
+    const o = ac.createOscillator(), og = ac.createGain();
+    o.type = kind === 'cheer' ? 'triangle' : 'sawtooth';
+    const at = t0 + 0.05 + Math.random() * 0.35;
+    const base = kind === 'cheer' ? 380 + Math.random() * 300 : 160 + Math.random() * 60;
+    o.frequency.setValueAtTime(base, at);
+    o.frequency.exponentialRampToValueAtTime(kind === 'cheer' ? base * 1.9 : base * 0.6, at + 0.5);
+    og.gain.setValueAtTime(0.0001, at);
+    og.gain.exponentialRampToValueAtTime(kind === 'cheer' ? 0.05 : 0.035, at + 0.06);
+    og.gain.exponentialRampToValueAtTime(0.0001, at + 0.7);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = kind === 'cheer' ? 2500 : 700;
+    o.connect(lp).connect(og).connect(ac.destination);
+    o.start(at); o.stop(at + 0.75);
+  }
+}
+
+/* The stickman, out loud, if the phone can talk. */
+let voice = null;
+export function speak(text, { on = true } = {}) {
+  try {
+    if (!on || muted || !window.speechSynthesis) return;
+    const clean = String(text).replace(/\(.*?\)/g, '').replace(/[!]{2,}/g, '!');
+    if (!voice) {
+      const vs = speechSynthesis.getVoices();
+      voice = vs.find((v) => /en[-_]US/i.test(v.lang) && /male|daniel|alex|fred/i.test(v.name)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+    }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(clean);
+    if (voice) u.voice = voice;
+    u.rate = 1.12; u.pitch = 0.9; u.volume = 0.9;
+    speechSynthesis.speak(u);
+  } catch { /* no voice here */ }
+}
