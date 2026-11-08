@@ -324,9 +324,27 @@
 }
 .pl-star[aria-pressed="true"] { color: var(--gold); }
 
+/* Ticking a ride off, from the list rather than only from a suggestion
+ * card. Same size and hit area as the star beside it.
+ */
+.pl-tick {
+  flex: 0 0 auto;
+  width: 30px; height: 30px;
+  font: inherit; font-size: 14px; line-height: 1;
+  color: #4C4169;
+  background: transparent; border: 0;
+  cursor: pointer;
+}
+.pl-tick[aria-pressed="true"] { color: #7BD88F; }
+.pl-star:focus-visible,
+.pl-tick:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 6px; }
+
+/* The hour a Lightning Lane runs for, beside the time you picked. */
+.pl-llfor { font-size: 12px; color: #8E80AE; align-self: center; }
+
 .pl-donelist { display: flex; flex-wrap: wrap; gap: 6px; }
 .pl-donelist:empty::after {
-  content: 'Nothing yet. Tap "Rode it" on a card.';
+  content: 'Nothing yet. Tap "Rode it" on a card, or the tick beside any ride.';
   font-size: 12px; color: #8E80AE;
 }
 .pl-donelist button {
@@ -609,3 +627,40 @@
 .pl-hour-row[data-big="yes"] .pl-hour-kind { color: var(--gold); }
 
 .pl-hour-quiet { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: #776A95; }
+
+/* ── signing in, and the days behind you ───────────────────────────────────
+ *
+ * Deliberately at the bottom and quiet. The planner works signed out, and
+ * an account prompt competing with the wait times would be selling
+ * something nobody opened the app for.
+ */
+.pl-account {
+  margin: 18px 0 4px;
+  padding: 12px;
+  border: 1px solid rgba(232,179,60,0.18);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+}
+.pl-acct-says { margin: 0 0 8px; font-size: 12px; color: #9D90BC; line-height: 1.45; }
+.pl-acct-in, .pl-acct-email { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pl-account button {
+  font: inherit; font-size: 13px; font-weight: 700;
+  color: #150E24; background: var(--gold);
+  border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer;
+}
+.pl-account button[disabled] { opacity: 0.55; cursor: progress; }
+.pl-account button.pl-acct-alt {
+  color: var(--gold); background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(232,179,60,0.45);
+}
+.pl-acct-email label { font-size: 12px; color: #9D90BC; }
+.pl-acct-email input {
+  flex: 1 1 160px; min-width: 0;
+  font: inherit; font-size: 13px;
+  color: #EDE7F7; background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(232,179,60,0.25); border-radius: 8px; padding: 7px 10px;
+}
+.pl-history { display: flex; flex-direction: column; gap: 8px; }
+.pl-histrow { display: flex; flex-direction: column; gap: 2px; }
+.pl-histrow b { font-size: 12px; color: var(--gold); }
+.pl-histrow span { font-size: 12px; color: #8E80AE; line-height: 1.4; }

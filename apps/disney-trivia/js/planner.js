@@ -14,6 +14,10 @@ import { bars, bestAhead, verdict, verdictWords, rightNow, hasCurve, coversUntil
 import { whatsOn } from './whatson.js';
 import { liveFor, hoursFor, parkDate, parkClock, ageWords } from './parkdata.js';
 import { nudge as nudgeArchive } from './history.js';
+import {
+  PREFS_KEY, dayKey, parseDayKey, freshPrefs, freshDay, readPrefs, readDay,
+  llWindow, byStart, migrate, withStamp, pickNewer, adopt,
+} from './plan.js';
 
 const $ = (id) => document.getElementById(id);
 const PARK_ORDER = ['mk', 'ep', 'hs', 'ak'];
@@ -26,25 +30,197 @@ let here = null;          // { lat, lng } from geolocation
 let watchId = null;
 let busy = false;
 
-/* The day, kept in localStorage. Firestore would be nicer for sharing across
- * the family's phones, but it would also mean a sign-in and a network round
- * trip before you can tick off a ride, in a place with no signal. Local wins
- * for v1; the rules for park_plans are already in place for when it does not.
+/* Two things, with two different lifetimes. See plan.js: your must-dos and
+ * how you walk are not facts about Friday, and filing them under a date is
+ * why they were gone every morning.
+ *
+ * Still localStorage, because a tick-off has to work standing in a queue
+ * with no signal. Sync is layered on top of this rather than replacing it.
  */
-const dayKey = () => `parkPlanner.day.${parkDate()}.${park}`;
-const freshDay = () => ({ done: [], mustDo: [], llWindows: [], skipHeld: true, pace: DEFAULT_PACE, maxWaitMin: null });
-
+let prefs = freshPrefs();
 let day = freshDay();
 
-const loadDay = () => {
+const keyForToday = () => dayKey(parkDate(), park);
+
+const read = (key) => {
   try {
-    const raw = localStorage.getItem(dayKey());
-    day = raw ? { ...freshDay(), ...JSON.parse(raw) } : freshDay();
-  } catch { day = freshDay(); }
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+};
+const write = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ }
+};
+
+const loadPrefs = () => { prefs = readPrefs(read(PREFS_KEY)); };
+const loadDay = () => { day = readDay(read(keyForToday())); };
+
+/* Both saves write the phone synchronously and then push upward without
+ * being waited on. A tick-off must not wait for a round trip: that is the
+ * whole reason the phone stayed the copy the app reads and writes.
+ */
+const savePrefs = () => {
+  write(PREFS_KEY, withStamp(prefs));
+  pushUp('prefs').catch(() => {});
 };
 const saveDay = () => {
-  try { localStorage.setItem(dayKey(), JSON.stringify(day)); } catch { /* private mode */ }
+  write(keyForToday(), withStamp(day));
+  pushUp('day').catch(() => {});
 };
+
+/* Move what is already stored into the new shape, once.
+ *
+ * Without this the change reads as "the app forgot everything I had
+ * starred", which is the complaint it exists to fix. Keyed on the
+ * preferences record existing at all, so it runs once and then never again.
+ */
+function migrateOnce() {
+  if (read(PREFS_KEY)) return;
+  let keys = [];
+  try { keys = Object.keys(localStorage); } catch { return; }
+
+  const entries = [];
+  for (const key of keys) {
+    const at = parseDayKey(key);
+    if (at) entries.push({ key, date: at.date, value: read(key) });
+  }
+
+  const moved = migrate(entries);
+  write(PREFS_KEY, moved.prefs);
+  for (const d of moved.days) write(d.key, d.value);
+}
+
+/* ── signed in, so the plan outlives this browser ──────────────────────────
+ *
+ * Firebase is loaded only when it is going to be used: on a device that has
+ * signed in before, or one opening an emailed link. The planner's first
+ * promise is that it starts with no network at all, and 300KB of auth SDK
+ * on every open to discover that nobody is signed in would break it.
+ *
+ * Whether to even try is therefore a local flag, not a question for
+ * Firebase, because asking Firebase means loading it.
+ */
+const WANTS_SYNC = 'parkPlanner.signedIn';
+const wantsSync = () => { try { return localStorage.getItem(WANTS_SYNC) === 'yes'; } catch { return false; } };
+const setWantsSync = (on) => {
+  try {
+    if (on) localStorage.setItem(WANTS_SYNC, 'yes');
+    else localStorage.removeItem(WANTS_SYNC);
+  } catch { /* private mode */ }
+};
+// An emailed link comes back with its one-time code in the query string.
+const looksLikeLink = () => /[?&](oobCode=|mode=signIn)/.test(location.search);
+
+let account = null;    // the account.js module, once loaded
+let sync = null;       // the plansync.js module, once loaded
+let user = null;       // the signed-in user, or null
+let syncNote = '';     // what to tell them about the last sync
+let syncStarted = false;
+
+async function firebase() {
+  if (!account) [account, sync] = await Promise.all([import('./account.js'), import('./plansync.js')]);
+  return { account, sync };
+}
+
+/* Pull the cloud copy and reconcile it with this device. See plan.js: last
+ * write wins per record, and on a first sign-in an empty cloud adopts
+ * whatever is already here, so signing in never reads as "it forgot".
+ */
+async function pullDown() {
+  if (!user || !sync) return;
+  const today = parkDate();
+
+  const [remotePrefs, remoteDay] = await Promise.all([
+    sync.fetchPrefs(user.uid),
+    sync.fetchDay(user.uid, today, park),
+  ]);
+
+  const p = adopt(read(PREFS_KEY), remotePrefs);
+  if (p.value) {
+    prefs = readPrefs(p.value);
+    write(PREFS_KEY, p.value);
+    if (p.from === 'local') await sync.pushPrefs(user.uid, withStamp(prefs));
+  }
+
+  const d = adopt(read(keyForToday()), remoteDay);
+  if (d.value) {
+    day = readDay(d.value);
+    write(keyForToday(), d.value);
+    if (d.from === 'local') await sync.pushDay(user.uid, today, park, withStamp(day));
+  }
+
+  paintAccount();
+  renderLL();
+  render();
+  drawHistory();
+}
+
+/* Writes go to the phone first and always, then upward. A failed push is
+ * said out loud rather than swallowed: the one thing worse than not syncing
+ * is telling someone their plan is saved when it is not.
+ */
+async function pushUp(what) {
+  if (!user || !sync) return;
+  const ok = what === 'prefs'
+    ? await sync.pushPrefs(user.uid, withStamp(prefs))
+    : await sync.pushDay(user.uid, parkDate(), park, withStamp(day));
+  syncNote = ok ? '' : 'Saved on this device. Could not reach your account just now.';
+  paintAccount();
+}
+
+function paintAccount() {
+  const says = $('pl-acct-says');
+  const inBox = $('pl-acct-in');
+  const out = $('pl-acct-out');
+  if (!says) return;
+
+  if (user) {
+    says.textContent = syncNote
+      || `Saved to your account (${user.email || 'signed in'}), so it survives this browser.`;
+    inBox.hidden = true;
+    $('pl-acct-email').hidden = true;
+    out.hidden = false;
+  } else {
+    says.textContent = 'Saved on this device only. Sign in and your stars, '
+      + 'Lightning Lanes and what you have ridden follow you to any phone.';
+    inBox.hidden = false;
+    out.hidden = true;
+  }
+}
+
+async function drawHistory() {
+  const fold = $('pl-history-fold');
+  if (!fold) return;
+  if (!user || !sync) { fold.hidden = true; return; }
+
+  const days = await sync.fetchHistory(user.uid);
+  const withAny = days.filter((d) => d.done.length);
+  fold.hidden = !withAny.length;
+  $('pl-history-count').textContent = withAny.length ? `${withAny.length}` : '';
+
+  const name = (id) => {
+    for (const k of PARK_ORDER) {
+      const hit = ((catalogue.parks[k] || {}).rides || []).find((r) => r.id === id);
+      if (hit) return hit.name;
+    }
+    return null;
+  };
+
+  $('pl-history').replaceChildren(...withAny.map((d) => {
+    const row = document.createElement('div');
+    row.className = 'pl-histrow';
+    const short = (catalogue.parks[d.park] || {}).short || d.park;
+    const rides = d.done.map(name).filter(Boolean);
+    const head = document.createElement('b');
+    head.textContent = `${d.date} · ${short}`;
+    const body = document.createElement('span');
+    body.textContent = rides.length
+      ? `${rides.length} ridden: ${rides.join(', ')}`
+      : `${d.done.length} ridden`;
+    row.append(head, body);
+    return row;
+  }));
+}
 
 /* ── where you are ───────────────────────────────────────────────────────── */
 
@@ -218,12 +394,12 @@ function render() {
   const state = {
     from,
     now: new Date(),
-    pace: day.pace,
+    pace: prefs.pace,
     done: day.done,
-    mustDo: day.mustDo,
+    mustDo: prefs.mustDo,
     llWindows: day.llWindows,
-    skipHeld: day.skipHeld,
-    maxWaitMin: day.maxWaitMin,
+    skipHeld: prefs.skipHeld,
+    maxWaitMin: prefs.maxWaitMin,
     /* The deadline that makes a must-do mean something. Without it every
      * must-do stays a mild preference all day and you go home without
      * riding it. */
@@ -272,8 +448,8 @@ function whyNothing() {
 
   const left = rides.filter((r) => !day.done.includes(r.id));
   if (!left.length) return 'You have ridden everything with a queue. Go and get a Dole Whip.';
-  if (day.maxWaitMin !== null) {
-    return `Nothing is under ${day.maxWaitMin} minutes right now. Raise the limit under "How you walk", or wait it out.`;
+  if (prefs.maxWaitMin !== null) {
+    return `Nothing is under ${prefs.maxWaitMin} minutes right now. Raise the limit under "How you walk", or wait it out.`;
   }
   if (day.llWindows.length) {
     return 'Nothing fits before your next Lightning Lane. Head that way.';
@@ -444,7 +620,7 @@ function renderList(candidates) {
     const row = document.createElement('div');
     row.className = 'pl-row';
     if (day.done.includes(ride.id)) row.classList.add('done');
-    if (day.mustDo.includes(ride.id)) row.classList.add('must');
+    if (prefs.mustDo.includes(ride.id)) row.classList.add('must');
 
     const hasWait = typeof l.waitMin === 'number';
     const wait = hasWait ? `${l.waitMin}` : '–';
@@ -467,18 +643,46 @@ function renderList(candidates) {
     const star = document.createElement('button');
     star.type = 'button';
     star.className = 'pl-star';
-    star.setAttribute('aria-pressed', String(day.mustDo.includes(ride.id)));
+    star.setAttribute('aria-pressed', String(prefs.mustDo.includes(ride.id)));
     star.setAttribute('aria-label', `Must do ${ride.name}`);
     star.textContent = '★';
     star.onclick = (e) => {
       e.stopPropagation();
-      day.mustDo = day.mustDo.includes(ride.id)
-        ? day.mustDo.filter((x) => x !== ride.id)
-        : [...day.mustDo, ride.id];
+      prefs.mustDo = prefs.mustDo.includes(ride.id)
+        ? prefs.mustDo.filter((x) => x !== ride.id)
+        : [...prefs.mustDo, ride.id];
+      savePrefs();
+      render();
+    };
+
+    /* Ticking off any ride, not only one the planner suggested.
+     *
+     * "Rode it" lived on the suggestion cards alone, so a ride you went on
+     * because you walked past it, or because a child insisted, could not be
+     * recorded at all. Which quietly spoils the planning too: the planner
+     * keeps offering a ride you have already been on.
+     *
+     * Its own hit area, like the star, so ticking a ride off never opens
+     * its chart by accident.
+     */
+    const tick = document.createElement('button');
+    tick.type = 'button';
+    tick.className = 'pl-tick';
+    const ridden = day.done.includes(ride.id);
+    tick.setAttribute('aria-pressed', String(ridden));
+    tick.setAttribute('aria-label', ridden ? `Un-tick ${ride.name}` : `Rode ${ride.name}`);
+    tick.title = ridden ? 'Ridden. Tap to un-tick.' : 'Mark as ridden';
+    tick.textContent = '✓';
+    tick.onclick = (e) => {
+      e.stopPropagation();
+      day.done = ridden
+        ? day.done.filter((x) => x !== ride.id)
+        : [...new Set([...day.done, ride.id])];
       saveDay();
       render();
     };
-    row.append(star);
+
+    row.append(star, tick);
     return row;
   }));
 }
@@ -580,16 +784,125 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 
+/* ── the sign-in controls ──────────────────────────────────────────────── */
+
+const acctError = (msg) => { const e = $('pl-acct-error'); if (e) e.textContent = msg || ''; };
+
+/* Load Firebase, watch the account, and reconcile whenever it changes.
+ *
+ * Also finishes a sign-in that was in flight: a Google redirect coming back,
+ * or an emailed link being opened. A link opened on a device that never
+ * asked for one cannot be resolved without the address, so that case asks
+ * for it rather than failing.
+ */
+async function startSync() {
+  const { account: acc } = await firebase();
+  // Once only: both init and the sign-in buttons call this, and two
+  // watchers would reconcile the same change twice.
+  if (syncStarted) return;
+  syncStarted = true;
+
+  acc.watch((u) => {
+    user = u;
+    setWantsSync(!!u);
+    syncNote = '';
+    paintAccount();
+    if (u) pullDown().catch(() => {});
+    else { $('pl-history-fold').hidden = true; }
+  });
+
+  try {
+    const done = await acc.finishSignIn();
+    if (done === 'need-email') {
+      $('pl-acct-in').hidden = true;
+      $('pl-acct-email').hidden = false;
+      $('pl-acct-address').value = '';
+      acctError('Confirm the address that link was sent to.');
+      $('pl-acct-send').dataset.finishing = 'yes';
+    }
+  } catch (err) {
+    acctError(`That link did not work: ${err.message}. Ask for a new one.`);
+  }
+}
+
+function wireAccount() {
+  const g = $('pl-acct-google');
+  if (!g) return;
+
+  g.onclick = async () => {
+    acctError('');
+    g.disabled = true;
+    try {
+      const { account: acc } = await firebase();
+      await startSync();
+      await acc.signInGoogle();
+    } catch (err) {
+      acctError(`Could not sign in: ${err.message}`);
+    } finally { g.disabled = false; }
+  };
+
+  $('pl-acct-email-open').onclick = () => {
+    acctError('');
+    $('pl-acct-in').hidden = true;
+    $('pl-acct-email').hidden = false;
+    $('pl-acct-address').focus();
+  };
+
+  $('pl-acct-send').onclick = async () => {
+    const btn = $('pl-acct-send');
+    const address = $('pl-acct-address').value;
+    acctError('');
+    btn.disabled = true;
+    try {
+      const { account: acc } = await firebase();
+      // Finishing a link opened on another device: the address confirms it
+      // is being opened by whoever asked for it.
+      if (btn.dataset.finishing === 'yes') {
+        await acc.completeLink(address);
+        delete btn.dataset.finishing;
+        return;
+      }
+      await startSync();
+      await acc.sendLink(address);
+      $('pl-acct-says').textContent = `Link sent to ${address}. Open it on this phone and you are in.`;
+      $('pl-acct-email').hidden = true;
+    } catch (err) {
+      acctError(err.message);
+    } finally { btn.disabled = false; }
+  };
+
+  $('pl-acct-out').onclick = async () => {
+    try {
+      const { account: acc } = await firebase();
+      await acc.signOutNow();
+    } catch { /* already gone */ }
+    setWantsSync(false);
+    user = null;
+    paintAccount();
+    $('pl-history-fold').hidden = true;
+  };
+}
+
 export async function init() {
   catalogue = await fetch('parks/attractions.json').then((r) => r.json());
 
   try { park = localStorage.getItem('parkPlanner.park') || 'mk'; } catch { park = 'mk'; }
   if (!catalogue.parks[park]) park = 'mk';
+
+  // Before the first read, so anything starred under the old shape is where
+  // the new one looks for it.
+  migrateOnce();
+  loadPrefs();
   loadDay();
 
   drawParkPicker();
   renderLL();
   paintWhere();
+
+  wireAccount();
+  paintAccount();
+  // Only now, and only if there is a reason to: see the note on WANTS_SYNC.
+  if (wantsSync() || looksLikeLink()) startSync().catch(() => {});
 
   $('pl-curve-close').onclick = () => { $('pl-curve').hidden = true; $('pl-hour').hidden = true; };
   $('pl-hour-close').onclick = () => { $('pl-hour').hidden = true; };
@@ -615,37 +928,38 @@ export async function init() {
    */
   nudgeArchive().catch(() => {});
 
-  $('pl-skipheld').checked = day.skipHeld;
-  $('pl-skipheld').onchange = (e) => { day.skipHeld = e.target.checked; saveDay(); render(); };
+  $('pl-skipheld').checked = prefs.skipHeld;
+  $('pl-skipheld').onchange = (e) => { prefs.skipHeld = e.target.checked; savePrefs(); render(); };
 
-  $('pl-pace').value = String(day.pace);
+  $('pl-pace').value = String(prefs.pace);
   $('pl-pace').oninput = (e) => {
-    day.pace = Number(e.target.value) || DEFAULT_PACE;
-    $('pl-pace-out').textContent = paceWords(day.pace);
-    saveDay();
+    prefs.pace = Number(e.target.value) || DEFAULT_PACE;
+    $('pl-pace-out').textContent = paceWords(prefs.pace);
+    savePrefs();
     render();
   };
-  $('pl-pace-out').textContent = paceWords(day.pace);
+  $('pl-pace-out').textContent = paceWords(prefs.pace);
 
-  $('pl-maxwait').value = day.maxWaitMin === null ? '' : String(day.maxWaitMin);
+  $('pl-maxwait').value = prefs.maxWaitMin === null ? '' : String(prefs.maxWaitMin);
   $('pl-maxwait').onchange = (e) => {
     const v = Number(e.target.value);
-    day.maxWaitMin = e.target.value === '' || !Number.isFinite(v) ? null : v;
-    saveDay();
+    prefs.maxWaitMin = e.target.value === '' || !Number.isFinite(v) ? null : v;
+    savePrefs();
     render();
   };
 
+  /* A return window is an hour, so the end is worked out rather than typed.
+   * Asking for both asked for something the app already knew, and let you
+   * enter a window that ends before it starts.
+   */
   $('pl-ll-add').onclick = () => {
     const id = $('pl-ll-ride').value;
-    const start = parkTimeToday($('pl-ll-start').value);
-    const end = parkTimeToday($('pl-ll-end').value);
     const err = $('pl-ll-error');
     if (!id) { err.textContent = 'Pick a ride first.'; return; }
-    if (!start || !end) { err.textContent = 'Both times are needed, as HH:MM.'; return; }
-    if (end <= start) { err.textContent = 'The window has to end after it starts.'; return; }
+    const w = llWindow(id, parkTimeToday($('pl-ll-start').value));
+    if (!w) { err.textContent = 'A start time is needed, as HH:MM.'; return; }
     err.textContent = '';
-    day.llWindows = [...day.llWindows, { attractionId: id, start: start.toISOString(), end: end.toISOString() }]
-      .sort((a, b) => new Date(a.start) - new Date(b.start));
+    day.llWindows = [...day.llWindows, w].sort(byStart);
     saveDay();
     renderLL();
     render();

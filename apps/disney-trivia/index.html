@@ -654,8 +654,8 @@
     <div class="pl-ll-add">
       <select id="pl-ll-ride" aria-label="Which ride"><option value="">Which ride?</option></select>
       <div class="pl-times">
-        <label>From <input type="time" id="pl-ll-start"></label>
-        <label>To <input type="time" id="pl-ll-end"></label>
+        <label>Return from <input type="time" id="pl-ll-start"></label>
+        <span class="pl-llfor">for an hour</span>
       </div>
       <button id="pl-ll-add" type="button">Add</button>
     </div>
@@ -689,6 +689,28 @@
     <div class="pl-donelist" id="pl-done"></div>
     <button class="pl-reset" id="pl-reset" type="button">Clear the day</button>
   </details>
+
+  <details class="pl-fold" id="pl-history-fold" hidden>
+    <summary>Days you have been <span class="pl-dim" id="pl-history-count"></span></summary>
+    <div class="pl-history" id="pl-history"></div>
+  </details>
+
+  <!-- Signing in is what makes the plan outlive this browser. The planner
+       works signed out, on this device, exactly as it always did. -->
+  <div class="pl-account" id="pl-account">
+    <p class="pl-acct-says" id="pl-acct-says"></p>
+    <div class="pl-acct-in" id="pl-acct-in" hidden>
+      <button type="button" id="pl-acct-google">Continue with Google</button>
+      <button type="button" id="pl-acct-email-open" class="pl-acct-alt">Use an email link</button>
+    </div>
+    <div class="pl-acct-email" id="pl-acct-email" hidden>
+      <label for="pl-acct-address">Email</label>
+      <input type="email" id="pl-acct-address" autocomplete="email" inputmode="email" placeholder="you@example.com">
+      <button type="button" id="pl-acct-send">Send me a link</button>
+    </div>
+    <button type="button" id="pl-acct-out" class="pl-acct-alt" hidden>Sign out</button>
+    <p class="pl-error" id="pl-acct-error"></p>
+  </div>
 
   <p class="pl-credit">Wait times from <a href="https://themeparks.wiki" target="_blank" rel="noopener">ThemeParks.wiki</a>. Walk times are straight-line distance with a detour factor, so treat them as a guide.</p>
 </section>
