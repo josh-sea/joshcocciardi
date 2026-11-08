@@ -324,9 +324,27 @@
 }
 .pl-star[aria-pressed="true"] { color: var(--gold); }
 
+/* Ticking a ride off, from the list rather than only from a suggestion
+ * card. Same size and hit area as the star beside it.
+ */
+.pl-tick {
+  flex: 0 0 auto;
+  width: 30px; height: 30px;
+  font: inherit; font-size: 14px; line-height: 1;
+  color: #4C4169;
+  background: transparent; border: 0;
+  cursor: pointer;
+}
+.pl-tick[aria-pressed="true"] { color: #7BD88F; }
+.pl-star:focus-visible,
+.pl-tick:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 6px; }
+
+/* The hour a Lightning Lane runs for, beside the time you picked. */
+.pl-llfor { font-size: 12px; color: #8E80AE; align-self: center; }
+
 .pl-donelist { display: flex; flex-wrap: wrap; gap: 6px; }
 .pl-donelist:empty::after {
-  content: 'Nothing yet. Tap "Rode it" on a card.';
+  content: 'Nothing yet. Tap "Rode it" on a card, or the tick beside any ride.';
   font-size: 12px; color: #8E80AE;
 }
 .pl-donelist button {

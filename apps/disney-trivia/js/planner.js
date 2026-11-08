@@ -14,6 +14,10 @@ import { bars, bestAhead, verdict, verdictWords, rightNow, hasCurve, coversUntil
 import { whatsOn } from './whatson.js';
 import { liveFor, hoursFor, parkDate, parkClock, ageWords } from './parkdata.js';
 import { nudge as nudgeArchive } from './history.js';
+import {
+  PREFS_KEY, dayKey, parseDayKey, freshPrefs, freshDay, readPrefs, readDay,
+  llWindow, byStart, migrate,
+} from './plan.js';
 
 const $ = (id) => document.getElementById(id);
 const PARK_ORDER = ['mk', 'ep', 'hs', 'ak'];
@@ -26,25 +30,55 @@ let here = null;          // { lat, lng } from geolocation
 let watchId = null;
 let busy = false;
 
-/* The day, kept in localStorage. Firestore would be nicer for sharing across
- * the family's phones, but it would also mean a sign-in and a network round
- * trip before you can tick off a ride, in a place with no signal. Local wins
- * for v1; the rules for park_plans are already in place for when it does not.
+/* Two things, with two different lifetimes. See plan.js: your must-dos and
+ * how you walk are not facts about Friday, and filing them under a date is
+ * why they were gone every morning.
+ *
+ * Still localStorage, because a tick-off has to work standing in a queue
+ * with no signal. Sync is layered on top of this rather than replacing it.
  */
-const dayKey = () => `parkPlanner.day.${parkDate()}.${park}`;
-const freshDay = () => ({ done: [], mustDo: [], llWindows: [], skipHeld: true, pace: DEFAULT_PACE, maxWaitMin: null });
-
+let prefs = freshPrefs();
 let day = freshDay();
 
-const loadDay = () => {
+const keyForToday = () => dayKey(parkDate(), park);
+
+const read = (key) => {
   try {
-    const raw = localStorage.getItem(dayKey());
-    day = raw ? { ...freshDay(), ...JSON.parse(raw) } : freshDay();
-  } catch { day = freshDay(); }
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
 };
-const saveDay = () => {
-  try { localStorage.setItem(dayKey(), JSON.stringify(day)); } catch { /* private mode */ }
+const write = (key, value) => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ }
 };
+
+const loadPrefs = () => { prefs = readPrefs(read(PREFS_KEY)); };
+const savePrefs = () => write(PREFS_KEY, prefs);
+
+const loadDay = () => { day = readDay(read(keyForToday())); };
+const saveDay = () => write(keyForToday(), day);
+
+/* Move what is already stored into the new shape, once.
+ *
+ * Without this the change reads as "the app forgot everything I had
+ * starred", which is the complaint it exists to fix. Keyed on the
+ * preferences record existing at all, so it runs once and then never again.
+ */
+function migrateOnce() {
+  if (read(PREFS_KEY)) return;
+  let keys = [];
+  try { keys = Object.keys(localStorage); } catch { return; }
+
+  const entries = [];
+  for (const key of keys) {
+    const at = parseDayKey(key);
+    if (at) entries.push({ key, date: at.date, value: read(key) });
+  }
+
+  const moved = migrate(entries);
+  write(PREFS_KEY, moved.prefs);
+  for (const d of moved.days) write(d.key, d.value);
+}
 
 /* ── where you are ───────────────────────────────────────────────────────── */
 
@@ -218,12 +252,12 @@ function render() {
   const state = {
     from,
     now: new Date(),
-    pace: day.pace,
+    pace: prefs.pace,
     done: day.done,
-    mustDo: day.mustDo,
+    mustDo: prefs.mustDo,
     llWindows: day.llWindows,
-    skipHeld: day.skipHeld,
-    maxWaitMin: day.maxWaitMin,
+    skipHeld: prefs.skipHeld,
+    maxWaitMin: prefs.maxWaitMin,
     /* The deadline that makes a must-do mean something. Without it every
      * must-do stays a mild preference all day and you go home without
      * riding it. */
@@ -272,8 +306,8 @@ function whyNothing() {
 
   const left = rides.filter((r) => !day.done.includes(r.id));
   if (!left.length) return 'You have ridden everything with a queue. Go and get a Dole Whip.';
-  if (day.maxWaitMin !== null) {
-    return `Nothing is under ${day.maxWaitMin} minutes right now. Raise the limit under "How you walk", or wait it out.`;
+  if (prefs.maxWaitMin !== null) {
+    return `Nothing is under ${prefs.maxWaitMin} minutes right now. Raise the limit under "How you walk", or wait it out.`;
   }
   if (day.llWindows.length) {
     return 'Nothing fits before your next Lightning Lane. Head that way.';
@@ -444,7 +478,7 @@ function renderList(candidates) {
     const row = document.createElement('div');
     row.className = 'pl-row';
     if (day.done.includes(ride.id)) row.classList.add('done');
-    if (day.mustDo.includes(ride.id)) row.classList.add('must');
+    if (prefs.mustDo.includes(ride.id)) row.classList.add('must');
 
     const hasWait = typeof l.waitMin === 'number';
     const wait = hasWait ? `${l.waitMin}` : '–';
@@ -467,18 +501,46 @@ function renderList(candidates) {
     const star = document.createElement('button');
     star.type = 'button';
     star.className = 'pl-star';
-    star.setAttribute('aria-pressed', String(day.mustDo.includes(ride.id)));
+    star.setAttribute('aria-pressed', String(prefs.mustDo.includes(ride.id)));
     star.setAttribute('aria-label', `Must do ${ride.name}`);
     star.textContent = '★';
     star.onclick = (e) => {
       e.stopPropagation();
-      day.mustDo = day.mustDo.includes(ride.id)
-        ? day.mustDo.filter((x) => x !== ride.id)
-        : [...day.mustDo, ride.id];
+      prefs.mustDo = prefs.mustDo.includes(ride.id)
+        ? prefs.mustDo.filter((x) => x !== ride.id)
+        : [...prefs.mustDo, ride.id];
+      savePrefs();
+      render();
+    };
+
+    /* Ticking off any ride, not only one the planner suggested.
+     *
+     * "Rode it" lived on the suggestion cards alone, so a ride you went on
+     * because you walked past it, or because a child insisted, could not be
+     * recorded at all. Which quietly spoils the planning too: the planner
+     * keeps offering a ride you have already been on.
+     *
+     * Its own hit area, like the star, so ticking a ride off never opens
+     * its chart by accident.
+     */
+    const tick = document.createElement('button');
+    tick.type = 'button';
+    tick.className = 'pl-tick';
+    const ridden = day.done.includes(ride.id);
+    tick.setAttribute('aria-pressed', String(ridden));
+    tick.setAttribute('aria-label', ridden ? `Un-tick ${ride.name}` : `Rode ${ride.name}`);
+    tick.title = ridden ? 'Ridden. Tap to un-tick.' : 'Mark as ridden';
+    tick.textContent = '✓';
+    tick.onclick = (e) => {
+      e.stopPropagation();
+      day.done = ridden
+        ? day.done.filter((x) => x !== ride.id)
+        : [...new Set([...day.done, ride.id])];
       saveDay();
       render();
     };
-    row.append(star);
+
+    row.append(star, tick);
     return row;
   }));
 }
@@ -585,6 +647,11 @@ export async function init() {
 
   try { park = localStorage.getItem('parkPlanner.park') || 'mk'; } catch { park = 'mk'; }
   if (!catalogue.parks[park]) park = 'mk';
+
+  // Before the first read, so anything starred under the old shape is where
+  // the new one looks for it.
+  migrateOnce();
+  loadPrefs();
   loadDay();
 
   drawParkPicker();
@@ -615,37 +682,38 @@ export async function init() {
    */
   nudgeArchive().catch(() => {});
 
-  $('pl-skipheld').checked = day.skipHeld;
-  $('pl-skipheld').onchange = (e) => { day.skipHeld = e.target.checked; saveDay(); render(); };
+  $('pl-skipheld').checked = prefs.skipHeld;
+  $('pl-skipheld').onchange = (e) => { prefs.skipHeld = e.target.checked; savePrefs(); render(); };
 
-  $('pl-pace').value = String(day.pace);
+  $('pl-pace').value = String(prefs.pace);
   $('pl-pace').oninput = (e) => {
-    day.pace = Number(e.target.value) || DEFAULT_PACE;
-    $('pl-pace-out').textContent = paceWords(day.pace);
-    saveDay();
+    prefs.pace = Number(e.target.value) || DEFAULT_PACE;
+    $('pl-pace-out').textContent = paceWords(prefs.pace);
+    savePrefs();
     render();
   };
-  $('pl-pace-out').textContent = paceWords(day.pace);
+  $('pl-pace-out').textContent = paceWords(prefs.pace);
 
-  $('pl-maxwait').value = day.maxWaitMin === null ? '' : String(day.maxWaitMin);
+  $('pl-maxwait').value = prefs.maxWaitMin === null ? '' : String(prefs.maxWaitMin);
   $('pl-maxwait').onchange = (e) => {
     const v = Number(e.target.value);
-    day.maxWaitMin = e.target.value === '' || !Number.isFinite(v) ? null : v;
-    saveDay();
+    prefs.maxWaitMin = e.target.value === '' || !Number.isFinite(v) ? null : v;
+    savePrefs();
     render();
   };
 
+  /* A return window is an hour, so the end is worked out rather than typed.
+   * Asking for both asked for something the app already knew, and let you
+   * enter a window that ends before it starts.
+   */
   $('pl-ll-add').onclick = () => {
     const id = $('pl-ll-ride').value;
-    const start = parkTimeToday($('pl-ll-start').value);
-    const end = parkTimeToday($('pl-ll-end').value);
     const err = $('pl-ll-error');
     if (!id) { err.textContent = 'Pick a ride first.'; return; }
-    if (!start || !end) { err.textContent = 'Both times are needed, as HH:MM.'; return; }
-    if (end <= start) { err.textContent = 'The window has to end after it starts.'; return; }
+    const w = llWindow(id, parkTimeToday($('pl-ll-start').value));
+    if (!w) { err.textContent = 'A start time is needed, as HH:MM.'; return; }
     err.textContent = '';
-    day.llWindows = [...day.llWindows, { attractionId: id, start: start.toISOString(), end: end.toISOString() }]
-      .sort((a, b) => new Date(a.start) - new Date(b.start));
+    day.llWindows = [...day.llWindows, w].sort(byStart);
     saveDay();
     renderLL();
     render();
