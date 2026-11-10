@@ -11,8 +11,9 @@
  */
 import {
   TAPS_ALLOWED, DEFAULT_TOLERANCE, PARKS, PARK_ORDER, isPark,
-  freshCentre, peepLayout, revealAt, judgeGuess, scoreRound,
+  centreFor, peepLayout, revealAt, judgeGuess, scoreRound,
 } from './game.js';
+import { PARK_CENTRES, judgeGeo, offWords, parkAt, isPoint, WITHIN_M } from './geo.js';
 
 const $ = (id) => document.getElementById(id);
 const show = (el, on) => { el.hidden = !on; };
@@ -25,7 +26,6 @@ let taps = 0, guess = null, settled = false;
 let points = 0, played = 0;
 let centre = null;         // this playing's peephole, fresh on every deal
 let pickedPark = null;     // the park being guessed this round
-let answerDraft = null;    // {park, x, y} being set on the Add tab
 let started = false;
 
 const DOOR_BLURB = 'Open a deck with its name and password. Nobody can see a deck without both.';
@@ -120,7 +120,7 @@ async function enterDeck(d) {
 
 function leaveDeck() {
   deck = null; rounds = []; queue = []; round = null; points = 0; played = 0;
-  pickedPark = null; answerDraft = null;
+  pickedPark = null;
   show($('deck'), false);
   show($('door'), true);
   blurb(DOOR_BLURB);
@@ -138,7 +138,11 @@ function pickMode(which) {
   if (which === 'add') { if (!addPark) resetAddForm(); drawRoundList(); }
 }
 
-const playable = (r) => r && r.answer && isPark(r.answer.park);
+/* A round can be dealt if it can be judged: real coordinates, or a pin on a
+ * park map that still exists. Rounds made before the built-in maps pinned
+ * against artwork that is gone, and have neither.
+ */
+const playable = (r) => !!r && (isPoint(r.at) || (!!r.answer && isPark(r.answer.park)));
 
 async function refreshRounds() {
   rounds = await S.listRounds(deck.id);
@@ -172,9 +176,12 @@ function nextRound() {
   }
   round = queue.splice(Math.floor(Math.random() * queue.length), 1)[0];
   taps = 0; guess = null; settled = false; pickedPark = null;
-  // A new opening every time, so a photo that comes round again is still a
-  // puzzle rather than a memory test.
-  centre = freshCentre();
+  /* A new opening every time, so a photo that comes round again is still a
+   * puzzle rather than a memory test. Where the round carries a region, the
+   * opening is drawn from inside it: still different every deal, but never
+   * on the blank sky or the flat side of a building.
+   */
+  centre = centreFor(round.start);
 
   show($('play-live'), true);
   show($('verdict'), false);
@@ -187,6 +194,8 @@ function nextRound() {
   $('lockin').disabled = true;
   $('play-prompt').textContent = 'Which park is this?';
   show($('mapwrap'), false);
+  show($('geowrap'), false);
+  $('geo-note').hidden = true;
   drawParks($('park-pick'), null, choosePark);
 
   S.urlFor(round.photo.path).then(url => { $('peep-img').src = url; paintPeep(); });
@@ -244,16 +253,74 @@ function paintTaps() {
 /* Pick a park: redraw the radio group, swap in that park's map, and clear any
  * pin already dropped, because a point on one map means nothing on another.
  */
+/* ── the real map ──────────────────────────────────────────────────────────
+ *
+ * A round carrying coordinates is guessed on an actual map and judged in
+ * metres. A round without them is a round added before this existed, and
+ * keeps the drawn map and the share-of-the-picture score it was made for.
+ */
+const isGeo = (r) => !!r && isPoint(r.at);
+
+let geoMap = null;       // the Leaflet handle, once built
+let geoFor = null;       // which park it is currently showing
+
+async function showGeoMap(parkKey) {
+  const box = $('geowrap');
+  show(box, true);
+  const centreOn = PARK_CENTRES[parkKey] || PARK_CENTRES.mk;
+
+  try {
+    if (!geoMap) {
+      const { makeMap } = await import('./wamap.js');
+      geoMap = await makeMap(box, {
+        centre: centreOn,
+        onPick: (p) => {
+          if (settled) return;
+          guess = p;
+          geoMap.pin('guess', p);
+          $('lockin').disabled = false;
+          $('play-prompt').textContent = 'Lock it in, or tap somewhere else.';
+        },
+      });
+    }
+    if (geoFor !== parkKey) { geoMap.recentre(centreOn); geoFor = parkKey; }
+    geoMap.pin('guess', null);
+    geoMap.pin('answer', null);
+    geoMap.ring(null);
+    geoMap.lock(false);
+    geoMap.resize();
+    $('geo-note').hidden = false;
+    $('geo-note').textContent = 'Drag and pinch the map, then tap the spot.';
+  } catch (err) {
+    /* No map is not no game: fall back to saying so rather than leaving a
+     * blank box, because the tiles come off a network that may not be there.
+     */
+    show(box, false);
+    $('geo-note').hidden = false;
+    $('geo-note').textContent = `The map could not load (${err.message}). Skip this one for now.`;
+  }
+}
+
 function choosePark(key) {
   if (settled) return;
   pickedPark = key;
   guess = null;
   drawParks($('park-pick'), key, choosePark);
+  $('lockin').disabled = true;
+
+  if (isGeo(round)) {
+    show($('mapwrap'), false);
+    $('play-prompt').textContent = `Where in ${PARKS[key].name}? Tap the map.`;
+    showGeoMap(key);
+    return;
+  }
+
+  show($('geowrap'), false);
+  $('geo-note').hidden = true;
   $('map-img').src = `maps/${key}.webp`;
   show($('mapwrap'), true);
   show($('pin-guess'), false);
   $('play-prompt').textContent = `Where in ${PARKS[key].name}? Tap the map.`;
-  $('lockin').disabled = true;
 }
 
 // A tap anywhere on the map is a guess, in normalised coordinates so it means
@@ -284,11 +351,56 @@ function drawRing(ring, box, at, parkKey) {
   show(ring, true);
 }
 
+/* Settling a round that has real coordinates.
+ *
+ * The number shown is metres, which is the point of the whole thing: it
+ * means the same in every park, it is what the photo's own GPS speaks, and
+ * it does not depend on which drawing a deck happens to use.
+ */
+function settleGeo() {
+  const answer = round.at;
+  const verdict = judgeGeo(guess, answer);
+  const got = scoreRound(verdict, taps);
+  points += got;
+  played += 1;
+
+  const realPark = parkAt(answer) || round.park;
+  drawParks($('park-pick'), realPark, () => {});
+
+  if (geoMap) {
+    geoMap.pin('answer', answer);
+    geoMap.ring(answer, WITHIN_M);
+    geoMap.frame([answer, guess]);
+    geoMap.lock(true);
+  }
+  $('peep').classList.add('revealed');
+
+  const v = $('verdict');
+  v.className = 'wa-verdict ' + (verdict.within ? 'hit' : 'miss');
+  const head = verdict.bullseye ? 'Nailed it'
+    : verdict.within ? 'Close enough'
+    : verdict.rightPark ? 'Right park, wrong spot'
+    : 'Wrong park';
+  v.innerHTML =
+    `<h3>${head}</h3>` +
+    `<p>${verdict.within ? `+${got} points` : 'No points'} · ` +
+    `you were ${offWords(verdict.distance)} away` +
+    (round.label ? ` · <strong>${esc(round.label)}</strong>` : '') + '</p>';
+  show(v, true);
+  show($('nextround'), true);
+  $('geo-note').hidden = false;
+  $('geo-note').textContent = `The green dot is the real spot, in ${(PARKS[realPark] || {}).name || 'the park'}.`;
+  $('play-prompt').textContent = 'How close were you?';
+  paintTaps();
+}
+
 function lockIn() {
   if (!guess || !pickedPark || settled) return;
   settled = true;
   $('lockin').disabled = true;
   $('widen').disabled = true;
+
+  if (isGeo(round)) { settleGeo(); return; }
 
   const answer = round.answer;
   const verdict = judgeGuess({ park: pickedPark, ...guess }, answer,
@@ -334,34 +446,178 @@ async function saveMyScore() {
   try { await S.saveScore(deck.id, { name, points, played }); } catch { /* not fatal */ }
 }
 
-/* ── adding a round ────────────────────────────────────────────────────── */
-
+/* ── adding photos ─────────────────────────────────────────────────────────
+ *
+ * The old flow was one photo at a time: pick a file, pick a park, find the
+ * spot on a drawing, submit, start again. Four decisions and a page reload's
+ * worth of friction for each picture, which is why decks stayed small.
+ *
+ * Now the whole selection is a queue. Each photo needs two things and both
+ * are a single gesture: drag a circle to where the round should open, and
+ * take the location from the phone, the photo, or one tap on a map. The park
+ * follows from the coordinates rather than being asked for.
+ */
+let addQueue = [];        // files still to deal with
+let addAt = 0;            // which one is on screen
 let addPark = null;
+let addPoint = null;      // { lat, lng, from }
+let addStart = null;      // { x, y, r } in normalised photo coordinates
+let addMap = null;        // the Leaflet handle for the Add tab
+let addUrl = null;        // object URL for the photo being shown
+
+const addFile = () => addQueue[addAt] || null;
 
 function refreshAddSubmit() {
-  $('add-submit').disabled = !addPark || !answerDraft || !$('add-photo').files[0];
+  const ready = !!addFile() && !!addPoint && !!addStart;
+  $('add-save').disabled = !ready;
 }
 
-function chooseAddPark(key) {
-  addPark = key;
-  answerDraft = null;
-  drawParks($('add-park-pick'), key, chooseAddPark);
-  $('add-map-img').src = `maps/${key}.webp`;
-  show($('add-map-prompt'), true);
-  show($('add-mapwrap'), true);
-  show($('add-pin'), false);
-  show($('add-ring'), false);
+/* The circle. Dragging moves it, the slider sizes it, and both are stored in
+ * normalised coordinates so the region means the same thing whatever size
+ * the photo is displayed at.
+ */
+function paintCircle() {
+  const wrap = $('add-startwrap');
+  const el = $('add-circle');
+  const img = $('add-preview');
+  if (!addStart || !img.naturalWidth) { show(el, false); return; }
+
+  const box = img.getBoundingClientRect();
+  const wrapBox = wrap.getBoundingClientRect();
+  // The radius is a fraction of the shorter side, so a region keeps its size
+  // and its shape on a photo of any proportion.
+  const px = addStart.r * Math.min(box.width, box.height);
+  el.style.width = `${px * 2}px`;
+  el.style.height = `${px * 2}px`;
+  el.style.left = `${(box.left - wrapBox.left) + addStart.x * box.width - px}px`;
+  el.style.top = `${(box.top - wrapBox.top) + addStart.y * box.height - px}px`;
+  show(el, true);
+}
+
+function setCircleFrom(e) {
+  const img = $('add-preview');
+  const box = img.getBoundingClientRect();
+  if (!box.width || !box.height) return;
+  const p = e.touches ? e.touches[0] : e;
+  const r = addStart ? addStart.r : Number($('add-size').value) / 100;
+  addStart = {
+    x: Math.min(Math.max((p.clientX - box.left) / box.width, 0), 1),
+    y: Math.min(Math.max((p.clientY - box.top) / box.height, 0), 1),
+    r,
+  };
+  paintCircle();
   refreshAddSubmit();
 }
 
-function resetAddForm() {
+function sayWhere() {
+  const el = $('add-where');
+  if (!addPoint) { el.textContent = 'Where was it taken?'; return; }
+  const where = addPark ? PARKS[addPark].name : 'outside the parks';
+  const how = addPoint.from === 'gps' ? 'from this phone'
+    : addPoint.from === 'exif' ? 'from the photo itself'
+    : 'from your tap';
+  el.textContent = `${where}, ${how}.`;
+}
+
+/* Which park, when the coordinates do not say.
+ *
+ * A photo taken at the hotel, or just outside the gates, still belongs to a
+ * deck and is still worth guessing; it just needs telling which park it goes
+ * with. The coordinates stay exactly as they were: this names the round, it
+ * does not move it.
+ */
+function pickAddPark(key) {
+  addPark = key;
+  drawParks($('add-park-pick'), key, pickAddPark);
+  sayWhere();
+  refreshAddSubmit();
+}
+
+function usePoint(point, from) {
+  addPoint = { lat: point.lat, lng: point.lng, from };
+  const inPark = parkAt(addPoint);
+  if (inPark) addPark = inPark;
+  drawParks($('add-park-pick'), addPark, pickAddPark);
+  if (addMap) { addMap.pin('answer', addPoint); addMap.recentre(addPoint, 17); }
+  sayWhere();
+  refreshAddSubmit();
+}
+
+async function showAddMap() {
+  const box = $('add-geowrap');
+  show(box, true);
+  try {
+    if (!addMap) {
+      const { makeMap } = await import('./wamap.js');
+      addMap = await makeMap(box, {
+        centre: addPoint || PARK_CENTRES[addPark || 'mk'],
+        onPick: (p) => usePoint(p, 'map'),
+      });
+    }
+    addMap.resize();
+    if (addPoint) { addMap.pin('answer', addPoint); addMap.recentre(addPoint, 17); }
+  } catch (err) {
+    show(box, false);
+    say($('add-note'), `The map could not load: ${err.message}`, 'bad');
+  }
+}
+
+/* Show the photo at `addAt`, with whatever we can work out about it already.
+ *
+ * The location is tried from the photo's own metadata first, because it costs
+ * nothing and is right when it is there. It usually is not: iOS strips GPS
+ * from anything that goes through a file input, so this is a bonus rather
+ * than the mechanism, and the buttons are what actually get used.
+ */
+async function showAddPhoto() {
+  const file = addFile();
+  const queueBox = $('add-queue');
+  if (!file) {
+    show(queueBox, false);
+    say($('add-note'), addQueue.length ? 'All done. Pick more photos to carry on.' : '', 'good');
+    drawRoundList();
+    return;
+  }
+
+  show(queueBox, true);
+  addPoint = null;
   addPark = null;
-  answerDraft = null;
-  drawParks($('add-park-pick'), null, chooseAddPark);
-  show($('add-map-prompt'), false);
-  show($('add-mapwrap'), false);
-  show($('add-pin'), false);
-  show($('add-ring'), false);
+  addStart = null;
+  $('add-label').value = '';
+  $('add-count').textContent = `Photo ${addAt + 1} of ${addQueue.length}`;
+  drawParks($('add-park-pick'), null, pickAddPark);
+  sayWhere();
+  refreshAddSubmit();
+
+  if (addUrl) URL.revokeObjectURL(addUrl);
+  addUrl = URL.createObjectURL(file);
+  const img = $('add-preview');
+  img.onload = () => {
+    // A sensible default region in the middle, so the circle is visible and
+    // draggable rather than something you have to discover by tapping.
+    addStart = { x: 0.5, y: 0.5, r: Number($('add-size').value) / 100 };
+    paintCircle();
+    refreshAddSubmit();
+  };
+  img.src = addUrl;
+
+  try {
+    const { gpsFromFile } = await import('./exif.js');
+    const found = await gpsFromFile(file);
+    if (found && addFile() === file) usePoint(found, 'exif');
+  } catch { /* no metadata is the normal case, not a failure */ }
+}
+
+function resetAddForm() {
+  addQueue = [];
+  addAt = 0;
+  addPoint = null;
+  addPark = null;
+  addStart = null;
+  if (addUrl) { URL.revokeObjectURL(addUrl); addUrl = null; }
+  show($('add-queue'), false);
+  show($('add-geowrap'), false);
+  $('add-photo').value = '';
   refreshAddSubmit();
 }
 
@@ -474,38 +730,92 @@ function wire() {
   $('lockin').onclick = lockIn;
   $('nextround').onclick = nextRound;
 
-  $('add-mapwrap').onclick = (e) => {
-    if (!addPark) return;
-    const pt = mapPoint(e, $('add-mapwrap'));
-    answerDraft = { park: addPark, x: pt.x, y: pt.y };
-    placePin($('add-pin'), answerDraft);
-    drawRing($('add-ring'), $('add-mapwrap').getBoundingClientRect(), answerDraft, addPark);
-    refreshAddSubmit();
-  };
-  $('add-photo').onchange = refreshAddSubmit;
+  /* Dragging the circle. Pointer events rather than mouse or touch, so one
+   * path covers a finger, a trackpad and a stylus; `setPointerCapture` keeps
+   * the drag alive when the finger leaves the photo, which otherwise strands
+   * the circle wherever it was when contact was lost.
+   */
+  {
+    const wrap = $('add-startwrap');
+    let dragging = false;
+    wrap.addEventListener('pointerdown', (e) => {
+      if (!addFile()) return;
+      dragging = true;
+      wrap.setPointerCapture(e.pointerId);
+      setCircleFrom(e);
+      e.preventDefault();
+    });
+    wrap.addEventListener('pointermove', (e) => { if (dragging) setCircleFrom(e); });
+    const stop = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { wrap.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+    };
+    wrap.addEventListener('pointerup', stop);
+    wrap.addEventListener('pointercancel', stop);
+  }
 
-  $('form-add').onsubmit = async (e) => {
-    e.preventDefault();
-    if (!addPark) { say($('add-note'), 'Pick the park it was taken in.', 'bad'); return; }
-    if (!answerDraft) { say($('add-note'), 'Tap the map to mark the spot.', 'bad'); return; }
-    $('add-submit').disabled = true;
-    say($('add-note'), 'Uploading…');
+  $('add-size').oninput = () => {
+    if (!addStart) return;
+    addStart = { ...addStart, r: Number($('add-size').value) / 100 };
+    paintCircle();
+  };
+
+  $('add-here').onclick = () => {
+    if (!navigator.geolocation) {
+      say($('add-note'), 'This browser will not share a location.', 'bad');
+      return;
+    }
+    say($('add-note'), 'Asking for your location…');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        usePoint({ lat: pos.coords.latitude, lng: pos.coords.longitude }, 'gps');
+        say($('add-note'), '', '');
+      },
+      (err) => say($('add-note'), `No location: ${err.message}`, 'bad'),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+    );
+  };
+
+  $('add-pickmap').onclick = () => showAddMap();
+
+  $('add-photo').onchange = () => {
+    addQueue = [...($('add-photo').files || [])];
+    addAt = 0;
+    say($('add-note'), '', '');
+    showAddPhoto();
+  };
+
+  $('add-skip').onclick = () => { addAt += 1; showAddPhoto(); };
+
+  $('add-save').onclick = async () => {
+    const file = addFile();
+    if (!file || !addPoint || !addStart) return;
+    $('add-save').disabled = true;
+    say($('add-note'), `Uploading ${addAt + 1} of ${addQueue.length}…`);
     try {
       await S.addRound(deck.id, {
-        photoFile: $('add-photo').files[0],
-        park: addPark,
-        answer: answerDraft,
+        photoFile: file,
+        // A photo outside every park still belongs to a deck; it just has to
+        // be told which park it goes with, and the picker above asks.
+        park: addPark || parkAt(addPoint) || 'mk',
+        at: addPoint,
+        start: addStart,
         label: $('add-label').value,
       });
-      $('form-add').reset();
-      resetAddForm();
-      say($('add-note'), 'Added.', 'good');
+      addAt += 1;
+      say($('add-note'), '', '');
       await refreshRounds();
-      drawRoundList();
+      showAddPhoto();
     } catch (err) {
       say($('add-note'), err.message, 'bad');
-    } finally { $('add-submit').disabled = true; }
+      refreshAddSubmit();
+    }
   };
+
+  // The form has no submit button any more, but Enter in the label field
+  // still counts as one and would reload the page.
+  $('form-add').onsubmit = (e) => e.preventDefault();
 
   $('me-name').oninput = () => {
     try { localStorage.setItem('whereami.name', $('me-name').value); } catch { /* private mode */ }

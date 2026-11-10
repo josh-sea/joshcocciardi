@@ -185,17 +185,40 @@ export async function setTolerance(deckId, tolerance) {
  * judged in one piece, and so a round stays self-describing if the deck's
  * settings ever change underneath it.
  */
-export async function addRound(deckId, { photoFile, park, answer, label }) {
+/* `at` and `start` are both optional, and a round without them plays exactly
+ * as it always did.
+ *
+ *   at     where the photo was actually taken, from the phone's GPS, the
+ *          photo's own metadata, or a tap on a real map. Judged in metres.
+ *   start  the region the peephole may open in, set by dragging a circle on
+ *          the photo, so a round cannot open on blank sky.
+ *
+ * `answer` stays required because the decks already in Firestore have it and
+ * nothing here is going to reach back and georeference artwork.
+ */
+export async function addRound(deckId, { photoFile, park, answer, label, at, start }) {
   const id = doc(collection(db, 'whereami_decks', deckId, 'rounds')).id;
   const photo = await putImage(`whereami/${deckId}/rounds/${id}.jpg`, photoFile);
   const round = {
     photo,
     park,
-    answer: { park, x: answer.x, y: answer.y },
     label: String(label || '').trim(),
     createdByUid: uid,
     createdAt: serverTimestamp(),
   };
+  /* A pin on the artwork is only needed when there is no real location. With
+   * coordinates there is nothing to place it from short of georeferencing a
+   * drawing, and the round is judged in metres anyway.
+   */
+  if (answer && Number.isFinite(answer.x) && Number.isFinite(answer.y)) {
+    round.answer = { park, x: answer.x, y: answer.y };
+  }
+  if (at && Number.isFinite(at.lat) && Number.isFinite(at.lng)) {
+    round.at = { lat: at.lat, lng: at.lng, from: String(at.from || 'map') };
+  }
+  if (start && Number.isFinite(start.x) && Number.isFinite(start.y) && start.r > 0) {
+    round.start = { x: start.x, y: start.y, r: start.r };
+  }
   await setDoc(doc(db, 'whereami_decks', deckId, 'rounds', id), round);
   return { id, ...round };
 }

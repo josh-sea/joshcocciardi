@@ -564,6 +564,10 @@
           <div class="pin answer" id="pin-answer" hidden></div>
           <div class="ring" id="ring" hidden></div>
         </div>
+        <!-- Rounds added with a real location are guessed on a real map and
+             judged in metres. Older rounds keep the drawn map above. -->
+        <div class="wa-geo" id="geowrap" hidden></div>
+        <p class="fine" id="geo-note" hidden></p>
         <button class="btn" id="lockin" disabled>Lock in my pin</button>
         <div class="wa-verdict" id="verdict" hidden></div>
         <button class="btn ghost" id="nextround" hidden>Next photo</button>
@@ -573,17 +577,37 @@
 
     <div id="pane-add" hidden>
       <form id="form-add">
-        <label>Photo<input id="add-photo" type="file" accept="image/*" required></label>
-        <label>Label (shown after the guess)<input id="add-label" autocomplete="off" placeholder="Outside the Haunted Mansion"></label>
-        <p class="wa-prompt">Which park was it taken in?</p>
-        <div class="parks" id="add-park-pick" role="radiogroup" aria-label="Which park"></div>
-        <p class="wa-prompt" id="add-map-prompt" hidden>Now tap the map to mark the spot.</p>
-        <div class="mapwrap" id="add-mapwrap" hidden>
-          <img id="add-map-img" alt="The park map. Tap it to mark the answer.">
-          <div class="pin answer" id="add-pin" hidden></div>
-          <div class="ring" id="add-ring" hidden></div>
+        <!-- Many at once: the slow part was never the upload, it was doing
+             all of this one photo at a time. -->
+        <label>Photos<input id="add-photo" type="file" accept="image/*" multiple required></label>
+
+        <div id="add-queue" hidden>
+          <p class="wa-prompt" id="add-count"></p>
+
+          <p class="wa-prompt">Drag the circle to where the photo should open.</p>
+          <div class="wa-startwrap" id="add-startwrap">
+            <img id="add-preview" alt="The photo you are adding. Drag to choose where a round opens.">
+            <div class="wa-startcircle" id="add-circle" hidden></div>
+          </div>
+          <label class="wa-size">How wide
+            <input type="range" id="add-size" min="4" max="28" step="1" value="12">
+          </label>
+
+          <p class="wa-prompt" id="add-where">Where was it taken?</p>
+          <div class="wa-row">
+            <button type="button" id="add-here">Use my location</button>
+            <button type="button" id="add-pickmap">Tap it on a map</button>
+          </div>
+          <div class="wa-geo" id="add-geowrap" hidden></div>
+          <div class="parks" id="add-park-pick" role="radiogroup" aria-label="Which park"></div>
+
+          <label>Label (shown after the guess)<input id="add-label" autocomplete="off" placeholder="Outside the Haunted Mansion"></label>
+
+          <div class="wa-row">
+            <button type="button" id="add-skip" class="btn ghost">Skip this one</button>
+            <button class="btn" type="button" id="add-save" disabled>Add and next</button>
+          </div>
         </div>
-        <button class="btn" type="submit" id="add-submit" disabled>Add this round</button>
         <p class="note" id="add-note" role="status"></p>
       </form>
       <h2 class="h2">In this deck</h2>

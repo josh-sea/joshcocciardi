@@ -213,3 +213,57 @@
 @media (prefers-reduced-motion: reduce) {
   .peep img { transition: none; }
 }
+
+/* ── the real map ──────────────────────────────────────────────────────────
+ *
+ * Leaflet needs its container to have a height before it will measure
+ * anything; given none it renders a map one pixel tall and reports no error.
+ */
+.wa-geo {
+  height: 320px;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 10px 0 6px;
+  background: #1A1430;
+}
+.wa-geo .leaflet-container { background: #1A1430; font: inherit; }
+
+/* Our own markers rather than Leaflet's default, which is a PNG fetched by a
+ * path relative to the library and 404s when the two are served from
+ * different places.
+ */
+.wa-dot {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.55);
+}
+.wa-dot-guess { background: var(--gold); }
+.wa-dot-answer { background: #7BD88F; }
+
+/* ── setting where a round opens ───────────────────────────────────────────
+ *
+ * A translucent circle over the photo. Everything outside it is dimmed, so
+ * what is being chosen reads as "the part worth looking at" rather than as a
+ * decoration laid on top.
+ */
+.wa-startwrap { position: relative; display: block; line-height: 0; touch-action: none; }
+.wa-startwrap img { width: 100%; height: auto; border-radius: 10px; display: block; }
+.wa-startcircle {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: rgba(232,179,60,0.18);
+  box-shadow: 0 0 0 9999px rgba(10,6,20,0.55);
+  pointer-events: none;
+}
+.wa-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.wa-row button {
+  font: inherit; font-size: 13px; font-weight: 700;
+  color: var(--gold); background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(232,179,60,0.45);
+  border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer;
+}
+.wa-row button[disabled] { opacity: 0.5; cursor: default; }
+.wa-row button[aria-pressed="true"] { color: #150E24; background: var(--gold); box-shadow: none; }
+.wa-size { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #9D90BC; margin: 8px 0; }
+.wa-size input { flex: 1 1 auto; min-width: 0; }

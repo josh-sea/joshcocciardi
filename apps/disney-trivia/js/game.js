@@ -39,6 +39,54 @@ export function freshCentre(rand = Math.random) {
   return { cx: lo + rand() * (hi - lo), cy: lo + rand() * (hi - lo) };
 }
 
+/* ── the start region ──────────────────────────────────────────────────────
+ *
+ * A centre chosen anywhere in the band above can open on blank sky, a stretch
+ * of path, or the flat side of a building: places no amount of staring will
+ * identify. So a round can carry a region, set when the photo is added, and
+ * the opening is drawn from inside it.
+ *
+ * A region rather than a point on purpose. A fixed point would make a photo
+ * you have already solved worth nothing on a second pass, which is exactly
+ * what the random centre was protecting. Inside a circle you chose, every
+ * deal still opens somewhere new and none of them opens on the sky.
+ *
+ * `r` is a fraction of the photo's shorter side, so a region keeps its size
+ * whatever shape the photo is.
+ */
+export const isRegion = (s) => !!s
+  && Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.r) && s.r > 0;
+
+/* A uniform point in a disc.
+ *
+ * sqrt on the radius is not decoration. Drawing `r = R * rand()` puts half
+ * the points inside the inner half-radius, which is a quarter of the area:
+ * the openings would cluster around the middle of the region and the edges
+ * would hardly ever be used.
+ */
+export function pointInDisc(centre, radius, rand = Math.random) {
+  const t = 2 * Math.PI * rand();
+  const d = radius * Math.sqrt(rand());
+  return { cx: centre.x + d * Math.cos(t), cy: centre.y + d * Math.sin(t) };
+}
+
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+/* Where this playing's peephole sits, given the round's region if it has one.
+ *
+ * Clamped into the same band a free-floating centre uses, so a region set
+ * near an edge still cannot open mostly outside the photo. That can pull the
+ * centre to the edge of the region rather than outside it, which is the
+ * honest compromise: the band exists so the player gets a circle rather than
+ * a sliver.
+ */
+export function centreFor(region, rand = Math.random) {
+  if (!isRegion(region)) return freshCentre(rand);
+  const [lo, hi] = CENTRE_BAND;
+  const p = pointInDisc(region, region.r, rand);
+  return { cx: clamp(p.cx, lo, hi), cy: clamp(p.cy, lo, hi) };
+}
+
 /* Radius, in photo pixels, that exposes `fraction` of the photo's area.
  * From pi*r^2 = fraction*w*h. Clamped to MAX_REVEAL first so the ceiling
  * holds whatever the caller asks for.
