@@ -3,7 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const STORAGE_KEYS = {
   SAVED_LOCATIONS: '@WeatherApp:saved_locations',
   SELECTED_PERSONALITY: '@WeatherApp:selected_personality',
-  LAST_SELECTED_LOCATION: '@WeatherApp:last_selected_location'
+  LAST_SELECTED_LOCATION: '@WeatherApp:last_selected_location',
+  VIEW_MODE: '@WeatherApp:view_mode'
 };
 
 /**
@@ -100,6 +101,31 @@ export const StorageUtils = {
   },
 
   /**
+   * Save which layout is showing ('classic' or 'dark')
+   * @param {string} mode
+   */
+  async saveViewMode(mode) {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.VIEW_MODE, mode);
+    } catch (error) {
+      console.error('Error saving view mode:', error);
+    }
+  },
+
+  /**
+   * Load the saved layout, defaulting to 'classic'
+   * @returns {Promise<string>}
+   */
+  async loadViewMode() {
+    try {
+      return (await AsyncStorage.getItem(STORAGE_KEYS.VIEW_MODE)) === 'dark' ? 'dark' : 'classic';
+    } catch (error) {
+      console.error('Error loading view mode:', error);
+      return 'classic';
+    }
+  },
+
+  /**
    * Clear all stored data (useful for development/testing)
    */
   async clearAllData() {
@@ -107,7 +133,8 @@ export const StorageUtils = {
       await AsyncStorage.multiRemove([
         STORAGE_KEYS.SAVED_LOCATIONS,
         STORAGE_KEYS.SELECTED_PERSONALITY,
-        STORAGE_KEYS.LAST_SELECTED_LOCATION
+        STORAGE_KEYS.LAST_SELECTED_LOCATION,
+        STORAGE_KEYS.VIEW_MODE
       ]);
       console.log('All storage data cleared');
     } catch (error) {
