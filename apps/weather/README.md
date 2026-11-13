@@ -27,6 +27,7 @@ apps/weather/
 - **Limits:** per visitor, 60 forecasts and 40 summaries per 10 minutes per function instance, and at most 3 instances.
 - **Place search:** [Open-Meteo geocoding](https://open-meteo.com/en/docs/geocoding-api) straight from the browser (no key). "Beacon", "Beacon, NY" and "12508" all work. `expo-location`'s geocoder doesn't run on the web.
 - **Current location:** the browser's geolocation, named with OpenStreetMap's [Nominatim](https://nominatim.org/release-docs/latest/api/Reverse/) (one call per tap, no key). On first load the app tries quietly; if the browser says no, you get the welcome screen instead of an error.
+- **Go dark:** the "Go dark" button switches to a one-page forecast in the classic layout the app set out to rebuild: current stats, a headline, a next-hour rain graph (only when rain is due), a 24-hour conditions strip with switchable values (temp, feels-like, precip, wind, humidity, UV), the week's summary, and 8 days of temperature range bars that expand for details. It reads Pirate Weather's own `minutely`/`hourly`/`daily` summaries, shows times in the location's time zone, and adds the AI line in your chosen voice (hidden for Default). "Go light" goes back, and the choice is remembered. It lives in `components/DarkView.js`, with original line icons in `components/ConditionIcon.js`.
 - **Saved places and personality** stay in the browser (AsyncStorage, which is localStorage on the web).
 
 ## Keys (one-time setup)
