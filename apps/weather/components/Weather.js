@@ -18,6 +18,7 @@ import { fetchForecast, fetchSummary } from '../utils/api';
 import { reverseGeocode } from '../utils/geocode';
 import { useLocationSearch } from './useLocationSearch';
 import LocationSearchForm from './LocationSearchForm';
+import DarkView from './DarkView';
 import { StorageUtils } from './StorageUtils';
 
 /**
@@ -360,6 +361,7 @@ const Weather = () => {
   const [selectedMetric, setSelectedMetric] = useState('temperature');
   const [metricSelectorVisible, setMetricSelectorVisible] = useState(false);
   const [storageInitialized, setStorageInitialized] = useState(false);
+  const [viewMode, setViewMode] = useState('classic');
 
   // Which place and voice the summaries on screen belong to, so an answer
   // that arrives after the user moved on is dropped instead of shown.
@@ -755,11 +757,18 @@ const Weather = () => {
         console.log('Initializing storage...');
         
         // Load saved data from storage
-        const [savedPersonality, savedLocationsList, lastLocation] = await Promise.all([
+        const [savedPersonality, savedLocationsList, lastLocation, savedViewMode] = await Promise.all([
           StorageUtils.loadPersonality(),
           StorageUtils.loadLocations(),
-          StorageUtils.loadLastSelectedLocation()
+          StorageUtils.loadLastSelectedLocation(),
+          StorageUtils.loadViewMode()
         ]);
+
+        // The dark view's AI line is the "now" summary.
+        if (savedViewMode === 'dark') {
+          setViewMode('dark');
+          setSelectedTimeframe('now');
+        }
 
         // Set loaded personality
         if (savedPersonality) {
@@ -1231,6 +1240,67 @@ const Weather = () => {
     return <View style={styles.centerContainer}><Text>Loading...</Text></View>;
   }
 
+  const changeViewMode = (mode) => {
+    setViewMode(mode);
+    if (mode === 'dark') setSelectedTimeframe('now');
+    StorageUtils.saveViewMode(mode);
+  };
+
+  // Shared by both layouts.
+  const sheets = (
+    <>
+      <LocationModal
+        visible={locationModalVisible}
+        onClose={() => setLocationModalVisible(false)}
+        onSelectLocation={handleSelectLocation}
+        locations={getAllLocations()}
+        onDeleteLocation={handleDeleteLocation}
+      />
+
+      <MenuModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+        selectedPersonality={selectedPersonality}
+        onPersonalityChange={async (personality) => {
+          setSelectedPersonality(personality);
+          
+          // Save personality to storage
+          await StorageUtils.savePersonality(personality);
+          
+          // Clear AI summaries immediately to avoid race condition
+          setAiSummaries({});
+          setSummaryLoading({});
+        }}
+        onSelectLocation={handleSelectLocation}
+        locations={getAllLocations()}
+        onDeleteLocation={handleDeleteLocation}
+        gettingCurrentLocation={gettingCurrentLocation}
+      />
+    </>
+  );
+
+  if (viewMode === 'dark') {
+    return (
+      <View style={styles.container}>
+        <DarkView
+          weatherData={weatherData}
+          location={selectedLocation}
+          aiSummary={aiSummaries.now}
+          aiLoading={!!summaryLoading.now}
+          personality={selectedPersonality}
+          refreshing={refreshing}
+          gettingCurrentLocation={gettingCurrentLocation}
+          onRefresh={handleRefresh}
+          onUseCurrentLocation={() => handleSelectLocation({ type: 'current' })}
+          onChooseLocation={() => setLocationModalVisible(true)}
+          onOpenSettings={() => setSettingsModalVisible(true)}
+          onExit={() => changeViewMode('classic')}
+        />
+        {sheets}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView 
@@ -1254,6 +1324,13 @@ const Weather = () => {
               <Text style={styles.locationText}>{selectedLocation.name}</Text>
             </View>
             
+            <TouchableOpacity
+              style={styles.goDarkButton}
+              onPress={() => changeViewMode('dark')}
+              accessibilityLabel="Switch to the dark view"
+            >
+              <Text style={styles.goDarkButtonText}>Go dark</Text>
+            </TouchableOpacity>
             {/* Pull to refresh doesn't exist in a desktop browser */}
             {Platform.OS === 'web' && (
               <TouchableOpacity
@@ -1414,33 +1491,7 @@ const Weather = () => {
         </View>
       </ScrollView>
 
-      <LocationModal
-        visible={locationModalVisible}
-        onClose={() => setLocationModalVisible(false)}
-        onSelectLocation={handleSelectLocation}
-        locations={getAllLocations()}
-        onDeleteLocation={handleDeleteLocation}
-      />
-
-      <MenuModal
-        visible={settingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-        selectedPersonality={selectedPersonality}
-        onPersonalityChange={async (personality) => {
-          setSelectedPersonality(personality);
-          
-          // Save personality to storage
-          await StorageUtils.savePersonality(personality);
-          
-          // Clear AI summaries immediately to avoid race condition
-          setAiSummaries({});
-          setSummaryLoading({});
-        }}
-        onSelectLocation={handleSelectLocation}
-        locations={getAllLocations()}
-        onDeleteLocation={handleDeleteLocation}
-        gettingCurrentLocation={gettingCurrentLocation}
-      />
+      {sheets}
 
       <MetricSelector
         visible={metricSelectorVisible}
@@ -1497,8 +1548,21 @@ const styles = StyleSheet.create({
   locationDisplay: {
     flex: 1,
   },
-  refreshButton: {
+  goDarkButton: {
     marginLeft: 'auto',
+    marginRight: 10,
+    height: 44,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#222',
+    justifyContent: 'center',
+  },
+  goDarkButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  refreshButton: {
     marginRight: 10,
   },
   refreshButtonText: {
