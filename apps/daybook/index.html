@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Daybook</title>
+<meta name="description" content="A calendar that lays each day out left to right, so you can see the gaps. To-dos that stay put, and little trackers for habits.">
+<meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16151a" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <button class="icon-btn only-narrow" id="menuBtn" aria-label="Calendars and trackers">☰</button>
+  <a class="brand" href="#/" aria-label="Daybook, today">Daybook</a>
+  <div class="nav">
+    <button class="btn ghost" id="todayBtn">Today</button>
+    <button class="icon-btn" id="prevBtn" aria-label="Previous">‹</button>
+    <button class="icon-btn" id="nextBtn" aria-label="Next">›</button>
+  </div>
+  <h1 id="title"></h1>
+  <div class="seg" role="tablist" aria-label="View">
+    <button role="tab" data-view="day">Day</button>
+    <button role="tab" data-view="week">Week</button>
+  </div>
+  <button class="btn primary" id="newBtn"><span aria-hidden="true">＋</span><span class="hide-narrow"> Event</span></button>
+</header>
+
+<div class="shell">
+  <aside class="side" id="side"></aside>
+  <main id="main" tabindex="-1"></main>
+</div>
+
+<section class="tray" id="tray" aria-label="To-dos"></section>
+<div class="scrim" id="scrim" hidden></div>
+<dialog id="dlg"></dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
