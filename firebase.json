@@ -87,6 +87,10 @@
           "destination": "/projects/casino/index.html"
         },
         {
+          "source": "/projects/daybook/**",
+          "destination": "/projects/daybook/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -231,6 +235,15 @@
           ]
         },
         {
+          "source": "/projects/daybook/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/tophat-spears/**/*.@(js|css)",
           "headers": [
             {
@@ -303,6 +316,11 @@
         {
           "source": "/casino",
           "destination": "/projects/casino/",
+          "type": 301
+        },
+        {
+          "source": "/daybook",
+          "destination": "/projects/daybook/",
           "type": 301
         },
         {

@@ -1,0 +1,9 @@
+{
+  "name": "Daybook",
+  "short_name": "Daybook",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f6f3ee",
+  "theme_color": "#f6f3ee",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
