@@ -100,6 +100,16 @@ const tools = [
     hidden: true,
     component: lazy(() => import("./seasonal-box")),
   },
+  {
+    slug: "narrative-lab",
+    title: "Narrative Lab",
+    description:
+      "Private knowledge base for reading content on five layers (context, reasoning, rhetoric, narrative, invariants) and measuring what each derivative did to its source.",
+    added: "2026-11-17",
+    tech: ["React", "Cloud Functions", "Claude API", "Firestore"],
+    hidden: true,
+    component: lazy(() => import("./narrative-lab")),
+  },
 ];
 
 // What the public indexes list.

@@ -178,6 +178,19 @@ jobs:
         working-directory: apps/portfolio
         run: node test/seasonal-box.test.mjs
 
+      # Narrative Lab: page capture, the blind-pass mask, quote location, the
+      # four scores, and that every model output schema stays inside the
+      # structured-outputs subset; then the browser side (highlight segments,
+      # cascades, the Markdown vault and its zip). Pure functions, no install
+      # needed. The pipeline and rules suites need the Firestore emulator;
+      # see functions/test/README.md and apps/portfolio/test/README.md.
+      - name: Test Narrative Lab scoring and capture
+        run: node functions/test/narrative-pure.test.mjs
+
+      - name: Test Narrative Lab browser helpers
+        working-directory: apps/portfolio
+        run: node test/narrative-lab.test.mjs
+
       # Tophat & Spears: the match simulation and lobby seat rules are pure
       # modules shared by every player's browser. No install needed.
       - name: Test Tophat & Spears

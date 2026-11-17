@@ -750,6 +750,73 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── Narrative Lab (/tools/narrative-lab) ─────────────────────────────
+    // Private to one verified Google account. Keep this list in sync with
+    // functions/narrative/store.js and src/work/access.js.
+    //
+    // The browser submits content and edits what is Josh's judgment (notes,
+    // affiliations, a claim's verdict, a narrative's name), but it can never
+    // write what the pipeline must be honest about: the original capture,
+    // findings, scores, edges, spend, or the log. Those come only from the
+    // Cloud Functions via the Admin SDK, which bypasses these rules.
+    function nlAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['joshua.cocciardi@gmail.com'];
+    }
+
+    match /nl_settings/{id} { allow read, write: if nlAdmin(); }
+
+    // The Anthropic key: writable by Josh, readable by no client, ever.
+    match /nl_secrets/{id} {
+      allow read: if false;
+      allow write: if nlAdmin();
+    }
+
+    // Server-written records.
+    match /nl_raw/{id} { allow read: if nlAdmin(); allow write: if false; }
+    match /nl_edges/{id} { allow read: if nlAdmin(); allow write: if false; }
+    match /nl_log/{id} { allow read: if nlAdmin(); allow write: if false; }
+    match /nl_counters/{id} { allow read: if nlAdmin(); allow write: if false; }
+
+    // Items: the browser may submit one (queued at capture, input only) and
+    // may retry a failed or stalled one. Archiving and notes are Josh's.
+    // Everything the pipeline computes is off limits.
+    match /nl_items/{id} {
+      allow read: if nlAdmin();
+      allow create: if nlAdmin()
+        && request.resource.data.status == 'queued'
+        && request.resource.data.stage == 'capture'
+        && request.resource.data.input is map
+        && request.resource.data.keys().hasOnly(['status', 'stage', 'input', 'createdAt']);
+      allow update: if nlAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'archived', 'notes', 'retryRequestedAt'])
+        && (request.resource.data.status == resource.data.status
+          || (request.resource.data.status == 'queued' && resource.data.status in ['failed', 'running']));
+      allow delete: if false;
+    }
+
+    match /nl_sources/{id} {
+      allow read: if nlAdmin();
+      allow update: if nlAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes', 'affiliations', 'kind']);
+      allow create, delete: if false;
+    }
+
+    match /nl_narratives/{id} {
+      allow read: if nlAdmin();
+      allow update: if nlAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'summary', 'notes']);
+      allow create, delete: if false;
+    }
+
+    match /nl_claims/{id} {
+      allow read: if nlAdmin();
+      allow update: if nlAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verdict', 'verdictNote']);
+      allow create, delete: if false;
+    }
+
     // ── Where Am I: password-gated photo decks ──────────────────────────
     // A deck is a private pile of photo rounds. You get into one by knowing
     // its name and password, never by being added to a list.
@@ -1124,6 +1191,7 @@ service cloud.firestore {
         && !collection.matches('collector_.*')
         && !collection.matches('workbook_.*')
         && !collection.matches('sbox_.*')
+        && !collection.matches('nl_.*')
         && !collection.matches('whereami_.*')
         && !collection.matches('ezpayze_.*')
         && !collection.matches('park_.*')
