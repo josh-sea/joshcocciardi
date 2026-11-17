@@ -18,6 +18,7 @@
 #   ./deploy.sh myreadingbuddy - Build portfolio, deploy hosting, firestore + storage rules, file function
 #   ./deploy.sh mise         - Build portfolio, deploy hosting + firestore and storage rules
 #   ./deploy.sh seasonal-box - Build portfolio, deploy rules + the sbox* agent functions + hosting
+#   ./deploy.sh narrative-lab - Test, build portfolio, deploy rules + the nl* pipeline functions + hosting
 #   ./deploy.sh firestore    - Deploy firestore rules + indexes only
 #   ./deploy.sh storage      - Deploy storage rules only
 #   ./deploy.sh ezpayze      - Test + build EzPayze, deploy its hosting site, functions, and rules
@@ -320,6 +321,10 @@ build_portfolio() {
     log "Testing Seasonal Box helpers..."
     node test/seasonal-box.test.mjs || fail "Seasonal Box tests failed"
 
+    log "Testing Narrative Lab helpers..."
+    node test/narrative-lab.test.mjs || fail "Narrative Lab browser tests failed"
+    node "$ROOT_DIR/functions/test/narrative-pure.test.mjs" || fail "Narrative Lab scoring tests failed"
+
     log "Building portfolio..."
     cd "$PORTFOLIO_DIR"
     npm run build || fail "Portfolio build failed"
@@ -402,6 +407,15 @@ deploy_seasonal_box_functions() {
       functions:sboxRunStep,functions:sboxProposal,functions:sboxSeason,functions:sboxHeartbeat,functions:sboxCheckKey \
       || fail "Seasonal Box functions deploy failed"
     success "Seasonal Box functions deployed"
+}
+
+deploy_narrative_lab_functions() {
+    log "Deploying Narrative Lab pipeline (nl* functions)..."
+    cd "$ROOT_DIR"
+    firebase deploy --only \
+      functions:nlItemWritten,functions:nlStatus,functions:nlCheckKey,functions:nlRescore,functions:nlDeleteItem \
+      || fail "Narrative Lab functions deploy failed"
+    success "Narrative Lab functions deployed"
 }
 
 deploy_ezpayze() {
@@ -658,6 +672,16 @@ case "${1:-all}" in
         deploy_hosting
         echo "  Seasonal Box:   https://www.joshcocciardi.com/tools/seasonal-box (private)"
         ;;
+    narrative-lab)
+        echo "========================================"
+        echo "  Deploying Narrative Lab"
+        echo "========================================"
+        build_portfolio
+        deploy_firestore
+        deploy_narrative_lab_functions
+        deploy_hosting
+        echo "  Narrative Lab:  https://www.joshcocciardi.com/tools/narrative-lab (private)"
+        ;;
     firestore)
         echo "========================================"
         echo "  Deploying Firestore only"
@@ -728,7 +752,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|gatekeeper|tophat|party|swarm|casino|daybook|roy|weather|subdomains|ezpayze|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|narrative-lab|gatekeeper|tophat|party|swarm|casino|daybook|roy|weather|subdomains|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac

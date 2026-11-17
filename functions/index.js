@@ -43,6 +43,15 @@ exports.sboxSeason = sbox.sboxSeason;
 exports.sboxHeartbeat = sbox.sboxHeartbeat;
 exports.sboxCheckKey = sbox.sboxCheckKey;
 
+// Narrative Lab: the content-analysis pipeline behind the private
+// /tools/narrative-lab tool. One stage per write to nl_items/{id}.
+const narrative = require('./narrative');
+exports.nlItemWritten = narrative.nlItemWritten;
+exports.nlStatus = narrative.nlStatus;
+exports.nlCheckKey = narrative.nlCheckKey;
+exports.nlRescore = narrative.nlRescore;
+exports.nlDeleteItem = narrative.nlDeleteItem;
+
 // Park Planner: the Disney World wait-time collector. An HTTPS endpoint a
 // GitHub Actions cron calls every five minutes, rather than onSchedule, for
 // the same reason seasonalbox has no cron: Cloud Scheduler is not enabled on

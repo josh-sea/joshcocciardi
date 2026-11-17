@@ -162,3 +162,31 @@ cd apps/portfolio
 npm i --no-save @firebase/rules-unit-testing
 node test/contact-rules.test.mjs
 ```
+
+## `narrative-lab.test.mjs`
+
+Narrative Lab's browser helpers: highlight segments over overlapping spans,
+cascade trees and fidelity per hop, the density display rule, and the
+Markdown vault export with its zip writer (read back, and checked with
+`unzip -t` when installed). No install. Runs in CI.
+
+```sh
+cd apps/portfolio
+node test/narrative-lab.test.mjs
+```
+
+## `narrative-lab-rules.test.mjs`
+
+Firestore security-rules tests for Narrative Lab: only the allowlisted,
+verified account reaches any `nl_*` collection (the catch-all rule must not
+let other signed-in users in); the API key is write-only; an item can only be
+submitted as a fresh capture and retried from failed or stalled; and the
+browser cannot forge a capture, findings, scores, edges, spend, or the log.
+Same setup as the Draft Night suite:
+
+```sh
+firebase emulators:start --only firestore --project josh-cocciardi
+cd apps/portfolio
+npm i --no-save @firebase/rules-unit-testing
+node test/narrative-lab-rules.test.mjs
+```

@@ -233,3 +233,32 @@ runs on every deploy: `apps/portfolio/test/parkdaily.test.mjs` and
 real browser by `apps/portfolio/test/history-render.mjs`, which builds the
 rollups from the live archive and measures the rendered elements; it needs
 Chromium, so CI does not run it.
+
+## `narrative-pure.test.mjs`
+
+Narrative Lab's pure modules: page capture (JSON-LD and meta fallbacks,
+boilerplate removal, outbound links), URL normalization, the same-length
+blind-pass mask, tolerant quote location, the four scores, the library's
+internal consistency, and that every model output schema stays inside the
+structured-outputs subset. No install, no emulator. Runs in CI.
+
+```sh
+node functions/test/narrative-pure.test.mjs
+```
+
+## `narrative-pipeline.test.mjs`
+
+Runs the Narrative Lab pipeline end to end (every stage, the claim lease,
+writeback) against the Firestore emulator, with a local fake of the Claude
+Messages API and a local web server for capture to fetch. No API key and no
+spend. Covers a primary source from link to scores, the blind mask, a
+derivative linked by the person and by URL, claim and narrative matching,
+fidelity and hop, a missing upstream filled in later (and every item citing
+it requeued), a refusal then Retry, an unreadable page, a duplicate delivery,
+the monthly budget, model and effort settings, rescore, and delete.
+
+```sh
+cd functions && npm ci && cd ..
+firebase emulators:exec --only firestore --project josh-cocciardi \
+  "node functions/test/narrative-pipeline.test.mjs"
+```
