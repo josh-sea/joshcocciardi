@@ -8,6 +8,9 @@ import { status, badges, streak, tally, tap } from '../../daybook/js/trackers.js
 import { forDay, dueOn } from '../../daybook/js/todos.js';
 import { apply, fresh, migrate } from '../../daybook/js/store.js';
 import { fromSkylight, fromHar, readAny } from '../../daybook/js/skylight.js';
+import { parseFrame } from '../../daybook/js/sync.js';
+import { createRequire } from 'node:module';
+const lib = createRequire(import.meta.url)('../../../functions/skylight-lib.js');
 
 let failures = 0, passes = 0;
 const ok = (name, cond, extra = '') => {
@@ -143,6 +146,20 @@ const fromH = fromHar(har);
 ok('HAR: reads calendar responses, base64 too, de-duplicated', fromH.responses === 2 && fromH.events.length === 4);
 ok('readAny tells HAR from a paste', readAny(JSON.stringify(har)).responses === 2 && readAny(JSON.stringify(payload)).events.length === 4);
 ok('a logged zero weight still gets a badge', status({ kind: 'number' }, 0) === 'done');
+
+console.log('skylight proxy');
+const url = new URL(lib.eventsUrl({ frame: '3575532', dateMin: '2026-10-01', dateMax: '2026-11-01', tz: 'America/New_York' }));
+ok('builds the calendar_events URL', url.host === 'app.ourskylight.com' && url.pathname === '/api/frames/3575532/calendar_events' && url.searchParams.get('include') === lib.INCLUDE && url.searchParams.get('date_min') === '2026-10-01');
+const throws = (f) => { try { f(); return false; } catch (e) { return e instanceof lib.BadInput; } };
+ok('frame must be digits (no path tricks)', throws(() => lib.frameId('1/../../users')) && throws(() => lib.frameId('')));
+ok('dates are checked', throws(() => lib.eventsUrl({ frame: 1, dateMin: '2026-1-1', dateMax: '2026-02-01' })) && throws(() => lib.eventsUrl({ frame: 1, dateMin: '2026-03-01', dateMax: '2026-02-01' })));
+ok('range is capped', throws(() => lib.eventsUrl({ frame: 1, dateMin: '2026-01-01', dateMax: '2026-12-31' })));
+ok('time zone is checked', throws(() => lib.timezone('America/New_York&x=1')) && lib.timezone('America/Argentina/Buenos_Aires') === 'America/Argentina/Buenos_Aires');
+ok('bare token becomes Bearer', lib.authHeader(' abc123 ') === 'Bearer abc123');
+ok('pasted header keeps its scheme', lib.authHeader('Authorization: basic dXNlcjp0b2s=') === 'Basic dXNlcjp0b2s=' && lib.authHeader('bearer xyz') === 'Bearer xyz');
+ok('newlines are refused (no header injection)', throws(() => lib.authHeader('abc\r\nX-Evil: 1')));
+ok('hint shows only the last four', lib.hint('Bearer abcdefghijkl') === '…ijkl');
+ok('frame from a pasted URL', parseFrame('https://app.ourskylight.com/api/frames/3575532/calendar_events?date_min=2026-10-01') === '3575532' && parseFrame(' 42 ') === '42' && parseFrame('nope') === null);
 
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

@@ -17,44 +17,54 @@ list rows. Live at `/projects/daybook` (short link: `/daybook`).
 
 Keyboard: `t` today, `d` day, `w` week, `←`/`→` move, `n` new event, `/` add a to-do.
 
-Everything is kept in `localStorage` on the device (key `daybook.v1`).
+Everything is kept in `localStorage` on the device (key `daybook.v1`); only the Skylight token lives on the server.
 Settings has a backup download and restore.
 
 ## Skylight
 
-Skylight's web app loads the calendar from a JSON:API style backend while you
-are signed in. Daybook can read those responses without ever seeing a
-password or cookie: **Import from Skylight** takes either
+### Live sync
 
-- the response body of a `calendar_events` request, copied from the browser's
-  Network tab, or
-- a whole HAR file (Network tab, *Save all as HAR*). Only response bodies of
-  `calendar_events` requests are read; the request headers, which carry the
-  session cookie, are ignored and the file is not kept.
+**Sync with Skylight** (sidebar) signs in with Google and asks for two things
+once: the Skylight calendar URL (or just the frame number in it) and the
+`Authorization` value from a `calendar_events` request in the browser's
+Network tab. Both go to the `daybookSkylight` Cloud Function
+(`functions/skylight.js`), which checks the token against Skylight and stores
+it in `daybook_skylight/{uid}`. The Firestore rules close that collection to
+every client, so the token is never in the page, the repo, or anyone's
+browser after that.
 
-Skylight categories (one per family member) become Daybook calendars with
-their colours. Importing the same weeks again replaces the earlier copies
-instead of duplicating them. The reader is `js/skylight.js`; it accepts the
-usual field names (`starts_at`/`ends_at`/`all_day`/`summary`) and a few
-alternatives, and treats all-day end dates as exclusive.
+From then on Daybook asks the function for the month in view plus a week
+either side whenever you move around (and every ten minutes while the page is
+open), and replaces that range's Skylight events with what comes back, so
+events deleted in Skylight disappear too. Synced events are read-only copies:
+edits made in Daybook are overwritten on the next sync.
 
-### Live sync (not built yet)
+The call, confirmed against a real frame:
 
-A browser page on joshcocciardi.com cannot call Skylight's API directly
-(CORS), so a live sync needs a small Cloud Function that holds the Skylight
-token and proxies reads. What community projects report about the API, **not
-yet checked against a real capture**:
+```
+GET https://app.ourskylight.com/api/frames/{frame}/calendar_events
+    ?date_min=YYYY-MM-DD&date_max=YYYY-MM-DD&timezone=America/New_York
+    &include=categories,calendar_account,event_notification_setting
+Authorization: Bearer <token>
+```
 
-| Call | Notes |
-|---|---|
-| `POST https://app.ourskylight.com/api/sessions` | `{ email, password }` returns a user id and a token. |
-| Auth header | `Authorization: Basic base64(<user id>:<token>)` |
-| `GET /api/frames` | The household's frames (calendars). |
-| `GET /api/frames/{frame}/calendar_events?date_min=…&date_max=…` | Events, with categories in `included`. |
-| `GET /api/frames/{frame}/categories` | The people and their colours. |
+It returns JSON:API: `data` is `calendar_event` records (`summary`,
+`starts_at`/`ends_at` with a UTC offset, `all_day`, `location`,
+`description`, recurring events already expanded into instances), and
+`included` carries the `category` records (`label`, `color`), one per person.
+An event shared by two people lists both categories; Daybook files it under
+the first. When the token expires the sidebar says so; paste a fresh one in
+the same dialog.
 
-A HAR from the Skylight tab is the quickest way to confirm the exact paths and
-auth before building the proxy.
+The function only talks to that host and path, only with a numeric frame id
+and checked dates (93 days at most per call), and never logs or returns the
+token.
+
+### Import a file
+
+Without signing in, **Import a Skylight file** takes a pasted
+`calendar_events` response or a HAR file saved from the Network tab. Only
+response bodies are read.
 
 ## Code
 
@@ -66,7 +76,8 @@ auth before building the proxy.
 | `js/todos.js` | Which to-dos show on a day. |
 | `js/store.js` | State shape and pure updates. |
 | `js/skylight.js` | Skylight JSON and HAR reader. |
+| `js/sync.js` | Google sign-in and calls to the `daybookSkylight` function. |
 | `js/app.js` | The page. |
 
-Tests: `node apps/portfolio/test/daybook.test.mjs` (no dependencies).
+Tests: `node apps/portfolio/test/daybook.test.mjs` (no dependencies; also covers the proxy's URL and token checks in `functions/skylight-lib.js`).
 Deploy: `./deploy.sh daybook`.

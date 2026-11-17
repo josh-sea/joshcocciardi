@@ -360,3 +360,5 @@ dialog h2 { margin: 0; font: 600 18px Fraunces, Georgia, serif; }
   .tk { padding: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.sync-err { color: #c92a2a; font-size: 12px; margin: 4px 6px 0; }
+.sync-err:empty { display: none; }

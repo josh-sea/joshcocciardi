@@ -11,7 +11,8 @@ import { eventsForDay, lanes, gaps, busyMinutes, windowFor, frac } from './layou
 import { KINDS, MOODS, valueOf, status, badges, streak, tally, tap, summary, STARTERS } from './trackers.js';
 import { forDay, dueOn } from './todos.js';
 import { apply, fresh, migrate, PALETTE, uid } from './store.js';
-import { readAny } from './skylight.js';
+import { readAny, fromSkylight } from './skylight.js';
+import * as Sync from './sync.js';
 
 const KEY = 'daybook.v1';
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -52,9 +53,9 @@ const writeHash = () => {
   if (location.hash !== h) history.replaceState(null, '', h);
 };
 readHash();
-addEventListener('hashchange', () => { readHash(); render(); });
+addEventListener('hashchange', () => { readHash(); render(); autoSync(); });
 
-const go = (patch) => { Object.assign(ui, patch); render(); $('#main').focus({ preventScroll: true }); };
+const go = (patch) => { Object.assign(ui, patch); render(); $('#main').focus({ preventScroll: true }); if ('day' in patch) autoSync(); };
 
 // ---------- helpers ----------
 
@@ -218,7 +219,7 @@ const welcome = () => {
   return `<div class="welcome">
     <h2>Every day, left to right</h2>
     <p>Each day is a strip from morning to night, so the free stretches stay visible. To-dos live in the tray at the bottom until you tick them off, and trackers for habits show up as little badges on the week.</p>
-    <div class="acts"><button class="btn primary" data-act="sample">Fill in a sample week</button><button class="btn" data-act="skylight">Import from Skylight</button><button class="btn ghost" data-act="dismiss">Start empty</button></div>
+    <div class="acts"><button class="btn primary" data-act="sample">Fill in a sample week</button><button class="btn" data-act="sync-setup">Sync with Skylight</button><button class="btn ghost" data-act="dismiss">Start empty</button></div>
   </div>`;
 };
 
@@ -315,8 +316,9 @@ const renderSide = () => {
     </div>
     <div><h3>Calendars <button data-act="cal-new" aria-label="Add a calendar">＋</button></h3>${cals}</div>
     <div><h3>Trackers <button data-act="tracker-new" aria-label="Add a tracker">＋</button></h3>${tks || '<button class="link" data-act="tracker-new">Add a habit or tracker</button>'}</div>
+    ${skylightSide()}
     <div><h3>More</h3>
-      <button class="link" data-act="skylight">Import from Skylight</button><br>
+      <button class="link" data-act="skylight">Import a Skylight file</button><br>
       <button class="link" data-act="settings">Settings, backup and restore</button>
     </div>`;
 };
@@ -581,6 +583,120 @@ const settingsDialog = () => {
   });
 };
 
+// ---------- Skylight live sync ----------
+
+const sky = () => S.settings.skylight || {};
+const syncUi = { busy: false, error: '' };
+
+const ago = (ms) => {
+  if (!ms) return 'not yet';
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+};
+
+const skylightSide = () => {
+  if (!sky().connected) {
+    return `<div><h3>Skylight</h3><button class="link" data-act="sync-setup">Sync with Skylight</button></div>`;
+  }
+  return `<div><h3>Skylight <button data-act="sync-setup" aria-label="Skylight sync settings">⋯</button></h3>
+    <div class="cal-row"><span class="nm">${syncUi.busy ? 'Syncing…' : `Synced ${ago(sky().lastSync)}`}</span>
+      <button class="btn small" data-act="sync-now"${syncUi.busy ? ' disabled' : ''}>Sync now</button></div>
+    ${syncUi.error ? `<p class="sync-err">${esc(syncUi.error)}</p>` : ''}</div>`;
+};
+
+/** The range to fetch for the day in view: its month, with a week either side. */
+const syncRange = () => {
+  const first = T.parseDate(ui.day); first.setDate(1);
+  const min = T.addDays(T.dateKey(first), -7);
+  const last = T.parseDate(ui.day); last.setMonth(last.getMonth() + 1, 0);
+  return [min, T.addDays(T.dateKey(last), 7)];
+};
+
+let syncing = null;
+const syncNow = async ({ quiet = false } = {}) => {
+  if (!sky().connected || syncing) return syncing;
+  const [min, max] = syncRange();
+  if (quiet && Sync.fresh(min, max)) return null;
+  syncUi.busy = true; syncUi.error = ''; renderSide();
+  syncing = (async () => {
+    try {
+      if (!(await Sync.user())) throw new Error('Signed out. Open Skylight settings and sign in again.');
+      const body = await Sync.events(min, max);
+      const got = fromSkylight(body);
+      Sync.mark(min, max);
+      // Replace the whole fetched range, so events deleted in Skylight go too.
+      S = apply(S, { type: 'import/events', source: 'skylight', events: got.events, calendars: got.calendars, from: min, to: max });
+      S = apply(S, { type: 'settings/set', patch: { skylight: { ...sky(), lastSync: Date.now() } } });
+      save();
+      if (!quiet) toast(`Synced ${got.events.length} Skylight event${got.events.length === 1 ? '' : 's'}`);
+    } catch (e) {
+      syncUi.error = e.message;
+    } finally {
+      syncUi.busy = false; syncing = null; render();
+    }
+  })();
+  return syncing;
+};
+const autoSync = () => { if (sky().connected) syncNow({ quiet: true }); };
+
+const syncDialog = async () => {
+  openDialog(`<h2>Sync with Skylight</h2><p class="muted" data-body>Loading…</p>
+    <div class="acts"><span class="grow"></span><button class="btn ghost" value="cancel" formnovalidate>Close</button></div>`, () => false);
+  const body = $('[data-body]', dlg);
+  let who;
+  try { who = await Sync.user(); } catch { body.textContent = 'Could not load sign-in. Check your connection and try again.'; return; }
+  if (!who) {
+    body.outerHTML = `<div class="note">Daybook keeps your Skylight token on its server, tied to your Google sign-in, so it never sits in this page or in anyone else's browser. Sign in first.</div>
+      <button class="btn primary" type="button" data-x="signin">Sign in with Google</button><p class="sync-err" data-err></p>`;
+    $('[data-x=signin]', dlg).onclick = async () => {
+      try { await Sync.signIn(); dlg.close(); syncDialog(); }
+      catch (e) { $('[data-err]', dlg).textContent = /popup/i.test(e.code || e.message) ? 'The sign-in window was blocked or closed. Allow pop-ups for this site and try again.' : e.message; }
+    };
+    return;
+  }
+  let st = { connected: false };
+  try { st = await Sync.status(); } catch (e) { syncUi.error = e.message; }
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
+  body.outerHTML = `
+    <p class="muted" style="margin:0">Signed in as <b>${esc(who.email || who.displayName || 'you')}</b>. <button class="link" type="button" data-x="signout">Sign out</button></p>
+    ${st.connected ? `<div class="note">Connected to frame <b>${esc(st.frame)}</b> with token <code>${esc(st.hint)}</code>. Daybook fetches the month you are looking at, a week either side, whenever you move around. Paste a new token below if Skylight starts turning it down.</div>` : ''}
+    <label class="field"><span>Skylight calendar URL or frame number</span><input name="frame" value="${esc(st.frame || '')}" placeholder="https://app.ourskylight.com/api/frames/1234567/calendar_events?…" ${st.connected ? '' : 'required'} autocomplete="off"></label>
+    <label class="field"><span>Token</span><input name="token" type="password" placeholder="${st.connected ? 'Leave empty to keep the saved token' : 'The value of the Authorization header'}" ${st.connected ? '' : 'required'} autocomplete="off"></label>
+    <div class="note">In developer tools, open <b>Network</b>, click the <code>calendar_events</code> request, and under <b>Request Headers</b> copy the <b>Authorization</b> value (with or without the word Bearer). It is sent to Daybook's server once, checked against Skylight, and stored where no browser can read it back.</div>
+    <input type="hidden" name="tz" value="${esc(st.tz || tz)}">
+    <p class="sync-err" data-err></p>`;
+  const acts = $('.acts', dlg);
+  acts.innerHTML = `${st.connected ? '<button class="btn danger" value="disconnect" formnovalidate>Disconnect</button>' : ''}<span class="grow"></span>
+    <button class="btn ghost" value="cancel" formnovalidate>Close</button><button class="btn primary" value="save">${st.connected ? 'Save' : 'Connect'}</button>`;
+  $('[data-x=signout]', dlg).onclick = async () => { await Sync.signOut(); dlg.close(); };
+  const form = $('form', dlg);
+  form.onsubmit = async (e) => {
+    const action = e.submitter?.value;
+    if (action === 'cancel') return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const err = $('[data-err]', dlg);
+    const fd = new FormData(form);
+    const btn = e.submitter; btn.disabled = true; err.textContent = '';
+    try {
+      if (action === 'disconnect') {
+        await Sync.disconnect();
+        S = apply(S, { type: 'settings/set', patch: { skylight: { connected: false } } }); save();
+        dlg.close(); render(); toast('Skylight disconnected. Synced events stay until you delete them.'); return;
+      }
+      const token = fd.get('token').trim();
+      const frame = Sync.parseFrame(fd.get('frame')) || st.frame;
+      if (!frame) throw new Error('Paste the Skylight URL or the number after /frames/.');
+      if (!token && !st.connected) throw new Error('Paste the token.');
+      if (token) await Sync.connect(token, frame, fd.get('tz'));
+      S = apply(S, { type: 'settings/set', patch: { skylight: { ...sky(), connected: true } } }); save();
+      firstRun = false; dlg.close(); Sync.forget(); syncNow();
+    } catch (x) { err.textContent = x.message; btn.disabled = false; }
+  };
+};
+
 const skylightDialog = () => {
   openDialog(`
     <h2>Import from Skylight</h2>
@@ -714,6 +830,8 @@ document.addEventListener('click', (e) => {
     case 'cal-new': return editCalendar();
     case 'settings': ui.sideOpen = false; render(); return settingsDialog();
     case 'skylight': ui.sideOpen = false; render(); return skylightDialog();
+    case 'sync-setup': ui.sideOpen = false; render(); return syncDialog();
+    case 'sync-now': Sync.forget(); return syncNow();
     case 'sample': return sample();
     case 'dismiss': firstRun = false; save(); return render();
     case 'clear-done': return dispatch({ type: 'todo/clearDone' }, { undo: 'Cleared done to-dos' });
@@ -807,3 +925,5 @@ setInterval(() => {
 }, 60000);
 
 render();
+autoSync();
+setInterval(() => { if (!document.hidden) autoSync(); }, 10 * 60000);
