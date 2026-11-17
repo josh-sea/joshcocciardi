@@ -1197,6 +1197,7 @@ service cloud.firestore {
         && !collection.matches('park_.*')
         && !collection.matches('scale_.*')
         && !collection.matches('weather_.*')
+        && !collection.matches('daybook_.*')
         && collection != 'work_private'
         && collection != 'contact_messages';
     }

@@ -29,6 +29,11 @@ exports.synthesizeWord = workbook.synthesizeWord;
 const espn = require('./espn');
 exports.espnFantasy = espn.espnFantasy;
 
+// Daybook: Skylight calendar read proxy. Skylight blocks cross-site reads
+// and its token must stay server-side. Gated on Firebase Auth.
+const skylight = require('./skylight');
+exports.daybookSkylight = skylight.daybookSkylight;
+
 // My Reading Buddy: serves a book's photos and recordings to members of its
 // shelf, same-origin through a Hosting rewrite, for the video export.
 const readingbuddy = require('./readingbuddy');
