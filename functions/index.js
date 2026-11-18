@@ -56,6 +56,7 @@ exports.nlStatus = narrative.nlStatus;
 exports.nlCheckKey = narrative.nlCheckKey;
 exports.nlRescore = narrative.nlRescore;
 exports.nlDeleteItem = narrative.nlDeleteItem;
+exports.nlPublic = narrative.nlPublic;
 
 // Park Planner: the Disney World wait-time collector. An HTTPS endpoint a
 // GitHub Actions cron calls every five minutes, rather than onSchedule, for

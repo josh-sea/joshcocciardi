@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { explain, retryItem, submitItem } from "./store";
 import { fmtDate, isStalled, progress } from "./format";
 import { Empty, Field, ItemLink, StatusChip, titleOf, useLab } from "./ui";
+import { SuggestionsCard } from "./Sharing";
 
 /* Submitting content, and watching it go through the pipeline. A link is
    fetched by the pipeline; pasted text is used as is (the link, if given too,
@@ -82,7 +83,8 @@ export default function Ingest() {
         </div>
       </div>
 
-      <div className="nl-two">
+      <SuggestionsCard />
+      <div className="nl-two" style={{ marginTop: 12 }}>
         <div>
           <form className="nl-card" onSubmit={submit}>
             <div className="nl-between" style={{ marginBottom: 12 }}>

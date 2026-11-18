@@ -817,6 +817,37 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // Share links: the document id is the token. Josh creates one, renames
+    // it, turns suggestions or the link itself on and off, or deletes it.
+    // Its counters (views, suggestions, the hourly limit) are kept by the
+    // public function only. Nobody else reads these documents; viewers get a
+    // snapshot from nlPublic, never Firestore access.
+    match /nl_shares/{token} {
+      allow read: if nlAdmin();
+      allow create: if nlAdmin()
+        && token.size() >= 20
+        && request.resource.data.keys().hasOnly(['scope', 'targetId', 'label', 'allowSuggestions', 'expiresAt', 'revoked', 'views', 'suggestions', 'createdAt'])
+        && request.resource.data.scope in ['item', 'cascade', 'lab']
+        && request.resource.data.revoked == false
+        && request.resource.data.views == 0
+        && request.resource.data.suggestions == 0
+        && request.resource.data.allowSuggestions is bool;
+      allow update: if nlAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['label', 'allowSuggestions', 'expiresAt', 'revoked', 'revokedAt'])
+        && request.resource.data.revoked is bool;
+      allow delete: if nlAdmin();
+    }
+
+    // Suggestions from viewers arrive only through the public function.
+    // Josh accepts (which also submits an nl_items document) or dismisses.
+    match /nl_suggestions/{id} {
+      allow read: if nlAdmin();
+      allow update: if nlAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'itemId', 'decidedAt'])
+        && request.resource.data.status in ['accepted', 'dismissed', 'pending'];
+      allow create, delete: if false;
+    }
+
     // ── Where Am I: password-gated photo decks ──────────────────────────
     // A deck is a private pile of photo rounds. You get into one by knowing
     // its name and password, never by being added to a list.

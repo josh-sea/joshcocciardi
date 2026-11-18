@@ -51,6 +51,8 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "nl_secrets", "anthropic"), { apiKey: "sk-ant-secret" });
   await setDoc(doc(db, "nl_counters", "month-2026-11"), { usd: 1.2 });
   await setDoc(doc(db, "nl_log", "l1"), { event: "scored" });
+  await setDoc(doc(db, "nl_shares", "existingtoken_aaaaaaaaaaaa"), { scope: "cascade", targetId: "done1", label: "L", allowSuggestions: true, revoked: false, views: 7, suggestions: 2 });
+  await setDoc(doc(db, "nl_suggestions", "s1"), { token: "existingtoken_aaaaaaaaaaaa", url: "https://x.com/a", status: "pending", itemId: null });
 });
 
 const fresh = (input = { url: "https://example.com/a" }) => ({ status: "queued", stage: "capture", input, createdAt: serverTimestamp() });
@@ -114,6 +116,37 @@ await check("rename a narrative", assertSucceeds(updateDoc(doc(josh, "nl_narrati
 await check("cannot edit a narrative's count", assertFails(updateDoc(doc(josh, "nl_narratives", "n1"), { itemCount: 50 })));
 await check("set a claim's verdict", assertSucceeds(updateDoc(doc(josh, "nl_claims", "c1"), { verdict: "false", verdictNote: "Retracted 11/14" })));
 await check("cannot relink a claim", assertFails(updateDoc(doc(josh, "nl_claims", "c1"), { itemIds: [] })));
+
+console.log("share links:");
+const newShare = (extra = {}) => ({ scope: "cascade", targetId: "done1", label: "Memo", allowSuggestions: true, expiresAt: null, revoked: false, views: 0, suggestions: 0, createdAt: serverTimestamp(), ...extra });
+const tok = "freshtoken_bbbbbbbbbbbbbbbb";
+await check("josh creates a share", assertSucceeds(setDoc(doc(josh, "nl_shares", tok), newShare())));
+await check("josh reads shares", assertSucceeds(getDoc(doc(josh, "nl_shares", tok))));
+await check("a short token is refused", assertFails(setDoc(doc(josh, "nl_shares", "short"), newShare())));
+await check("cannot create with views already counted", assertFails(setDoc(doc(josh, "nl_shares", "tok_cccccccccccccccccccccc"), newShare({ views: 50 }))));
+await check("cannot create already revoked", assertFails(setDoc(doc(josh, "nl_shares", "tok_dddddddddddddddddddddd"), newShare({ revoked: true }))));
+await check("cannot create with an unknown scope", assertFails(setDoc(doc(josh, "nl_shares", "tok_eeeeeeeeeeeeeeeeeeeeee"), newShare({ scope: "everything" }))));
+await check("cannot create with extra fields", assertFails(setDoc(doc(josh, "nl_shares", "tok_ffffffffffffffffffffff"), newShare({ hourCount: -100 }))));
+await check("josh turns a share off", assertSucceeds(updateDoc(doc(josh, "nl_shares", "existingtoken_aaaaaaaaaaaa"), { revoked: true, revokedAt: serverTimestamp() })));
+await check("josh turns suggestions off", assertSucceeds(updateDoc(doc(josh, "nl_shares", "existingtoken_aaaaaaaaaaaa"), { allowSuggestions: false })));
+await check("cannot reset a view count", assertFails(updateDoc(doc(josh, "nl_shares", "existingtoken_aaaaaaaaaaaa"), { views: 0 })));
+await check("cannot repoint a share", assertFails(updateDoc(doc(josh, "nl_shares", "existingtoken_aaaaaaaaaaaa"), { targetId: "other" })));
+await check("josh deletes a share", assertSucceeds(deleteDoc(doc(josh, "nl_shares", tok))));
+for (const [name, db] of [["a stranger", stranger], ["signed out", anon]]) {
+  await check(`${name} cannot read a share by its token`, assertFails(getDoc(doc(db, "nl_shares", "existingtoken_aaaaaaaaaaaa"))));
+  await check(`${name} cannot list shares`, assertFails(getDocs(collection(db, "nl_shares"))));
+  await check(`${name} cannot create a share`, assertFails(setDoc(doc(db, "nl_shares", "tok_gggggggggggggggggggggg"), newShare())));
+  await check(`${name} cannot write a suggestion directly`, assertFails(setDoc(doc(db, "nl_suggestions", "s9"), { url: "https://x", status: "pending" })));
+  await check(`${name} cannot read suggestions`, assertFails(getDoc(doc(db, "nl_suggestions", "s1"))));
+}
+
+console.log("suggestions:");
+await check("josh reads suggestions", assertSucceeds(getDoc(doc(josh, "nl_suggestions", "s1"))));
+await check("josh accepts one", assertSucceeds(updateDoc(doc(josh, "nl_suggestions", "s1"), { status: "accepted", itemId: "new1", decidedAt: serverTimestamp() })));
+await check("cannot rewrite what a viewer sent", assertFails(updateDoc(doc(josh, "nl_suggestions", "s1"), { url: "https://other" })));
+await check("cannot invent a status", assertFails(updateDoc(doc(josh, "nl_suggestions", "s1"), { status: "published" })));
+await check("josh cannot forge a suggestion either", assertFails(setDoc(doc(josh, "nl_suggestions", "s2"), { url: "https://x", status: "pending" })));
+await check("an accepted suggestion becomes a normal item", assertSucceeds(setDoc(doc(josh, "nl_items", "fromsugg"), fresh({ url: "https://x.com/a", suggestionId: "s1" }))));
 
 await env.cleanup();
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -162,3 +162,80 @@ export const cascadeStats = (tree) => {
   }));
   return { rows, perHop, size: rows.length - 1, depth: perHop.length };
 };
+
+/* The root of the cascade an item belongs to (mirrors the server's
+   cascadeRoot): walk upstream until an item has no stored upstream. */
+export const cascadeRootOf = (itemId, edges) => {
+  const up = {};
+  for (const e of edges || []) if (e.from && e.status !== "unrelated") (up[e.to] = up[e.to] || []).push(e.from);
+  let cur = itemId;
+  const seen = new Set([cur]);
+  while (up[cur] && up[cur].length) {
+    const nxt = up[cur].find((x) => !seen.has(x));
+    if (!nxt) break;
+    seen.add(nxt);
+    cur = nxt;
+  }
+  return cur;
+};
+
+const DAY = 86400000;
+
+/* Positions for the shared timeline: x by publication time, one lane per hop,
+   and within a lane, nodes that would collide drop to a new row. Items with
+   no usable date are spread evenly after the dated ones. Pure: returns
+   pixel positions inside `width`. */
+export const timelineLayout = (items, { width = 960, left = 96, right = 28, top = 34, rowH = 46, minGap = 150, laneGap = 18 } = {}) => {
+  const list = (items || []).map((it, i) => ({ id: it.id, t: Date.parse(it.publishedAt || "") || null, hop: typeof it.hop === "number" ? it.hop : 0, i }));
+  const dated = list.filter((n) => n.t !== null);
+  const span = { min: Math.min(...dated.map((n) => n.t)), max: Math.max(...dated.map((n) => n.t)) };
+  const inner = width - left - right;
+  const undatedCount = list.length - dated.length;
+  const datedWidth = undatedCount ? inner * 0.82 : inner;
+  const xOf = (n, k) => {
+    if (n.t === null) return left + datedWidth + ((k + 1) / (undatedCount + 1)) * (inner - datedWidth);
+    if (span.max === span.min) return left + datedWidth / 2;
+    return left + ((n.t - span.min) / (span.max - span.min)) * datedWidth;
+  };
+  let undatedSeen = 0;
+  for (const n of [...list].sort((a, b) => (a.t ?? Infinity) - (b.t ?? Infinity) || a.i - b.i)) {
+    n.x = Math.round(xOf(n, n.t === null ? undatedSeen++ : 0));
+  }
+  const hops = [...new Set(list.map((n) => n.hop))].sort((a, b) => a - b);
+  const lanes = [];
+  let y = top;
+  for (const hop of hops) {
+    const rows = [];
+    for (const n of list.filter((m) => m.hop === hop).sort((a, b) => a.x - b.x || a.i - b.i)) {
+      let r = rows.findIndex((lastX) => n.x - lastX >= minGap);
+      if (r < 0) {
+        rows.push(n.x);
+        r = rows.length - 1;
+      } else rows[r] = n.x;
+      n.row = r;
+      n.y = y + rowH / 2 + r * rowH;
+    }
+    const h = Math.max(1, rows.length) * rowH;
+    lanes.push({ hop, y, h });
+    y += h + laneGap;
+  }
+  const ticks = [];
+  if (dated.length && span.max > span.min) {
+    const days = (span.max - span.min) / DAY;
+    const count = Math.min(6, Math.max(2, Math.round(days) + 1));
+    for (let k = 0; k < count; k++) {
+      const t = span.min + ((span.max - span.min) * k) / (count - 1);
+      ticks.push({ x: Math.round(left + ((t - span.min) / (span.max - span.min)) * datedWidth), t });
+    }
+  } else if (dated.length) {
+    ticks.push({ x: Math.round(left + datedWidth / 2), t: span.min });
+  }
+  return {
+    nodes: Object.fromEntries(list.map((n) => [n.id, { x: n.x, y: n.y, hop: n.hop, row: n.row }])),
+    lanes,
+    ticks,
+    width,
+    height: y - laneGap + 30,
+    undated: undatedCount,
+  };
+};
