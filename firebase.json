@@ -31,6 +31,13 @@
           }
         },
         {
+          "source": "/api/narrative/**",
+          "function": {
+            "functionId": "nlPublic",
+            "region": "us-central1"
+          }
+        },
+        {
           "source": "/projects/moments/**",
           "destination": "/projects/moments/index.html"
         },
@@ -111,6 +118,32 @@
         },
         {
           "source": "/tools/seasonal-box{,/**}",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow, noarchive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            }
+          ]
+        },
+        {
+          "source": "/lab/**",
+          "headers": [
+            {
+              "key": "X-Robots-Tag",
+              "value": "noindex, nofollow, noarchive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-store"
+            }
+          ]
+        },
+        {
+          "source": "/tools/narrative-lab{,/**}",
           "headers": [
             {
               "key": "X-Robots-Tag",

@@ -7,6 +7,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   limit,
@@ -61,6 +62,59 @@ export const setArchived = (id, archived) => updateDoc(d("items", id), { archive
 export const updateSource = (id, patch) => updateDoc(d("sources", id), patch);
 export const updateNarrative = (id, patch) => updateDoc(d("narratives", id), patch);
 export const updateClaim = (id, patch) => updateDoc(d("claims", id), patch);
+
+// ── Share links ─────────────────────────────────────────────────────────────
+
+/* A random 27-character token (20 bytes, base64url). It is the share's
+   document id and the only secret in the link, so it comes from the
+   browser's cryptographic generator, never Math.random. */
+export const newToken = () => {
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+
+export const shareUrl = (token) => `${window.location.origin}/lab/${token}`;
+
+export const createShare = async ({ scope, targetId = null, label, allowSuggestions = true, expiresAt = null }) => {
+  const token = newToken();
+  await setDoc(d("shares", token), {
+    scope,
+    targetId,
+    label: (label || "").trim().slice(0, 160),
+    allowSuggestions,
+    expiresAt,
+    revoked: false,
+    views: 0,
+    suggestions: 0,
+    createdAt: serverTimestamp(),
+  });
+  return token;
+};
+
+export const updateShare = (token, patch) => updateDoc(d("shares", token), patch);
+export const setShareRevoked = (token, revoked) => updateDoc(d("shares", token), { revoked, revokedAt: revoked ? serverTimestamp() : null });
+export const deleteShare = (token) => deleteDoc(d("shares", token));
+
+// ── Suggestions from viewers ────────────────────────────────────────────────
+
+/* Accepting submits a normal item (it then runs the pipeline) and marks the
+   suggestion with the new item's id. */
+export const acceptSuggestion = async (s) => {
+  const id = await submitItem({
+    url: s.url,
+    text: s.text,
+    title: s.title,
+    author: s.author,
+    publisher: s.publisher,
+    suggestionId: s.id,
+  });
+  await updateDoc(d("suggestions", s.id), { status: "accepted", itemId: id, decidedAt: serverTimestamp() });
+  return id;
+};
+
+export const dismissSuggestion = (id) => updateDoc(d("suggestions", id), { status: "dismissed", decidedAt: serverTimestamp() });
+export const restoreSuggestion = (id) => updateDoc(d("suggestions", id), { status: "pending", decidedAt: null });
 
 // ── Settings and the key ────────────────────────────────────────────────────
 

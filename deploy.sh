@@ -413,7 +413,7 @@ deploy_narrative_lab_functions() {
     log "Deploying Narrative Lab pipeline (nl* functions)..."
     cd "$ROOT_DIR"
     firebase deploy --only \
-      functions:nlItemWritten,functions:nlStatus,functions:nlCheckKey,functions:nlRescore,functions:nlDeleteItem \
+      functions:nlItemWritten,functions:nlStatus,functions:nlCheckKey,functions:nlRescore,functions:nlDeleteItem,functions:nlPublic \
       || fail "Narrative Lab functions deploy failed"
     success "Narrative Lab functions deployed"
 }

@@ -372,6 +372,71 @@ const res = await nlDeleteItem.run({ data: { itemId: A }, ...asJosh });
 eq('delete removes the item and capture, orphans edges out of it', [!!(await get('nl_items', A)), !!(await get('nl_raw', A)), res.edgesOrphaned], [false, false, 1]);
 eq('orphaned edge goes back to missing', (await get('nl_edges', `${A}__${B}`)).status, 'missing');
 
+// ── 8. Share links and suggestions (the public endpoint) ────────────────────
+
+console.log('share links:');
+const { nlPublic } = require('../narrative/index.js');
+const SH = require('../narrative/share.js');
+const call = (method, path, body) =>
+  new Promise((resolve, reject) => {
+    const headers = {};
+    const res = {
+      set: (k, v) => {
+        headers[k.toLowerCase()] = v;
+        return res;
+      },
+      status: (code) => {
+        res.code = code;
+        return res;
+      },
+      json: (b) => resolve({ code: res.code, body: b, headers }),
+      setHeader: (k, v) => (headers[k.toLowerCase()] = v),
+      getHeader: (k) => headers[k.toLowerCase()],
+      end: () => resolve({ code: res.code, body: null, headers }),
+      on: () => res,
+    };
+    const req = { method, path, url: path, body, headers: { 'content-type': 'application/json' }, header: () => undefined, get: () => undefined };
+    Promise.resolve(nlPublic(req, res)).catch(reject);
+  });
+const token = 'tok_' + 'x'.repeat(24);
+await db.collection('nl_shares').doc(token).set({ scope: 'cascade', targetId: D, label: 'The memo cascade', allowSuggestions: true, revoked: false, views: 0, suggestions: 0, expiresAt: null });
+await db.collection('nl_items').doc(C).update({ notes: 'PRIVATE NOTE ON C' }).catch(() => {});
+let r = await call('GET', `/api/narrative/share/${token}`);
+eq('a live link returns its cascade', [r.code, r.body.items.map((x) => x.id).sort()], [200, [C, C2, D].sort()]);
+ok('the snapshot carries edges with fidelity', r.body.edges.length === 2 && r.body.edges.every((e) => typeof e.fidelity === 'number'));
+ok('no private fields reach a viewer', !/PRIVATE NOTE|"cost"|"steps"|"notes"/.test(JSON.stringify(r.body)));
+eq('no caching, no indexing', [r.headers['cache-control'], /noindex/.test(r.headers['x-robots-tag'])], ['no-store', true]);
+await call('GET', `/api/narrative/share/${token}/`);
+eq('views are counted', (await get('nl_shares', token)).views, 2);
+eq('bad paths are 404', (await call('GET', '/api/narrative/share/short')).code, 404);
+eq('unknown token is 404', (await call('GET', `/api/narrative/share/${'n'.repeat(27)}`)).code, 404);
+eq('wrong method on the snapshot', (await call('POST', `/api/narrative/share/${token}`)).code, 405);
+
+r = await call('POST', `/api/narrative/share/${token}/suggest`, { url: 'https://example.com/another-take', title: 'Another take', note: 'Covers the memo too', name: 'Sam' });
+eq('a suggestion is accepted', r.code, 201);
+const sugg = await all('nl_suggestions');
+eq('it is stored pending, with the share label', [sugg.length, sugg[0].status, sugg[0].shareLabel, sugg[0].name], [1, 'pending', 'The memo cascade', 'Sam']);
+eq('no item is created by a suggestion', (await all('nl_items')).some((x) => x.input?.url === 'https://example.com/another-take'), false);
+eq('a bad suggestion is refused with a reason', [(await call('POST', `/api/narrative/share/${token}/suggest`, { text: 'short' })).code], [400]);
+r = await call('POST', `/api/narrative/share/${token}/suggest`, { url: 'https://example.com/x', website: 'http://spam.example' });
+eq('a honeypot hit looks accepted but stores nothing', [r.code, (await all('nl_suggestions')).length], [201, 1]);
+for (let i = 0; i < SH.HOURLY_SUGGESTIONS_PER_SHARE - 1; i++) await call('POST', `/api/narrative/share/${token}/suggest`, { url: `https://example.com/n${i}` });
+r = await call('POST', `/api/narrative/share/${token}/suggest`, { url: 'https://example.com/one-too-many' });
+eq('the hourly limit per link holds', [r.code, (await all('nl_suggestions')).length], [429, SH.HOURLY_SUGGESTIONS_PER_SHARE]);
+eq('the share counts its suggestions', (await get('nl_shares', token)).suggestions, SH.HOURLY_SUGGESTIONS_PER_SHARE);
+
+await db.collection('nl_shares').doc(token).update({ allowSuggestions: false, hourCount: 0 });
+eq('suggestions can be switched off per link', (await call('POST', `/api/narrative/share/${token}/suggest`, { url: 'https://example.com/z' })).code, 403);
+await db.collection('nl_shares').doc(token).update({ revoked: true });
+r = await call('GET', `/api/narrative/share/${token}`);
+eq('a turned-off link is gone at once', [r.code, r.body.state], [410, 'revoked']);
+eq('and takes no suggestions', (await call('POST', `/api/narrative/share/${token}/suggest`, { url: 'https://example.com/z' })).code, 410);
+const lab = 'lab_' + 'y'.repeat(24);
+await db.collection('nl_shares').doc(lab).set({ scope: 'lab', targetId: null, label: 'Everything', allowSuggestions: false, revoked: false, views: 0, suggestions: 0 });
+r = await call('GET', `/api/narrative/share/${lab}`);
+const doneCount = (await all('nl_items')).filter((x) => x.status === 'done' && !x.archived).length;
+eq('a lab link lists every finished item', [r.code, r.body.items.length], [200, doneCount]);
+
 api.close();
 web.close();
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -13,6 +13,7 @@ const { redact, namesToHide, locate, locateAll, wordCount, MASK } = require('../
 const S = require('../narrative/scoring.js');
 const L = require('../narrative/library.js');
 const P = require('../narrative/prompts.js');
+const SH = require('../narrative/share.js');
 
 let pass = 0;
 let fail = 0;
@@ -187,6 +188,72 @@ for (const name of ['EXTRACT', 'BLIND', 'RESOLVE', 'RELATE', 'NARRATE']) walk(P[
 eq('every schema is in the structured-outputs subset', problems, []);
 ok('blind enum lists every technique', P.BLIND_SCHEMA.properties.findings.items.properties.techniqueId.enum.length === L.TECHNIQUES.length);
 ok('system prompts carry no per-item content', !/\$\{|undefined/.test(P.BLIND_SYSTEM + P.RELATE_SYSTEM + P.NARRATE_SYSTEM + P.EXTRACT_SYSTEM + P.RESOLVE_SYSTEM));
+
+// ── share links ──
+console.log('share links:');
+eq('active', SH.shareState({ scope: 'cascade', revoked: false }), 'active');
+eq('revoked', SH.shareState({ scope: 'cascade', revoked: true }), 'revoked');
+eq('expired', SH.shareState({ scope: 'item', expiresAt: '2026-01-01T00:00:00Z' }, Date.parse('2026-02-01')), 'expired');
+eq('not expired yet', SH.shareState({ scope: 'item', expiresAt: '2026-03-01T00:00:00Z' }, Date.parse('2026-02-01')), 'active');
+eq('missing doc', SH.shareState(null), 'missing');
+eq('bad scope', SH.shareState({ scope: 'everything' }), 'missing');
+const E = [
+  { id: 'e1', from: 'P', to: 'A', status: 'done' },
+  { id: 'e2', from: 'A', to: 'B', status: 'done' },
+  { id: 'e3', from: 'P', to: 'U', status: 'unrelated' },
+  { id: 'e4', from: 'B', to: 'P', status: 'done' },
+  { id: 'e5', from: null, to: 'A', status: 'missing' },
+  { id: 'e6', from: 'Q', to: 'R', status: 'done' },
+];
+eq('cascade follows derivations, skips unrelated, stops on a cycle', SH.cascadeIds('P', E).sort(), ['A', 'B', 'P']);
+eq('cascade root from a leaf', SH.cascadeRoot('R', E), 'Q');
+eq('cascade root survives a cycle', ['P', 'A', 'B'].includes(SH.cascadeRoot('B', E)), true);
+
+const priv = (id, extra = {}) => ({
+  id,
+  status: 'done',
+  context: { title: `Title ${id}`, author: 'Dana', publisher: 'Example', url: 'https://ex.com/a', summary: 's', publishedAt: '2026-11-10' },
+  sourceName: 'Dana',
+  notes: 'PRIVATE NOTE',
+  cost: 0.42,
+  steps: { blind: { cost: 0.1 } },
+  input: { text: 'FULL ORIGINAL TEXT' },
+  claims: [{ text: 'claim', kind: 'fact', claimId: 'c1', quote: 'q', start: 1, end: 2 }],
+  findings: [{ id: 'f1', layer: 3, techniqueId: 'loaded-language', quote: 'x'.repeat(900), explanation: 'e', confidence: 'high', start: 3, end: 903 }],
+  scores: { densityRaw: 4.2, fidelity: 60 },
+  ...extra,
+});
+const shared = [priv('P'), priv('A'), priv('B'), priv('U'), priv('Q'), priv('R'), priv('X', { archived: true }), priv('Y', { status: 'failed' })];
+const snapC = SH.buildSnapshot({ share: { scope: "cascade", targetId: "P", label: "L", allowSuggestions: true, views: 9 }, items: shared, edges: E, narratives: [], library: L.LIBRARY });
+eq('cascade snapshot covers the cascade only', snapC.items.map((x) => x.id).sort(), ['A', 'B', 'P']);
+eq('edges inside the cascade only, unrelated dropped', snapC.edges.map((x) => x.id).sort(), ['e1', 'e2', 'e4']);
+const blob = JSON.stringify(snapC);
+ok('no notes leak', !blob.includes('PRIVATE NOTE'));
+ok('no original text leaks', !blob.includes('FULL ORIGINAL TEXT'));
+ok('no cost or pipeline steps leak', !/"cost"|"steps"|"input"/.test(blob));
+ok('no claim ids or offsets leak', !/"claimId"|"start"|"end"/.test(blob));
+ok('no share counters leak', !/"views"/.test(blob));
+eq('quotes are cut to excerpts', snapC.items[0].findings[0].quote.length, SH.EXCERPT_CHARS);
+ok('library without internals', snapC.library.techniques.every((t) => Object.keys(t).join() === 'id,layer,name,definition,question'));
+const snapI = SH.buildSnapshot({ share: { scope: "item", targetId: "A" }, items: shared, edges: E });
+eq('item snapshot: the item in full, neighbors as titles', snapI.items.map((x) => [x.id, !!x.neighborOnly]).sort(), [['A', false], ['B', true], ['P', true]]);
+ok('neighbors carry no findings', snapI.items.filter((x) => x.neighborOnly).every((x) => !('findings' in x)));
+const snapL = SH.buildSnapshot({ share: { scope: "lab" }, items: shared, edges: E });
+eq('lab snapshot skips archived and unfinished items', snapL.items.map((x) => x.id).sort(), ['A', 'B', 'P', 'Q', 'R', 'U']);
+eq('lab snapshot has no target', snapL.share.targetId, null);
+eq('unknown target gives an empty snapshot', SH.buildSnapshot({ share: { scope: "cascade", targetId: "nope" }, items: shared, edges: E }).items.length, 0);
+ok('non-http url dropped', SH.publicItem(priv('Z', { context: { url: 'javascript:alert(1)' } })).url === null);
+
+console.log('suggestions:');
+eq('a link is enough', SH.validateSuggestion({ url: 'https://example.com/story' }).ok, true);
+eq('short text alone is not', SH.validateSuggestion({ text: 'too short' }).ok, false);
+eq('a long paste is', SH.validateSuggestion({ text: 'word '.repeat(20) }).ok, true);
+eq('bad link', SH.validateSuggestion({ url: 'ftp://x' }).error, 'The link should start with http:// or https://.');
+eq('honeypot', SH.validateSuggestion({ url: 'https://example.com/a', website: 'http://spam' }).error, 'spam');
+ok('too long', /too long/.test(SH.validateSuggestion({ url: 'https://example.com/a', note: 'n'.repeat(2000) }).error));
+eq('fields trimmed, unknown fields dropped', SH.validateSuggestion({ url: ' https://example.com/a ', admin: true, title: '  T  ' }).value, { text: '', title: 'T', author: '', publisher: '', note: '', name: '', contact: '', url: 'https://example.com/a' });
+eq('non-object body', SH.validateSuggestion('nope').ok, false);
+eq('hour key', SH.hourKey(new Date('2026-11-18T14:35:00Z')), '2026-11-18T14');
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

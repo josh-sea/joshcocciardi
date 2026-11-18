@@ -73,6 +73,27 @@ Settings → **Download vault** writes a zip of linked Markdown pages (items,
 sources, narratives, claims, an index) with frontmatter and `[[links]]`, for
 Obsidian or a knowledge-base repo.
 
+## Sharing
+
+**Sharing** (or **Share…** on a scored item) makes a read-only link at
+`/lab/<token>`. The token is 20 random bytes and is the `nl_shares` document
+id. A link's scope is one cascade (the default from an item page), one item,
+or the whole lab.
+
+- The public page never touches Firestore. It calls `nlPublic`
+  (`/api/narrative/share/<token>`, behind a Hosting rewrite), which builds
+  the snapshot through the allowlist in `functions/narrative/share.js`.
+  Viewers get scores, findings, transformations and excerpts of at most 300
+  characters with links to the originals. They never get original texts,
+  notes, costs, pipeline steps, claim verdicts or source profiles.
+- Turning a link off works on the next load (nothing is cached, `410`).
+  Each link counts its views and suggestions.
+- Viewers can suggest a link or pasted text on links that take suggestions.
+  Suggestions land in `nl_suggestions` and at the top of **Ingest**; nothing
+  runs or costs anything until you press Ingest. Each link is limited to 10
+  suggestions an hour and the queue to 300 pending, and a hidden honeypot
+  field drops simple bots.
+
 ## Not built yet
 
 Event pages, the pattern-over-time layer (firehose traits), cascade
@@ -88,4 +109,8 @@ exact claim wording, library versions) is captured from the first item.
   cascades, vault and zip. No install. Runs in CI.
 - `functions/test/narrative-pipeline.test.mjs`: the whole pipeline on the
   Firestore emulator with a fake Claude API.
-- `apps/portfolio/test/narrative-lab-rules.test.mjs`: the security rules.
+- `apps/portfolio/test/narrative-lab-rules.test.mjs`: the security rules,
+  shares and suggestions included.
+
+The pipeline suite also drives `nlPublic`: snapshots, view counts,
+suggestions, the hourly limit, the honeypot, and turning a link off.

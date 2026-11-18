@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { deleteItem, explain, readRaw, rescore, retryItem, setArchived, setItemNotes } from "./store";
 import { fmtDate, fmtUsd, isStalled, progress, STAGE_TEXT } from "./format";
 import { MissingIngest } from "./Ingest";
+import { ShareControl } from "./Sharing";
 import {
   ConfChip,
   DensityTile,
@@ -112,8 +113,9 @@ export default function ItemView({ id }) {
             )}
           </div>
         </div>
-        <div className="nl-row">
+        <div className="nl-row" style={{ position: "relative" }}>
           <StatusChip item={item} />
+          <ShareControl key={id} item={item} />
           {(item.status === "failed" || isStalled(item)) && (
             <button type="button" className="nl-btn small primary" onClick={() => act(retryItem(id))}>
               Retry

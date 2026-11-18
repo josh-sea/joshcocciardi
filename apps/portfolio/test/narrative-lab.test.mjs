@@ -11,7 +11,7 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { around, cascadeStats, cascadeTree, densityDisplay, isStalled, progress, segments, statusLine } from "../src/tools/narrative-lab/format.js";
+import { around, cascadeRootOf, cascadeStats, cascadeTree, densityDisplay, isStalled, progress, segments, statusLine, timelineLayout } from "../src/tools/narrative-lab/format.js";
 import { crc32, pageNames, toVault, zip } from "../src/tools/narrative-lab/vault.js";
 
 let pass = 0;
@@ -67,6 +67,31 @@ eq("tree order and depth", st.rows.map((r) => [r.item.id, r.depth]), [["P", 0], 
 eq("per-hop fidelity", st.perHop, [{ depth: 1, count: 2, meanFidelity: 80 }, { depth: 2, count: 1, meanFidelity: 40 }]);
 eq("size and depth", [st.size, st.depth], [3, 2]);
 eq("unknown root", cascadeTree("nope", edges, items), null);
+
+console.log("timeline:");
+eq("cascade root of a leaf", cascadeRootOf("C", edges), "P");
+eq("an item with no upstream is its own root", cascadeRootOf("B", [{ from: "B", to: "Z" }]), "B");
+const tl = timelineLayout(
+  [
+    { id: "p", publishedAt: "2026-11-01", hop: 0 },
+    { id: "a", publishedAt: "2026-11-03", hop: 1 },
+    { id: "b", publishedAt: "2026-11-03", hop: 1 },
+    { id: "c", publishedAt: "2026-11-11", hop: 2 },
+    { id: "u", hop: 1 },
+  ],
+  { width: 1000, left: 100, right: 20 }
+);
+eq("earliest at the left edge", tl.nodes.p.x, 100);
+ok("later is further right", tl.nodes.c.x > tl.nodes.a.x);
+eq("same day, same lane: stacked rows, same x", [tl.nodes.a.x === tl.nodes.b.x, tl.nodes.a.row, tl.nodes.b.row], [true, 0, 1]);
+ok("undated sits right of every dated item", tl.nodes.u.x > tl.nodes.c.x && tl.nodes.u.x <= 980);
+eq("one lane per hop, in order", tl.lanes.map((l) => l.hop), [0, 1, 2]);
+ok("lanes do not overlap", tl.lanes.every((l, i) => i === 0 || l.y >= tl.lanes[i - 1].y + tl.lanes[i - 1].h));
+ok("every node inside its lane", Object.values(tl.nodes).every((n) => { const ln = tl.lanes.find((l) => l.hop === n.hop); return n.y > ln.y && n.y < ln.y + ln.h; }));
+ok("ticks span the dated range", tl.ticks[0].x === 100 && tl.ticks[tl.ticks.length - 1].x === Math.max(tl.nodes.c.x));
+eq("undated count reported", tl.undated, 1);
+const one = timelineLayout([{ id: "x", publishedAt: "2026-11-01", hop: 0 }], { width: 600, left: 100, right: 0 });
+eq("a single dated item is centred in the dated span", [one.nodes.x.x, one.ticks.length], [350, 1]);
 
 console.log("vault:");
 const kb = {

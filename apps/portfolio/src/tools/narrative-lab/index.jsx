@@ -11,6 +11,7 @@ import { NarrativeView, NarrativesList } from "./Narratives";
 import Claims from "./Claims";
 import Cascades from "./Cascades";
 import Settings from "./Settings";
+import Sharing from "./Sharing";
 import { explain, status as fetchStatus, watch, watchAll } from "./store";
 import { Lab } from "./ui";
 
@@ -33,6 +34,7 @@ const NAV = [
   ["sources", "Sources"],
   ["narratives", "Narratives"],
   ["claims", "Claims"],
+  ["sharing", "Sharing"],
   ["settings", "Settings"],
 ];
 const PARENT = { item: "items", source: "sources", narrative: "narratives" };
@@ -60,6 +62,8 @@ function Console({ user }) {
   const [narratives, setNarratives] = useState([]);
   const [claims, setClaims] = useState([]);
   const [edges, setEdges] = useState([]);
+  const [shares, setShares] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [server, setServer] = useState(null);
   const [error, setError] = useState(null);
 
@@ -71,6 +75,8 @@ function Console({ user }) {
       watch("narratives", setNarratives, onErr, { by: "lastSeen", max: 500 }),
       watch("claims", setClaims, onErr, { by: "lastSeen", max: 1000 }),
       watchAll("edges", setEdges, onErr),
+      watch("shares", setShares, onErr, { max: 300 }),
+      watch("suggestions", setSuggestions, onErr, { max: 300 }),
     ];
     return () => unsubs.forEach((u) => u());
   }, []);
@@ -97,6 +103,8 @@ function Console({ user }) {
       claims,
       claimsById: Object.fromEntries(claims.map((x) => [x.id, x])),
       edges,
+      shares,
+      suggestions,
       server,
       library: server?.library || null,
       thresholds: server?.thresholds || { genreBaseline: 200, profileMin: 20 },
@@ -105,10 +113,11 @@ function Console({ user }) {
     };
     // go is stable enough for navigation; setParams identity changes with the URL
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, items, sources, narratives, claims, edges, server]);
+  }, [user, items, sources, narratives, claims, edges, shares, suggestions, server]);
 
   const inFlight = items.filter((x) => x.status === "queued" || x.status === "running").length;
   const failed = items.filter((x) => x.status === "failed").length;
+  const suggested = suggestions.filter((x) => x.status === "pending").length;
   const active = PARENT[view] || view;
 
   let page;
@@ -121,6 +130,7 @@ function Console({ user }) {
   else if (view === "claims") page = <Claims />;
   else if (view === "cascades") page = <Cascades rootId={id} />;
   else if (view === "settings") page = <Settings />;
+  else if (view === "sharing") page = <Sharing />;
   else page = <Ingest />;
 
   return (
@@ -142,7 +152,7 @@ function Console({ user }) {
             {NAV.map(([k, label]) => (
               <button key={k} type="button" className={active === k ? "on" : ""} onClick={() => go(k)}>
                 {label}
-                {k === "ingest" && inFlight + failed > 0 && <span className="nl-count">{inFlight + failed}</span>}
+                {k === "ingest" && inFlight + failed + suggested > 0 && <span className="nl-count">{inFlight + failed + suggested}</span>}
               </button>
             ))}
           </nav>

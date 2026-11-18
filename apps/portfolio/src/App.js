@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-dom";
 import Layout from "./site/Layout";
 import Home from "./site/Home";
@@ -12,6 +12,9 @@ import ToolPage from "./tools/ToolPage";
 import WorkPage from "./work/WorkPage";
 import { toolForHost } from "./site/domains";
 import "./App.css";
+
+// Shared Narrative Lab links: public, read-only, code-split.
+const NarrativeShare = lazy(() => import("./tools/narrative-lab/public/ShareView"));
 
 // Routes inside <Layout> get the site header and footer. Tool pages
 // (/tools/:slug) and private /work pages render full-bleed so each one
@@ -33,6 +36,17 @@ const MainSite = () => (
       </Route>
 
       <Route path="/tools/:slug" element={<ToolPage />} />
+
+      {/* A shared Narrative Lab link. Public and read-only; the token in the
+          path is the only key, and turning the link off makes it dead. */}
+      <Route
+        path="/lab/:token"
+        element={
+          <Suspense fallback={null}>
+            <NarrativeShare />
+          </Suspense>
+        }
+      />
 
       {/* Private pages: full-bleed, behind the /work allowlist, and absent
           from every index on the site. `/work` itself has no listing; the
