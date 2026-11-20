@@ -14,7 +14,7 @@ a Cloud Function.
 
 | Area | What it does |
 |---|---|
-| **Accounts** | Email and password, forgot password, a unique username (can't change) and a display name. Delete account in Settings. |
+| **Accounts** | Google (web) or email and password, forgot password, a unique username (can't change) and a display name. Delete account in Settings. |
 | **Onboarding** | Username and public/private choice, your streaming services, quick-rate trending titles, find friends. |
 | **Feed** | Friends' new verdicts, changed verdicts, and what they started or finished. A "Friends are watching" strip on top. |
 | **Discover** | Search all of TMDB. Friends recommend (👍 minus 👎, starred friends count double, titles you've rated hidden), Friends are watching, Trending. "Only on my services" filter. |
@@ -95,8 +95,17 @@ Every collection starts with `verdict_` (rules in the Verdict section of the roo
    - `verdict_lists`: `uid` + `updatedAt` desc, and `uid` + `status` + `updatedAt` desc
 3. **Feed TTL.** Firestore → TTL policies → collection group `items`, field
    `expireAt`, so feed items clear after 90 days.
-4. **Email/Password sign-in** is on for the project already if other apps use it;
-   check Authentication → Sign-in method.
+4. **Sign-in.** Email/Password and Google are already on for the project
+   (other apps use both). Google sign-in only works on addresses listed under
+   Authentication → Settings → **Authorized domains**: add
+   `josh-cocciardi-verdict.web.app`, and `verdict.joshcocciardi.com` once that
+   domain is connected. Until then the Google button fails with "Google sign-in
+   isn't enabled for this address yet."
+
+   Accounts are shared with every other app in the project, so someone who
+   already signed up elsewhere is told to log in (or use Google, or reset the
+   password) instead of seeing "email taken". Google sign-in is web-only for
+   now; the phone builds need their own Google client IDs.
 5. **EAS.** `npm i -g eas-cli`, then in this folder `eas init` (adds the
    project id to `app.json`, which push notifications need) and
    `eas build --profile development --platform ios`.
