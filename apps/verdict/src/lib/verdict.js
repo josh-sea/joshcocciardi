@@ -131,3 +131,6 @@ export function ago(t, now = Date.now()) {
   const s = timeAgo(t, now);
   return s && s !== 'just now' ? `${s} ago` : s;
 }
+
+// Newest first by updatedAt. Done in code so queries need no composite index.
+export const newestFirst = (rows) => [...rows].sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));

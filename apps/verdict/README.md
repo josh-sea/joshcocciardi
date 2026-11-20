@@ -84,15 +84,10 @@ Every collection starts with `verdict_` (rules in the Verdict section of the roo
    Firestore, create the document `verdict_secrets/keys` with a string field
    `tmdbReadToken` set to it. Nothing works without this; until then title
    screens say "TMDB is not set up yet."
-2. **Indexes.** They're listed in the root `firestore.indexes.json`, but CI
-   doesn't deploy indexes. Run `firebase deploy --only firestore:indexes` once
-   from the repo root and answer **No** when it offers to delete indexes that
-   aren't in the file, or create them in the console when a query error links
-   to them:
-   - `verdict_connections`: `users` array-contains + `status`
-   - `verdict_users`: `discoverable` + `username`
-   - `verdict_ratings`: `uid` + `updatedAt` desc
-   - `verdict_lists`: `uid` + `updatedAt` desc, and `uid` + `status` + `updatedAt` desc
+2. **Indexes.** None needed. Every query uses a single filter or a single-field
+   sort, and anything else is filtered or sorted in code, so a fresh project
+   works without creating indexes. (The entries in the root
+   `firestore.indexes.json` are optional and only make large lists faster.)
 3. **Feed TTL.** Firestore → TTL policies → collection group `items`, field
    `expireAt`, so feed items clear after 90 days.
 4. **Sign-in.** Email/Password and Google are already on for the project

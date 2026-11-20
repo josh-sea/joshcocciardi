@@ -27,12 +27,12 @@ const requireAuth = (request) => {
 
 // Accepted connections of a user, as a list of the other uids.
 async function friendUids(uid) {
-  const snap = await db()
-    .collection(C.connections)
-    .where('users', 'array-contains', uid)
-    .where('status', '==', 'accepted')
-    .get();
-  return snap.docs.map((d) => d.data().users.find((u) => u !== uid)).filter(Boolean);
+  // array-contains alone (status filtered here) so no composite index is needed.
+  const snap = await db().collection(C.connections).where('users', 'array-contains', uid).get();
+  return snap.docs
+    .filter((d) => d.data().status === 'accepted')
+    .map((d) => d.data().users.find((u) => u !== uid))
+    .filter(Boolean);
 }
 
 async function blockedBy(uid) {

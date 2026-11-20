@@ -8,7 +8,10 @@ const connRef = (a, b) => doc(db, 'verdict_connections', pairId(a, b));
 // All of my connections, any status.
 export function watchConnections(uid, cb, onError) {
   const q = query(collection(db, 'verdict_connections'), where('users', 'array-contains', uid));
-  return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError);
+  return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), (err) => {
+    console.warn('Could not load your friends:', err.message);
+    if (onError) onError(err);
+  });
 }
 
 export async function sendRequest(me, other, via = 'search') {
