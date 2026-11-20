@@ -465,6 +465,7 @@ const PROMOTED_ORDER = [
   "gramandpops", "party-room", "parkday", "tool-meal-planner", "tool-myreadingbuddy",
   "camboy", "camboku", "weather", "tool-mise", "tool-sunday-desk",
   "tool-channel-surfer", "canitwo", "swing-coach", "roy", "tophat-spears",
+  "swarmbreak", "casino",
 ];
 export const PROMOTED = PROMOTED_ORDER.map(byId);
 
@@ -486,7 +487,7 @@ export const REELS = [
     id: "games",
     name: "Games",
     blurb: "Built for the fun of building them.",
-    frames: ["roy", "tophat-spears", "boulder-smash", "psx", "deadnet", "binary", "doom-life"].map(byId),
+    frames: ["swarmbreak", "casino", "roy", "tophat-spears", "boulder-smash", "psx", "doom-life"].map(byId),
   },
 ];
 

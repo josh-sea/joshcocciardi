@@ -1,8 +1,8 @@
 # Apps on their own subdomains
 
-Fifteen projects have an address of their own. Gram & Pop's already had one
+Seventeen projects have an address of their own. Gram & Pop's already had one
 (gramandpops.com). Roy and Weather already had their own Hosting sites. The
-other twelve each get a new Firebase Hosting site in the `josh-cocciardi`
+other fourteen each get a new Firebase Hosting site in the `josh-cocciardi`
 project:
 
 | Subdomain | Hosting site | Serves |
@@ -14,6 +14,8 @@ project:
 | camboy.joshcocciardi.com | josh-cocciardi-camboy | `build/projects/camboy` |
 | swingcoach.joshcocciardi.com | josh-cocciardi-swingcoach | `build/projects/swing-coach` |
 | tophat.joshcocciardi.com | josh-cocciardi-tophat | `build/projects/tophat-spears` |
+| swarmbreak.joshcocciardi.com | josh-cocciardi-swarmbreak | `build/projects/swarmbreak` |
+| casino.joshcocciardi.com | josh-cocciardi-casino | `build/projects/casino` |
 | mise.joshcocciardi.com | josh-cocciardi-mise | the portfolio build, showing only Mise |
 | channelsurfer.joshcocciardi.com | josh-cocciardi-channelsurfer | the portfolio build, showing only Channel Surfer |
 | sundaydesk.joshcocciardi.com | josh-cocciardi-sundaydesk | the portfolio build, showing only Sunday Desk |
@@ -32,7 +34,7 @@ addresses (`/projects/party-room`, `/tools/mise` and so on) keep working.
 
 When this merges, the **Deploy subdomain sites** step in
 `.github/workflows/deploy.yml` creates any site that doesn't exist yet and
-deploys all twelve. Each one is reachable straight away at
+deploys all fourteen. Each one is reachable straight away at
 `https://josh-cocciardi-<name>.web.app`. By hand, `./deploy.sh subdomains`
 does the same thing.
 
@@ -71,7 +73,7 @@ uses Google sign-in:
 - mealplanner.joshcocciardi.com
 - roy.joshcocciardi.com
 
-Party Room, Park Day and Tophat & Spears sign players in anonymously, which
+Party Room, Park Day, Tophat & Spears, Swarmbreak and Casino sign players in anonymously, which
 works on any domain. Camboku and Camboy have no sign-in.
 
 One thing to know: a sign-in belongs to the address it happened on. Someone

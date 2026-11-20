@@ -461,7 +461,7 @@ deploy_weather() {
 # Hosting site (josh-cocciardi-<target>); the static ones serve their copy
 # under apps/portfolio/build/projects/, the React tools serve the portfolio
 # build itself. Needs a portfolio build with the static apps copied in.
-SUBDOMAIN_TARGETS="partyroom canitwo parkday camboku camboy swingcoach tophat mise channelsurfer sundaydesk readingbuddy mealplanner"
+SUBDOMAIN_TARGETS="partyroom canitwo parkday camboku camboy swingcoach tophat swarmbreak casino mise channelsurfer sundaydesk readingbuddy mealplanner"
 
 deploy_subdomains() {
     log "Deploying subdomain sites..."

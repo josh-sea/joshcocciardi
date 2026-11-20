@@ -32,6 +32,7 @@
 #                   web export), deployed in its own step with its own
 #                   functions codebase (weather-api holds the API keys).
 #   - partyroom, canitwo, parkday, camboku, camboy, swingcoach, tophat,
+#     swarmbreak, casino,
 #     mise, channelsurfer, sundaydesk, readingbuddy, mealplanner
 #                → josh-cocciardi-<name>.web.app, and <name>.joshcocciardi.com
 #                   once the custom domain is connected. Deployed together in
@@ -388,7 +389,7 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
         run: |
-          targets="partyroom canitwo parkday camboku camboy swingcoach tophat mise channelsurfer sundaydesk readingbuddy mealplanner"
+          targets="partyroom canitwo parkday camboku camboy swingcoach tophat swarmbreak casino mise channelsurfer sundaydesk readingbuddy mealplanner"
           only=""
           for t in $targets; do
             site="josh-cocciardi-$t"

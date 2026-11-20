@@ -23,6 +23,8 @@ export const DOMAINS = {
   camboy: { sub: "camboy", path: "/projects/camboy", live: false },
   "swing-coach": { sub: "swingcoach", path: "/projects/swing-coach", live: false },
   "tophat-spears": { sub: "tophat", path: "/projects/tophat-spears", live: false },
+  swarmbreak: { sub: "swarmbreak", path: "/projects/swarmbreak", live: false },
+  casino: { sub: "casino", path: "/projects/casino", live: false },
 
   // React tools
   "tool-mise": { sub: "mise", tool: "mise", path: "/tools/mise", live: false },
