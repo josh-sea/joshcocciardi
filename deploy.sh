@@ -30,6 +30,7 @@
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
 #   ./deploy.sh subdomains   - Copy the static apps, build the portfolio, deploy every <app>.joshcocciardi.com site
 #   ./deploy.sh weather      - Test + export the Weather web build, deploy its hosting site, functions, and Firestore rules
+#   ./deploy.sh verdict      - Test + deploy the Verdict functions and Firestore rules (the app itself ships through EAS)
 #
 # Apps live in:
 #   apps/portfolio/   - Main React portfolio SPA (CRA)
@@ -443,6 +444,16 @@ deploy_roy() {
     success "Roy deployed → https://josh-cocciardi-roy.web.app"
 }
 
+deploy_verdict() {
+    log "Testing Verdict functions..."
+    cd "$ROOT_DIR/apps/verdict/functions"
+    npm ci || fail "Verdict functions install failed"
+    npm test || fail "Verdict function tests failed"
+    cd "$ROOT_DIR"
+    firebase deploy --only functions:verdict,firestore:rules || fail "Verdict deploy failed"
+    success "Verdict functions and rules deployed (build the app with EAS, see apps/verdict/README.md)"
+}
+
 deploy_weather() {
     log "Building Weather for the web..."
     cd "$ROOT_DIR/apps/weather/functions"
@@ -461,7 +472,7 @@ deploy_weather() {
 # Hosting site (josh-cocciardi-<target>); the static ones serve their copy
 # under apps/portfolio/build/projects/, the React tools serve the portfolio
 # build itself. Needs a portfolio build with the static apps copied in.
-SUBDOMAIN_TARGETS="partyroom canitwo parkday camboku camboy swingcoach tophat mise channelsurfer sundaydesk readingbuddy mealplanner"
+SUBDOMAIN_TARGETS="partyroom canitwo parkday camboku camboy swingcoach tophat swarmbreak casino mise channelsurfer sundaydesk readingbuddy mealplanner"
 
 deploy_subdomains() {
     log "Deploying subdomain sites..."
@@ -706,6 +717,12 @@ case "${1:-all}" in
         echo "========================================"
         deploy_weather
         ;;
+    verdict)
+        echo "========================================"
+        echo "  Deploying Verdict functions"
+        echo "========================================"
+        deploy_verdict
+        ;;
     tophat)
         echo "========================================"
         echo "  Deploying Tophat & Spears"
@@ -752,7 +769,7 @@ case "${1:-all}" in
         ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|narrative-lab|gatekeeper|tophat|party|swarm|casino|daybook|roy|weather|subdomains|ezpayze|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|narrative-lab|gatekeeper|tophat|party|swarm|casino|daybook|roy|weather|verdict|subdomains|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac

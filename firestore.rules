@@ -1208,6 +1208,175 @@ service cloud.firestore {
         && request.resource.data.read is bool;
     }
 
+    // ── Verdict: friends' verdicts on movies and shows ───────────────────
+    // apps/verdict. Friend lists, star/mute, blocks, usernames, invites,
+    // feeds and the per-viewer activity index are never readable by anyone
+    // but their owner (or by nobody, where only the functions touch them).
+    function vSignedIn() { return request.auth != null; }
+    function vPair(a, b) { return a < b ? a + '__' + b : b + '__' + a; }
+    function vFriends(other) {
+      return vSignedIn()
+        && exists(/databases/$(database)/documents/verdict_connections/$(vPair(request.auth.uid, other)))
+        && get(/databases/$(database)/documents/verdict_connections/$(vPair(request.auth.uid, other))).data.status == 'accepted';
+    }
+    function vBlockedBy(owner) {
+      return exists(/databases/$(database)/documents/verdict_users/$(owner)/private/blocks)
+        && get(/databases/$(database)/documents/verdict_users/$(owner)/private/blocks).data.get('blocked', {}).get(request.auth.uid, false) == true;
+    }
+    function vTitle(t) {
+      return t is map && t.keys().hasOnly(['name', 'year', 'posterPath'])
+        && t.name is string && t.name.size() <= 200;
+    }
+
+    match /verdict_users/{uid} {
+      // get by uid only: listing would let anyone find private accounts.
+      allow get: if vSignedIn();
+      allow list: if false;
+      allow create: if vSignedIn() && request.auth.uid == uid
+        && request.resource.data.get('username', null) == null
+        && request.resource.data.keys().hasOnly(
+             ['displayName', 'avatarUrl', 'discoverable', 'shareWantList', 'region', 'services', 'onboarded', 'createdAt', 'updatedAt'])
+        && request.resource.data.get('discoverable', true) is bool;
+      // The username is claimed through verdictClaimUsername and can't change.
+      allow update: if vSignedIn() && request.auth.uid == uid
+        && request.resource.data.get('username', null) == resource.data.get('username', null)
+        && request.resource.data.keys().hasOnly(
+             ['username', 'displayName', 'avatarUrl', 'discoverable', 'shareWantList', 'region', 'services', 'onboarded', 'createdAt', 'updatedAt'])
+        && request.resource.data.get('discoverable', true) is bool
+        && request.resource.data.get('displayName', '') is string
+        && request.resource.data.get('displayName', '').size() <= 40;
+      allow delete: if false;
+
+      // prefs (star/mute) and push tokens: owner only. blocks and invite
+      // are written by the functions.
+      match /private/{docId} {
+        allow read: if vSignedIn() && request.auth.uid == uid;
+        allow write: if vSignedIn() && request.auth.uid == uid && docId in ['prefs', 'push'];
+      }
+    }
+
+    match /verdict_usernames/{name} { allow read, write: if false; }
+    match /verdict_invites/{code} { allow read, write: if false; }
+    match /verdict_secrets/{docId} { allow read, write: if false; }
+
+    // Same shape as recipebox_connections: id is the sorted uid pair, the
+    // requester creates it pending, only the other person accepts, either
+    // side deletes. Nobody can send a request to someone who blocked them.
+    match /verdict_connections/{connId} {
+      allow read: if vSignedIn()
+        && (resource == null || request.auth.uid in resource.data.users);
+      allow create: if vSignedIn()
+        && request.resource.data.requestedBy == request.auth.uid
+        && request.auth.uid in request.resource.data.users
+        && request.resource.data.users.size() == 2
+        && request.resource.data.users[0] < request.resource.data.users[1]
+        && connId == request.resource.data.users[0] + '__' + request.resource.data.users[1]
+        && request.resource.data.status == 'pending'
+        && request.resource.data.keys().hasOnly(['users', 'requestedBy', 'status', 'via', 'createdAt'])
+        && !vBlockedBy(request.resource.data.users[0] == request.auth.uid
+             ? request.resource.data.users[1] : request.resource.data.users[0]);
+      allow update: if vSignedIn()
+        && request.auth.uid in resource.data.users
+        && request.auth.uid != resource.data.requestedBy
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt']);
+      allow delete: if vSignedIn() && request.auth.uid in resource.data.users;
+    }
+
+    // One rating per user per title: id is uid + '__' + titleKey. Readable
+    // by the owner and accepted friends. Every update appends the previous
+    // version to `history` (at most 20; the oldest drops off).
+    function vRatingShape(d) {
+      return d.keys().hasOnly(
+               ['uid', 'titleKey', 'mediaType', 'tmdbId', 'rating', 'note', 'tags', 'whileWatching', 'title', 'history', 'createdAt', 'updatedAt'])
+        && d.rating in ['up', 'meh', 'down']
+        && d.mediaType in ['movie', 'tv']
+        && d.tmdbId is int
+        && d.titleKey == d.mediaType + '_' + string(d.tmdbId)
+        && d.get('note', '') is string && d.get('note', '').size() <= 280
+        && d.get('tags', []) is list && d.get('tags', []).size() <= 5
+        && d.get('whileWatching', false) is bool
+        && vTitle(d.get('title', {'name': ''}))
+        && d.history is list;
+    }
+    function vHistoryAppended(before, after) {
+      let old = before.get('history', []);
+      let h = after.history;
+      let last = {
+        'rating': before.rating,
+        'note': before.get('note', ''),
+        'tags': before.get('tags', []),
+        'at': before.updatedAt
+      };
+      return h.size() > 0 && h[h.size() - 1] == last
+        && ((h.size() == old.size() + 1 && h.size() <= 20 && (old.size() == 0 || h[0:old.size()] == old))
+            || (old.size() == 20 && h.size() == 20 && h[0:19] == old[1:20]));
+    }
+    match /verdict_ratings/{id} {
+      allow read: if vSignedIn()
+        && (resource == null || request.auth.uid == resource.data.uid || vFriends(resource.data.uid));
+      allow create: if vSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && id == request.auth.uid + '__' + request.resource.data.titleKey
+        && vRatingShape(request.resource.data)
+        && request.resource.data.history == [];
+      allow update: if vSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.titleKey == resource.data.titleKey
+        && request.resource.data.createdAt == resource.data.createdAt
+        && vRatingShape(request.resource.data)
+        && vHistoryAppended(resource.data, request.resource.data);
+      allow delete: if vSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Watch lists. Friends see everything but Want to watch, unless the
+    // owner turned on shareWantList.
+    function vShareWant(owner) {
+      return get(/databases/$(database)/documents/verdict_users/$(owner)).data.get('shareWantList', false) == true;
+    }
+    match /verdict_lists/{id} {
+      allow read: if vSignedIn()
+        && (resource == null
+            || request.auth.uid == resource.data.uid
+            || (vFriends(resource.data.uid)
+                && (resource.data.status != 'want' || vShareWant(resource.data.uid))));
+      allow create, update: if vSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && (resource == null || resource.data.uid == request.auth.uid)
+        && id == request.auth.uid + '__' + request.resource.data.titleKey
+        && request.resource.data.keys().hasOnly(
+             ['uid', 'titleKey', 'mediaType', 'tmdbId', 'status', 'title', 'startedAt', 'finishedAt', 'updatedAt'])
+        && request.resource.data.status in ['want', 'watching', 'finished', 'abandoned']
+        && request.resource.data.mediaType in ['movie', 'tv']
+        && request.resource.data.tmdbId is int
+        && request.resource.data.titleKey == request.resource.data.mediaType + '_' + string(request.resource.data.tmdbId)
+        && vTitle(request.resource.data.get('title', {'name': ''}));
+      allow delete: if vSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Written only by the fan-out functions.
+    match /verdict_activity/{uid}/{document=**} {
+      allow read: if vSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /verdict_feeds/{uid}/{document=**} {
+      allow read: if vSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /verdict_titles/{docId} {
+      allow read: if vSignedIn();
+      allow write: if false;
+    }
+    match /verdict_reports/{id} {
+      allow create: if vSignedIn()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['reporterUid', 'targetUid', 'titleKey', 'reason', 'createdAt'])
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 500;
+      allow read, update, delete: if false;
+    }
+
     match /{collection}/{document=**} {
       allow read, write: if request.auth != null
         && collection != 'users'
@@ -1229,6 +1398,7 @@ service cloud.firestore {
         && !collection.matches('scale_.*')
         && !collection.matches('weather_.*')
         && !collection.matches('daybook_.*')
+        && !collection.matches('verdict_.*')
         && collection != 'work_private'
         && collection != 'contact_messages';
     }
