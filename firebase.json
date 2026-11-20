@@ -1034,6 +1034,16 @@
         "test",
         "*.log"
       ]
+    },
+    {
+      "source": "apps/verdict/functions",
+      "codebase": "verdict",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "test",
+        "*.log"
+      ]
     }
   ],
   "storage": {

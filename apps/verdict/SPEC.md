@@ -189,10 +189,11 @@ member only), delete (either member: decline, cancel or remove). Copy the
 
 ### 4.5 `verdict_invites/{code}`
 ```js
-{ uid, createdAt, expiresAt }   // code: 8 chars, A–Z 2–9, no 0/O/1/I
+{ uid, createdAt }   // code: 8 chars, A-Z and 2-9, no 0/O/1/I
 ```
-Created by the owner. Readable by any signed-in user via `get` only (no `list`).
-One active code per user. Regenerating replaces it.
+No client access. Created and replaced by `verdictInviteCode`; the caller's
+current code is mirrored at `verdict_users/{uid}/private/invite`. One active
+code per user. Regenerating replaces it.
 
 ### 4.6 `verdict_ratings/{uid}__{titleKey}`
 ```js
@@ -345,8 +346,18 @@ never fanned out.
 
 ### 5.10 `verdictDeleteAccount` (callable)
 Deletes: ratings, lists, connections, invites, username, profile and private docs,
-activity and feed subcollections, the user's entries in friends' activity docs and
-feeds, then the Auth user. Idempotent so it can be retried.
+activity and feed subcollections, and the user's entries in friends' activity docs
+and feeds. Idempotent so it can be retried.
+
+**The Firebase Auth user is kept.** The Auth pool is shared with every other app
+in the `josh-cocciardi` project, so deleting it would also delete that person's
+sign-in for those apps. Signing in again starts a fresh Verdict account.
+
+### 5.12 Added while building
+- `verdictInviteCode` `{ regenerate }`: returns (or makes) the caller's invite code.
+- `verdictGetProfile` `{ uid }`: one public profile plus the connection state,
+  hiding anyone who blocked the caller.
+- `verdictBlockedList`: names for the blocked list in Settings.
 
 ### 5.11 Push sending
 Helper in `notify.js`: read `private/push.tokens`, POST to

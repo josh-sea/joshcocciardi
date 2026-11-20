@@ -332,6 +332,16 @@ jobs:
           npm ci
           npm test
 
+      # Verdict: an iOS-first Expo app (no web hosting), so only its
+      # functions codebase ships from here. Its rules go out with the shared
+      # firestore.rules above; its TMDB token lives in Firestore
+      # (verdict_secrets/keys), not in CI. See apps/verdict/README.md.
+      - name: Test Verdict functions
+        working-directory: apps/verdict/functions
+        run: |
+          npm ci
+          npm test
+
       - name: Deploy hosting + Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
@@ -376,6 +386,12 @@ jobs:
           npx firebase-tools@13 hosting:sites:get josh-cocciardi-weather --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
             || npx firebase-tools@13 hosting:sites:create josh-cocciardi-weather --project josh-cocciardi --non-interactive
           npx firebase-tools@13 deploy --only hosting:weather,functions:weather --project josh-cocciardi --non-interactive --force
+
+      - name: Deploy Verdict functions
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: npx firebase-tools@13 deploy --only functions:verdict --project josh-cocciardi --non-interactive --force
 
       # Apps on their own subdomains (partyroom.joshcocciardi.com and so on).
       # Each is its own Hosting site: the static apps serve their clean copy
