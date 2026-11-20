@@ -41,7 +41,12 @@ export function InviteCard() {
       <Text style={{ color: colors.text, fontSize: 28, fontWeight: '800', letterSpacing: 3, marginTop: 2 }}>{prettyCode(code)}</Text>
       <Small style={{ textAlign: 'center', marginTop: space(2) }}>Anyone with this can send you a request. You still approve it.</Small>
       <View style={{ flexDirection: 'row', gap: 10, marginTop: space(4), alignSelf: 'stretch' }}>
-        <Button title="Share" icon="share-outline" style={{ flex: 1 }} onPress={() => Share.share({ message })} />
+        <Button
+          title="Share" icon="share-outline" style={{ flex: 1 }}
+          onPress={async () => {
+            try { await Share.share({ message }); } catch { await Clipboard.setStringAsync(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+          }}
+        />
         <Button
           title={copied ? 'Copied' : 'Copy'} icon="copy-outline" kind="secondary" style={{ flex: 1 }}
           onPress={async () => { await Clipboard.setStringAsync(message); setCopied(true); setTimeout(() => setCopied(false), 1500); }}

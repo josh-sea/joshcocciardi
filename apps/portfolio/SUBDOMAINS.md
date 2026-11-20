@@ -23,6 +23,7 @@ project:
 | mealplanner.joshcocciardi.com | josh-cocciardi-mealplanner | the portfolio build, showing only the Meal Planner |
 | roy.joshcocciardi.com | josh-cocciardi-roy (existing) | Roy |
 | weather.joshcocciardi.com | josh-cocciardi-weather (existing) | Weather |
+| verdict.joshcocciardi.com | josh-cocciardi-verdict | Verdict (`apps/verdict/dist`, deployed in its own CI step). Not on the portfolio yet; after connecting, update `WEB_URL` in `apps/verdict/src/constants/config.js`. |
 
 The static apps are served from the clean copy that the portfolio build already
 makes under `build/projects/<app>`. The React tools all share the portfolio

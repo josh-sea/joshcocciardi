@@ -30,7 +30,7 @@
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
 #   ./deploy.sh subdomains   - Copy the static apps, build the portfolio, deploy every <app>.joshcocciardi.com site
 #   ./deploy.sh weather      - Test + export the Weather web build, deploy its hosting site, functions, and Firestore rules
-#   ./deploy.sh verdict      - Test + deploy the Verdict functions and Firestore rules (the app itself ships through EAS)
+#   ./deploy.sh verdict      - Test + export the Verdict web build, deploy its hosting site, functions, and Firestore rules
 #
 # Apps live in:
 #   apps/portfolio/   - Main React portfolio SPA (CRA)
@@ -449,9 +449,15 @@ deploy_verdict() {
     cd "$ROOT_DIR/apps/verdict/functions"
     npm ci || fail "Verdict functions install failed"
     npm test || fail "Verdict function tests failed"
+    log "Building Verdict for the web..."
+    cd "$ROOT_DIR/apps/verdict"
+    npm ci || fail "Verdict install failed"
+    node --test test/lib.test.mjs || fail "Verdict tests failed"
+    npx expo export -p web --clear || fail "Verdict web export failed"
     cd "$ROOT_DIR"
-    firebase deploy --only functions:verdict,firestore:rules || fail "Verdict deploy failed"
-    success "Verdict functions and rules deployed (build the app with EAS, see apps/verdict/README.md)"
+    firebase hosting:sites:get josh-cocciardi-verdict >/dev/null 2>&1 || firebase hosting:sites:create josh-cocciardi-verdict
+    firebase deploy --only hosting:verdict,functions:verdict,firestore:rules || fail "Verdict deploy failed"
+    success "Verdict deployed → https://josh-cocciardi-verdict.web.app"
 }
 
 deploy_weather() {
@@ -719,7 +725,7 @@ case "${1:-all}" in
         ;;
     verdict)
         echo "========================================"
-        echo "  Deploying Verdict functions"
+        echo "  Deploying Verdict"
         echo "========================================"
         deploy_verdict
         ;;

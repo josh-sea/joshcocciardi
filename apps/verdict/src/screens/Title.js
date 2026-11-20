@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, Text, View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { Linking, Pressable, Text, View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { useApp } from '../context/AppContext';
+import * as dialog from '../lib/dialog';
 import { useActivity } from '../hooks/useActivity';
 import { useAsync } from '../hooks/useAsync';
 import { titleDetails, titleProviders, backdropUrl, logoUrl } from '../api/tmdb';
@@ -69,9 +70,9 @@ export default function TitleDetail({ route, navigation }) {
 
   const changeList = async (status) => {
     const t = { ...title, mediaType, tmdbId };
-    await setListStatus(profile.uid, t, status, list).catch((e) => Alert.alert('Could not save', e.message));
+    await setListStatus(profile.uid, t, status, list).catch((e) => dialog.alert('Could not save', e.message));
     if (status === 'finished' && mine) {
-      Alert.alert('Finished!', `You said ${RATING_INFO[mine.rating].emoji} ${RATING_INFO[mine.rating].label}. Still true?`, [
+      dialog.alert('Finished!', `You said ${RATING_INFO[mine.rating].emoji} ${RATING_INFO[mine.rating].label}. Still true?`, [
         { text: 'Keep it', style: 'cancel', onPress: () => mine.whileWatching && saveRating(profile.uid, t, { ...mine, whileWatching: false }) },
         { text: 'Change', onPress: () => navigation.navigate('Rate', { title: t }) },
       ]);
@@ -205,7 +206,7 @@ export function RateSheet({ route, navigation }) {
     }
   };
 
-  const unrate = () => Alert.alert('Remove your verdict?', 'Friends will stop seeing it.', [
+  const unrate = () => dialog.alert('Remove your verdict?', 'Friends will stop seeing it.', [
     { text: 'Cancel', style: 'cancel' },
     { text: 'Remove', style: 'destructive', onPress: async () => { await removeRating(profile.uid, titleKey).catch(() => {}); navigation.goBack(); } },
   ]);

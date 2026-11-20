@@ -31,6 +31,9 @@
 #   - weather    → josh-cocciardi-weather.web.app (apps/weather/dist, the Expo
 #                   web export), deployed in its own step with its own
 #                   functions codebase (weather-api holds the API keys).
+#   - verdict    → josh-cocciardi-verdict.web.app (apps/verdict/dist, the Expo
+#                   web export), deployed in its own step with its own
+#                   functions codebase (TMDB proxy and friend fan-out).
 #   - partyroom, canitwo, parkday, camboku, camboy, swingcoach, tophat,
 #     swarmbreak, casino,
 #     mise, channelsurfer, sundaydesk, readingbuddy, mealplanner
@@ -332,10 +335,17 @@ jobs:
           npm ci
           npm test
 
-      # Verdict: an iOS-first Expo app (no web hosting), so only its
-      # functions codebase ships from here. Its rules go out with the shared
+      # Verdict: an Expo app exported for the web (like Roy and Weather), plus
+      # its functions codebase. Its rules go out with the shared
       # firestore.rules above; its TMDB token lives in Firestore
       # (verdict_secrets/keys), not in CI. See apps/verdict/README.md.
+      - name: Build Verdict web app
+        working-directory: apps/verdict
+        run: |
+          npm ci
+          node --test test/lib.test.mjs
+          npx expo export -p web --clear
+
       - name: Test Verdict functions
         working-directory: apps/verdict/functions
         run: |
@@ -387,11 +397,15 @@ jobs:
             || npx firebase-tools@13 hosting:sites:create josh-cocciardi-weather --project josh-cocciardi --non-interactive
           npx firebase-tools@13 deploy --only hosting:weather,functions:weather --project josh-cocciardi --non-interactive --force
 
-      - name: Deploy Verdict functions
+      # Creates the Hosting site the first time.
+      - name: Deploy Verdict
         continue-on-error: true
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-        run: npx firebase-tools@13 deploy --only functions:verdict --project josh-cocciardi --non-interactive --force
+        run: |
+          npx firebase-tools@13 hosting:sites:get josh-cocciardi-verdict --project josh-cocciardi --non-interactive >/dev/null 2>&1 \
+            || npx firebase-tools@13 hosting:sites:create josh-cocciardi-verdict --project josh-cocciardi --non-interactive
+          npx firebase-tools@13 deploy --only hosting:verdict,functions:verdict --project josh-cocciardi --non-interactive --force
 
       # Apps on their own subdomains (partyroom.joshcocciardi.com and so on).
       # Each is its own Hosting site: the static apps serve their clean copy
