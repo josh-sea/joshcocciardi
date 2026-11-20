@@ -73,6 +73,7 @@ uses Google sign-in:
 - readingbuddy.joshcocciardi.com
 - mealplanner.joshcocciardi.com
 - roy.joshcocciardi.com
+- josh-cocciardi-verdict.web.app and verdict.joshcocciardi.com (Verdict)
 
 Party Room, Park Day, Tophat & Spears, Swarmbreak and Casino sign players in anonymously, which
 works on any domain. Camboku and Camboy have no sign-in.
