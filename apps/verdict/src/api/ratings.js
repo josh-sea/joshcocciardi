@@ -1,6 +1,6 @@
-import { collection, deleteDoc, doc, getDocs, onSnapshot, query, runTransaction, Timestamp, where, orderBy } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, query, runTransaction, Timestamp, where } from 'firebase/firestore';
 import { db } from '../firebase';
-import { nextHistory, titleKeyOf } from '../lib/verdict';
+import { nextHistory, titleKeyOf, newestFirst } from '../lib/verdict';
 import { snapshotOf } from './tmdb';
 
 export const ratingRef = (uid, titleKey) => doc(db, 'verdict_ratings', `${uid}__${titleKey}`);
@@ -44,12 +44,16 @@ export function watchRating(uid, titleKey, cb) {
 }
 
 // Everything a user has rated, newest first. Works for me and my friends.
+// Sorted here rather than with orderBy, so no composite index is needed.
 export async function ratingsOf(uid) {
-  const snap = await getDocs(query(collection(db, 'verdict_ratings'), where('uid', '==', uid), orderBy('updatedAt', 'desc')));
-  return snap.docs.map((d) => d.data());
+  const snap = await getDocs(query(collection(db, 'verdict_ratings'), where('uid', '==', uid)));
+  return newestFirst(snap.docs.map((d) => d.data()));
 }
 
 export function watchMyRatings(uid, cb) {
-  const q = query(collection(db, 'verdict_ratings'), where('uid', '==', uid), orderBy('updatedAt', 'desc'));
-  return onSnapshot(q, (snap) => cb(snap.docs.map((d) => d.data())), () => cb([]));
+  const q = query(collection(db, 'verdict_ratings'), where('uid', '==', uid));
+  return onSnapshot(q, (snap) => cb(newestFirst(snap.docs.map((d) => d.data()))), (err) => {
+    console.warn('Could not load your ratings:', err.message);
+    cb([]);
+  });
 }

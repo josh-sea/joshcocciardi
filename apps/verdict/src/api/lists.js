@@ -1,6 +1,6 @@
-import { collection, deleteDoc, doc, getDocs, onSnapshot, query, setDoc, Timestamp, where, orderBy } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, query, setDoc, Timestamp, where } from 'firebase/firestore';
 import { db } from '../firebase';
-import { titleKeyOf } from '../lib/verdict';
+import { titleKeyOf, newestFirst } from '../lib/verdict';
 import { snapshotOf } from './tmdb';
 
 export const listRef = (uid, titleKey) => doc(db, 'verdict_lists', `${uid}__${titleKey}`);
@@ -30,16 +30,19 @@ export function watchListItem(uid, titleKey, cb) {
 }
 
 export function watchMyLists(uid, cb) {
-  const q = query(collection(db, 'verdict_lists'), where('uid', '==', uid), orderBy('updatedAt', 'desc'));
-  return onSnapshot(q, (snap) => cb(snap.docs.map((d) => d.data())), () => cb([]));
+  const q = query(collection(db, 'verdict_lists'), where('uid', '==', uid));
+  return onSnapshot(q, (snap) => cb(newestFirst(snap.docs.map((d) => d.data()))), (err) => {
+    console.warn('Could not load your lists:', err.message);
+    cb([]);
+  });
 }
 
 // A friend's list for one status. Want to watch is only readable when they
 // share it, so that query may fail; it then comes back empty.
 export async function listOf(uid, status) {
   try {
-    const snap = await getDocs(query(collection(db, 'verdict_lists'), where('uid', '==', uid), where('status', '==', status), orderBy('updatedAt', 'desc')));
-    return snap.docs.map((d) => d.data());
+    const snap = await getDocs(query(collection(db, 'verdict_lists'), where('uid', '==', uid), where('status', '==', status)));
+    return newestFirst(snap.docs.map((d) => d.data()));
   } catch {
     return [];
   }

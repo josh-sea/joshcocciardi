@@ -68,17 +68,17 @@ exports.verdictSearchUsers = onCall(opts, async (request) => {
   const q = normalizeUsername(request.data && request.data.query).replace(/[^a-z0-9_.]/g, '');
   if (q.length < 2) return { results: [] };
 
+  // A username range alone (discoverable filtered here) needs no composite index.
   const snap = await db()
     .collection(C.users)
-    .where('discoverable', '==', true)
     .where('username', '>=', q)
     .where('username', '<', `${q}`)
     .orderBy('username')
-    .limit(25)
+    .limit(60)
     .get();
 
   const mine = await blockedBy(uid);
-  const candidates = snap.docs.filter((d) => d.id !== uid && !mine[d.id]);
+  const candidates = snap.docs.filter((d) => d.id !== uid && !mine[d.id] && d.data().discoverable === true);
   const results = [];
   for (const d of candidates) {
     const theirs = await blockedBy(d.id);

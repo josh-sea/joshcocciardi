@@ -79,3 +79,9 @@ test('invite links', () => {
   assert.equal(v.parseInviteUrl('verdict://somewhere'), null);
   assert.equal(v.initials('Josh Cocciardi'), 'JC');
 });
+
+test('newestFirst sorts by updatedAt without mutating', () => {
+  const rows = [{ k: 'a', updatedAt: 1 }, { k: 'b', updatedAt: { seconds: 5 } }, { k: 'c', updatedAt: 3 }];
+  assert.deepEqual(v.newestFirst(rows).map((r) => r.k), ['b', 'c', 'a']);
+  assert.equal(rows[0].k, 'a');
+});
