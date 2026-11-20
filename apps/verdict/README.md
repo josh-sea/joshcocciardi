@@ -4,9 +4,11 @@ Movie and TV recommendations from the people you actually trust. Give anything a
 👍 Recommend, 😐 It's fine or 👎 Don't bother, and see what your friends think
 of anything before you start it. The full product spec is in [SPEC.md](SPEC.md).
 
-iOS first, built with Expo (SDK 54) on the shared `josh-cocciardi` Firebase
-project. Title data and "where to watch" come from TMDB through a Cloud
-Function.
+Built with Expo (SDK 54) on the shared `josh-cocciardi` Firebase project, and
+published as a web app at **https://josh-cocciardi-verdict.web.app** (later
+verdict.joshcocciardi.com), the same way Roy and Weather are. The same code
+runs on iOS and Android. Title data and "where to watch" come from TMDB through
+a Cloud Function.
 
 ## What's in v1
 
@@ -99,9 +101,12 @@ Every collection starts with `verdict_` (rules in the Verdict section of the roo
    project id to `app.json`, which push notifications need) and
    `eas build --profile development --platform ios`.
 
-Functions and rules deploy from CI when this merges to master (the
-"Deploy Verdict functions" step), or by hand with `./deploy.sh verdict` from the
-repo root.
+The web app, functions and rules deploy from CI when a change merges to master
+(the "Deploy Verdict" step creates the Hosting site the first time), or by hand
+with `./deploy.sh verdict` from the repo root. To serve it at
+verdict.joshcocciardi.com, connect the domain to the `josh-cocciardi-verdict`
+site (see `apps/portfolio/SUBDOMAINS.md`), then change `WEB_URL` in
+`src/constants/config.js` so invite links use it.
 
 ## Running it
 
@@ -114,8 +119,12 @@ Open it in Expo Go on your phone. To run against the emulators instead of
 production: `EXPO_PUBLIC_USE_EMULATORS=1 npx expo start` (set
 `EXPO_PUBLIC_EMULATOR_HOST` to your computer's LAN address when using a phone).
 
-The invite link is `verdict://invite/CODE`. It only opens in an installed build
-(not Expo Go); the typed code works everywhere.
+Invite links are `https://josh-cocciardi-verdict.web.app/invite/CODE`, so they
+open for anyone in a browser. An installed build also accepts
+`verdict://invite/CODE`, and the typed code works everywhere.
+
+On the web, confirmations use the browser's own dialogs (`src/lib/dialog.js`),
+because React Native's Alert does nothing there.
 
 ## Tests
 

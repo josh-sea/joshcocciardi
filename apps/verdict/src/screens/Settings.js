@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, Switch, Text, View } from 'react-native';
+import { Linking, Pressable, Switch, Text, View } from 'react-native';
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import Constants from 'expo-constants';
 import { auth } from '../firebase';
 import { useApp } from '../context/AppContext';
+import * as dialog from '../lib/dialog';
 import { updateProfile, deleteAccount } from '../api/profile';
 import { blockedList, unblockUser, redeemInvite } from '../api/social';
 import { setPushEnabled } from '../api/prefs';
@@ -51,21 +52,22 @@ export default function Settings({ navigation }) {
     }
   };
 
-  const confirmDelete = () => Alert.prompt
-    ? Alert.prompt('Delete your Verdict account?', `This removes your ratings, lists, friends and profile for good. Type your username (${profile.username}) to confirm.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: (v) => (String(v || '').trim().toLowerCase() === profile.username ? doDelete() : Alert.alert("That didn't match.")) },
-    ])
-    : Alert.alert('Delete your Verdict account?', 'This removes your ratings, lists, friends and profile for good.', [
-      { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: doDelete },
-    ]);
+  const confirmDelete = async () => {
+    const v = await dialog.prompt(
+      'Delete your Verdict account?',
+      `This removes your ratings, lists, friends and profile for good. Type your username (${profile.username}) to confirm.`,
+    );
+    if (v === null) return;
+    if (v === '__confirmed__' || String(v).trim().toLowerCase().replace(/^@/, '') === profile.username) doDelete();
+    else dialog.alert("That didn't match", 'Nothing was deleted.');
+  };
 
   async function doDelete() {
     try {
       await deleteAccount();
       await signOut(auth);
     } catch (err) {
-      Alert.alert('Could not delete', err.message);
+      dialog.alert('Could not delete', err.message);
     }
   }
 
@@ -122,7 +124,7 @@ export default function Settings({ navigation }) {
   );
 }
 
-// Opened from verdict://invite/CODE.
+// Opened from an invite link (.../invite/CODE).
 export function RedeemInvite({ route, navigation }) {
   const { setPendingInvite, rememberPerson } = useApp();
   const code = route.params && route.params.code;

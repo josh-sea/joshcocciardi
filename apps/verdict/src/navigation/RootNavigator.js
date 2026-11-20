@@ -67,7 +67,7 @@ function Tabs() {
   );
 }
 
-// Jump to the invite screen once a verdict://invite link has arrived and
+// Jump to the invite screen once an invite link has arrived and
 // the person is signed in and set up.
 function InviteWatcher() {
   const navigation = useNavigation();

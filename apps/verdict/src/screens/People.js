@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
+import * as dialog from '../lib/dialog';
 import { fetchProfile, mutualCount, blockUser, reportUser, removeConnection, acceptRequest, sendRequest } from '../api/social';
 import { ratingsOf } from '../api/ratings';
 import { listOf } from '../api/lists';
@@ -88,14 +89,13 @@ export default function FriendProfile({ route, navigation }) {
     return tasteMatch(mine, Object.fromEntries(theirs.map((r) => [r.titleKey, r.rating])));
   }, [theirs, myRatings]);
 
-  const menu = () => Alert.alert(info.profile.displayName, null, [
-    state === 'friends' ? { text: 'Remove friend', onPress: () => confirm('Remove friend?', "They won't be told. You'll both stop seeing each other's verdicts.", () => removeConnection(user.uid, uid)) } : null,
-    { text: 'Block', style: 'destructive', onPress: () => confirm('Block?', "They can't find you, send requests or see your verdicts. They won't be told.", async () => { await blockUser(uid); navigation.goBack(); }) },
-    { text: 'Report', onPress: () => confirm('Report this account?', "We'll take a look. They won't know who reported them.", () => reportUser(user.uid, uid, 'Reported from profile')) },
-    { text: 'Cancel', style: 'cancel' },
-  ].filter(Boolean));
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menu = () => setMenuOpen((v) => !v);
+  const removeFriend = () => confirm('Remove friend?', "They won't be told. You'll both stop seeing each other's verdicts.", () => removeConnection(user.uid, uid));
+  const block = () => confirm('Block?', "They can't find you, send requests or see your verdicts. They won't be told.", async () => { await blockUser(uid); navigation.goBack(); });
+  const report = () => confirm('Report this account?', "We'll take a look. They won't know who reported them.", () => reportUser(user.uid, uid, 'Reported from profile'));
 
-  const connect = async (fn) => { setBusy(true); try { await fn(); } catch (e) { Alert.alert('Could not do that', e.message); } setBusy(false); };
+  const connect = async (fn) => { setBusy(true); try { await fn(); } catch (e) { dialog.alert('Could not do that', e.message); } setBusy(false); };
 
   if (error) return <Screen scroll edges={[]}><ErrorText error={error} /></Screen>;
   if (!info) return <Loading />;
@@ -115,6 +115,13 @@ export default function FriendProfile({ route, navigation }) {
         </View>
         <IconButton name="ellipsis-horizontal" onPress={menu} label="More" />
       </View>
+      {menuOpen ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: space(4) }}>
+          {state === 'friends' ? <Button small kind="ghost" title="Remove friend" onPress={removeFriend} /> : null}
+          <Button small kind="danger" title="Block" onPress={block} />
+          <Button small kind="ghost" title="Report" onPress={report} />
+        </View>
+      ) : null}
 
       {state === 'none' ? (
         <View style={{ marginTop: space(6) }}>
@@ -198,7 +205,7 @@ export default function FriendProfile({ route, navigation }) {
   );
 
   function confirm(title, body, fn) {
-    Alert.alert(title, body, [{ text: 'Cancel', style: 'cancel' }, { text: 'OK', style: 'destructive', onPress: () => fn().catch((e) => Alert.alert('Could not do that', e.message)) }]);
+    dialog.alert(title, body, [{ text: 'Cancel', style: 'cancel' }, { text: 'Yes', style: 'destructive', onPress: () => { setMenuOpen(false); fn().catch((e) => dialog.alert('Could not do that', e.message)); } }]);
   }
 }
 

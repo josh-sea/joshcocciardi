@@ -1,5 +1,6 @@
 import { collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, addDoc } from 'firebase/firestore';
 import { db, call } from '../firebase';
+import { WEB_URL } from '../constants/config';
 
 export const pairId = (a, b) => (a < b ? `${a}__${b}` : `${b}__${a}`);
 const connRef = (a, b) => doc(db, 'verdict_connections', pairId(a, b));
@@ -42,5 +43,6 @@ export const reportUser = (me, targetUid, reason, titleKey = null) =>
     reporterUid: me, targetUid, reason: String(reason).slice(0, 500), titleKey, createdAt: serverTimestamp(),
   });
 
-export const inviteLink = (code) => `verdict://invite/${code}`;
+// A web link works for everyone: it opens the web app, which redeems it.
+export const inviteLink = (code) => `${WEB_URL}/invite/${code}`;
 export const prettyCode = (code) => (code ? `${code.slice(0, 4)}-${code.slice(4)}` : '');
