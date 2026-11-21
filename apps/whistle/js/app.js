@@ -10,13 +10,13 @@ const $ = (id) => document.getElementById(id);
 const RENDER_SR = 44100;
 
 const INST_BLURBS = {
-  overdrive: 'Bends, sustain, grit', clean: 'Plucked and bright', bass: 'Three octaves down',
+  overdrive: 'Bends, sustain, grit', clean: 'Plucked and bright', bass: 'Deep, round low end',
   lead: 'Follows every wobble', violin: 'Bowed, slow attack', brass: 'Brightens as you push', flute: 'Breathy, close to a whistle',
 };
 
 /* ---------- settings ---------- */
 const DEFAULTS = {
-  instrument: 'overdrive', octave: -1, semis: 0, tonic: 'auto', scale: 'auto',
+  instrument: 'overdrive', octave: 'auto', semis: 0, tonic: 'auto', scale: 'auto',
   correction: 0.8, bends: 1, sens: 0.5, reverb: 0.25, echo: 0.15,
   volInst: 0.9, volSong: 0.7, volWhistle: 0,
 };
@@ -225,13 +225,36 @@ function settingsForPerform() {
     if (majorish && key.mode === 'minor') tonic = (tonic + 3) % 12;
     if (minorish && key.mode === 'major') tonic = (tonic + 9) % 12;
   }
-  return { transpose: S.octave * 12 + S.semis, correction: S.correction, bends: S.bends, tonic, scale };
+  return { transpose: shift(), correction: S.correction, bends: S.bends, tonic, scale };
+}
+
+// Octaves to move the whistle: picked by hand, or fitted to the instrument.
+function octave() {
+  if (S.octave !== 'auto') return +S.octave;
+  return notes && notes.length ? P.fitOctave(notes, INSTRUMENTS[S.instrument].home) : INSTRUMENTS[S.instrument].octave;
+}
+const shift = () => octave() * 12 + S.semis;
+const OCT_WORDS = { '-4': '4 down', '-3': '3 down', '-2': '2 down', '-1': '1 down', 0: 'As whistled', 1: '1 up', 2: '2 up' };
+
+function showOctave() {
+  const oct = octave();
+  $('octave').options[0].textContent = `Auto (${OCT_WORDS[P.fitOctave(notes || [], INSTRUMENTS[S.instrument].home)] || 'fit'})`;
+  const r = notes && P.melodyRange(notes), def = INSTRUMENTS[S.instrument];
+  if (!r) { $('rangeHint').textContent = ''; return; }
+  const name = (m) => P.noteName(m);
+  const lo = r[0] + shift(), hi = r[1] + shift();
+  let text = `You whistled ${name(r[0])} to ${name(r[1])}. ${def.label} plays ${name(lo)} to ${name(hi)}`;
+  text += oct === 0 && !S.semis ? '.' : ` (${OCT_WORDS[oct] || oct + ' octaves'}${S.semis ? `, ${S.semis > 0 ? '+' : ''}${S.semis}` : ''}).`;
+  if (lo < def.range[0] - 0.5) text += ` That goes below what a real ${def.label.toLowerCase()} can reach.`;
+  else if (hi > def.range[1] + 0.5) text += ` That goes above what a real ${def.label.toLowerCase()} can reach.`;
+  $('rangeHint').textContent = text;
 }
 
 let renderSeq = 0;
 async function rerender() {
   if (!tr) return;
   perf = P.perform(tr, notes, settingsForPerform());
+  showOctave();
   $('noteCount').textContent = `${perf.notes.length} notes`;
   draw();
   const id = ++renderSeq;
@@ -401,9 +424,9 @@ const LEFT = 34, BOTTOM = 20;
 
 function pitchRange() {
   let lo = Infinity, hi = -Infinity;
-  const shift = S.octave * 12 + S.semis;
+  const sh = shift();
   if (perf) for (let i = 0; i < perf.frames; i++) {
-    const a = perf.pitch[i], b = tr.midi[i] + shift;
+    const a = perf.pitch[i], b = tr.midi[i] + sh;
     if (!isNaN(a)) { lo = Math.min(lo, a); hi = Math.max(hi, a); }
     if (!isNaN(b)) { lo = Math.min(lo, b); hi = Math.max(hi, b); }
   }
@@ -470,7 +493,7 @@ function draw() {
     }
     g2.stroke(); g2.globalAlpha = 1;
   };
-  line(tr.midi, S.octave * 12 + S.semis, colors.blue, 2, 0.5);
+  line(tr.midi, shift(), colors.blue, 2, 0.5);
   line(perf.pitch, 0, colors.amber, 2.25, 1);
 
   // Time axis.
@@ -649,7 +672,7 @@ function buildInstruments() {
     b.className = 'inst'; b.setAttribute('role', 'radio'); b.dataset.id = id;
     b.innerHTML = `${def.label}<small>${INST_BLURBS[id]}</small>`;
     b.onclick = () => {
-      S.instrument = id; S.octave = def.octave; saveSettings(); syncControls(); rerender();
+      S.instrument = id; S.octave = 'auto'; saveSettings(); syncControls(); rerender();
     };
     grid.append(b);
   }
@@ -678,7 +701,7 @@ function wire() {
   syncControls();
 
   const onSelect = (id, num = true) => $(id).addEventListener('change', () => { S[id] = num ? +$(id).value : $(id).value; saveSettings(); rerender(); });
-  onSelect('octave'); onSelect('semis'); onSelect('tonic', false); onSelect('scale', false);
+  onSelect('octave', false); onSelect('semis'); onSelect('tonic', false); onSelect('scale', false);
   $('tonic').addEventListener('change', () => { if (S.tonic !== 'auto') S.tonic = +S.tonic; });
 
   for (const id of ['correction', 'bends']) $(id).addEventListener('input', () => { S[id] = +$(id).value; showOut(id); saveSettings(); rerenderSoon(); });

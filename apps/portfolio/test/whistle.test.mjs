@@ -43,6 +43,18 @@ const notes = P.segment(tr, 0.5);
   ok('silence gives no notes', P.segment(P.track({ hz: new Float32Array(300), clarity: new Float32Array(300), rms: new Float32Array(300).fill(1e-5), hop: 0.01 })).length === 0);
 }
 
+console.log('octave fitting');
+{
+  ok('melody middle of the demo is around G5', Math.abs(P.melodyMiddle(notes) - 79) <= 2, P.melodyMiddle(notes));
+  ok('guitar goes one octave down', P.fitOctave(notes, INSTRUMENTS.overdrive.home) === -1);
+  ok('bass goes three octaves down', P.fitOctave(notes, INSTRUMENTS.bass.home) === -3);
+  ok('flute stays as whistled', P.fitOctave(notes, INSTRUMENTS.flute.home) === 0);
+  const low = notes.map((n) => ({ ...n, center: n.center - 12 }));
+  ok('a lower whistler needs one octave less', P.fitOctave(low, INSTRUMENTS.overdrive.home) === 0);
+  ok('one long squeak does not drag the middle', P.melodyMiddle([...notes, { start: 0, end: 5, center: 100 }]) === P.melodyMiddle(notes));
+  ok('no notes, no shift', P.fitOctave([], 60) === 0 && P.melodyRange([]) === null);
+}
+
 console.log('perform');
 {
   const flat = P.perform(tr, notes, { transpose: -12, correction: 1, bends: 0 });

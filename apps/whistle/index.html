@@ -73,11 +73,14 @@
       <div class="field">
         <label for="octave">Octave</label>
         <select id="octave">
+          <option value="auto">Auto</option>
+          <option value="-4">4 down</option>
           <option value="-3">3 down</option>
           <option value="-2">2 down</option>
           <option value="-1">1 down</option>
           <option value="0">As whistled</option>
           <option value="1">1 up</option>
+          <option value="2">2 up</option>
         </select>
       </div>
       <div class="field">
@@ -93,6 +96,8 @@
         <select id="scale"></select>
       </div>
     </div>
+
+    <p class="hint range-hint" id="rangeHint" aria-live="polite"></p>
 
     <div class="field">
       <label for="correction">Pitch correction <output id="correctionOut"></output></label>
