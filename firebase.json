@@ -98,6 +98,10 @@
           "destination": "/projects/daybook/index.html"
         },
         {
+          "source": "/projects/whistle/**",
+          "destination": "/projects/whistle/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -277,6 +281,15 @@
           ]
         },
         {
+          "source": "/projects/whistle/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/tophat-spears/**/*.@(js|css)",
           "headers": [
             {
@@ -354,6 +367,11 @@
         {
           "source": "/daybook",
           "destination": "/projects/daybook/",
+          "type": 301
+        },
+        {
+          "source": "/whistle",
+          "destination": "/projects/whistle/",
           "type": 301
         },
         {

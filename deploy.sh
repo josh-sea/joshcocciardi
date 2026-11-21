@@ -27,6 +27,7 @@
 #   ./deploy.sh swarm        - Test Swarmbreak, copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh casino       - Test Casino (blackjack, craps), copy (no build), deploy hosting + Realtime Database rules
 #   ./deploy.sh daybook      - Test Daybook (calendar), copy (no build), deploy hosting
+#   ./deploy.sh whistle      - Test Whistle Rig, copy (no build), deploy hosting
 #   ./deploy.sh roy          - Export the Roy web build, deploy its hosting site, functions, and Realtime Database rules
 #   ./deploy.sh subdomains   - Copy the static apps, build the portfolio, deploy every <app>.joshcocciardi.com site
 #   ./deploy.sh weather      - Test + export the Weather web build, deploy its hosting site, functions, and Firestore rules
@@ -56,6 +57,8 @@
 #                       → served at /projects/casino
 #   apps/daybook/       - Daybook: horizontal-day calendar, to-do tray, habit trackers (static, local storage)
 #                       → served at /projects/daybook
+#   apps/whistle/       - Whistle Rig: whistle a melody, hear it on guitar and more (static, local storage)
+#                       → served at /projects/whistle
 #
 # Hosting is multi-site: the "portfolio" target deploys apps/portfolio/build/
 # (all sub-apps are built into apps/portfolio/public/ before portfolio builds),
@@ -80,6 +83,7 @@ PARTY_DIR="$ROOT_DIR/apps/party-room"
 SWARM_DIR="$ROOT_DIR/apps/swarmbreak"
 CASINO_DIR="$ROOT_DIR/apps/casino"
 DAYBOOK_DIR="$ROOT_DIR/apps/daybook"
+WHISTLE_DIR="$ROOT_DIR/apps/whistle"
 WORKBOOK_DIR="$ROOT_DIR/apps/workbook"
 GATEKEEPER_DIR="$ROOT_DIR/apps/gatekeeper/app"
 
@@ -299,6 +303,22 @@ build_daybook() {
     success "daybook copied"
 }
 
+build_whistle() {
+    # No build step. Pitch tracking, the instruments and MIDI export are
+    # pure modules with a dependency-free suite.
+    log "Testing Whistle Rig..."
+    cd "$ROOT_DIR"
+    node apps/portfolio/test/whistle.test.mjs || fail "Whistle Rig tests failed"
+
+    log "Copying whistle to portfolio/public/projects/whistle (no build step)..."
+    mkdir -p "$PORTFOLIO_DIR/public/projects/whistle"
+    rm -rf "$PORTFOLIO_DIR/public/projects/whistle"/*
+    cp -r "$WHISTLE_DIR"/* "$PORTFOLIO_DIR/public/projects/whistle/"
+    rm -f "$PORTFOLIO_DIR/public/projects/whistle/README.md" \
+          "$PORTFOLIO_DIR/public/projects/whistle/package.json"
+    success "whistle copied"
+}
+
 build_portfolio() {
     # Swing Coach ships as a single static page inside public/, with its swing
     # geometry inlined. The suite lifts that engine out of the page and runs
@@ -372,6 +392,7 @@ deploy_hosting() {
     echo "  Swarmbreak:     https://www.joshcocciardi.com/projects/swarmbreak  (short link: /swarm)"
     echo "  Casino:         https://www.joshcocciardi.com/projects/casino  (short link: /casino)"
     echo "  Daybook:        https://www.joshcocciardi.com/projects/daybook  (short link: /daybook)"
+    echo "  Whistle Rig:    https://www.joshcocciardi.com/projects/whistle  (short link: /whistle)"
     echo "  Camboy:         https://www.joshcocciardi.com/projects/camboy  (Sweat Boy, Boulder Smash, Dark Hat, Conway's DOOM)"
     echo "  Camboku:        https://www.joshcocciardi.com/projects/camboku  (short link: /camboku)"
     echo "  Meal Planner:   https://www.joshcocciardi.com/tools/meal-planner"
@@ -532,6 +553,7 @@ case "${1:-all}" in
         build_swarm
         build_casino
         build_daybook
+        build_whistle
         build_workbook
         build_portfolio
         deploy_firestore
@@ -773,9 +795,17 @@ case "${1:-all}" in
         build_portfolio
         deploy_hosting
         ;;
+    whistle)
+        echo "========================================"
+        echo "  Deploying Whistle Rig"
+        echo "========================================"
+        build_whistle
+        build_portfolio
+        deploy_hosting
+        ;;
     *)
         echo "Unknown command: $1"
-        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|narrative-lab|gatekeeper|tophat|party|swarm|casino|daybook|roy|weather|verdict|subdomains|ezpayze|firestore|storage]"
+        echo "Usage: ./deploy.sh [all|portfolio|email|moments|collector|workbook|playball|canitwo|recipebox|psx|solra|myreadingbuddy|mise|seasonal-box|narrative-lab|gatekeeper|tophat|party|swarm|casino|daybook|whistle|roy|weather|verdict|subdomains|ezpayze|firestore|storage]"
         exit 1
         ;;
 esac

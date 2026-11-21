@@ -1,0 +1,9 @@
+{
+  "name": "whistle",
+  "private": true,
+  "type": "module",
+  "description": "Whistle Rig. Lets node load the pure modules as ES modules for the tests.",
+  "scripts": {
+    "test": "node ../portfolio/test/whistle.test.mjs"
+  }
+}
