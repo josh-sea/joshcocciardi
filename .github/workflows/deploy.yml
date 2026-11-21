@@ -253,9 +253,14 @@ jobs:
       - name: Test Daybook
         run: node apps/portfolio/test/daybook.test.mjs
 
+      # Whistle Rig: pitch tracking, note splitting, instruments, MIDI.
+      # Plain modules, no install needed.
+      - name: Test Whistle Rig
+        run: node apps/portfolio/test/whistle.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room swarmbreak casino daybook; do
+          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room swarmbreak casino daybook whistle; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"

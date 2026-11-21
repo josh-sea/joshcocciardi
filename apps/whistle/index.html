@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Whistle Rig</title>
+<meta name="description" content="Whistle a melody, along with a song if you like, and hear it played back on overdrive guitar, bass, violin and more. Bends and vibrato come through.">
+<meta name="theme-color" content="#eceef3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 20c4 0 4-8 8-8s4 10 8 10 4-14 10-14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+    <span>Whistle Rig</span>
+  </div>
+  <p class="tag">Whistle it. Hear it on guitar.</p>
+</header>
+
+<main class="rig">
+  <div class="col col-a">
+  <section class="panel record" aria-labelledby="recHead">
+    <h2 id="recHead" class="label">1 · Record</h2>
+
+    <div class="song">
+      <div class="song-row">
+        <label class="file-btn">
+          <input type="file" id="songFile" accept="audio/*,video/*">
+          <span>Load a song to whistle along to</span>
+        </label>
+        <button class="link-btn" id="songClear" hidden>Remove</button>
+      </div>
+      <p class="hint" id="songName">Optional. Any audio file on your device (mp3, m4a, wav).</p>
+      <div class="field" id="songStartField" hidden>
+        <label for="songStart">Start the song at <output id="songStartOut">0:00</output></label>
+        <input type="range" id="songStart" min="0" max="100" step="0.5" value="0">
+      </div>
+    </div>
+
+    <div class="rec-row">
+      <button class="rec-btn" id="recBtn" aria-pressed="false">
+        <span class="rec-dot" aria-hidden="true"></span>
+        <span id="recLabel">Record</span>
+      </button>
+      <div class="tuner" aria-live="polite">
+        <div class="tuner-note" id="tunerNote">–</div>
+        <div class="tuner-sub" id="tunerSub">live pitch</div>
+      </div>
+    </div>
+    <p class="hint" id="recHint">Headphones help when a song is playing, so the mic only hears you.</p>
+
+    <div class="or">or</div>
+    <div class="song-row">
+      <label class="file-btn ghost">
+        <input type="file" id="whistleFile" accept="audio/*,video/*">
+        <span>Open a whistle recording</span>
+      </label>
+      <button class="link-btn" id="demoBtn">Try the demo whistle</button>
+    </div>
+    <p class="hint">A voice memo from your phone works.</p>
+  </section>
+
+  <section class="panel tone" aria-labelledby="toneHead">
+    <h2 id="toneHead" class="label">3 · Sound</h2>
+    <div class="inst-grid" id="instGrid" role="radiogroup" aria-label="Instrument"></div>
+
+    <div class="tone-grid">
+      <div class="field">
+        <label for="octave">Octave</label>
+        <select id="octave">
+          <option value="-3">3 down</option>
+          <option value="-2">2 down</option>
+          <option value="-1">1 down</option>
+          <option value="0">As whistled</option>
+          <option value="1">1 up</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="semis">Transpose</label>
+        <select id="semis"></select>
+      </div>
+      <div class="field">
+        <label for="tonic">Key <span class="pill" id="keyGuess"></span></label>
+        <select id="tonic"></select>
+      </div>
+      <div class="field">
+        <label for="scale">Scale</label>
+        <select id="scale"></select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="correction">Pitch correction <output id="correctionOut"></output></label>
+      <input type="range" id="correction" min="0" max="1" step="0.05" value="0.8">
+      <p class="hint">Pulls each note onto the scale. 0% keeps exactly what you whistled.</p>
+    </div>
+    <div class="field">
+      <label for="bends">Bends and vibrato <output id="bendsOut"></output></label>
+      <input type="range" id="bends" min="0" max="1" step="0.05" value="1">
+      <p class="hint">How much of each slide and wobble comes through. 0% plays flat, piano-style notes.</p>
+    </div>
+    <div class="field">
+      <label for="sens">Note splitting <output id="sensOut"></output></label>
+      <input type="range" id="sens" min="0" max="1" step="0.05" value="0.5">
+      <p class="hint">Higher hears more separate notes. Lower turns more of your slides into one bent note.</p>
+    </div>
+    <div class="tone-grid two">
+      <div class="field">
+        <label for="reverb">Room <output id="reverbOut"></output></label>
+        <input type="range" id="reverb" min="0" max="1" step="0.05" value="0.25">
+      </div>
+      <div class="field">
+        <label for="echo">Echo <output id="echoOut"></output></label>
+        <input type="range" id="echo" min="0" max="1" step="0.05" value="0.15">
+      </div>
+    </div>
+  </section>
+  </div>
+  <div class="col col-b">
+  <section class="panel stage" aria-labelledby="stageHead">
+    <div class="stage-head">
+      <h2 id="stageHead" class="label">2 · Listen</h2>
+      <input class="take-name" id="takeName" value="Demo whistle" aria-label="Take name" maxlength="60">
+    </div>
+    <div class="roll-wrap" id="rollWrap">
+      <canvas id="roll" aria-label="Pitch of your whistle over time, with the notes found"></canvas>
+      <div class="busy" id="busy" hidden><span id="busyText">Listening for notes…</span></div>
+    </div>
+    <div class="legend">
+      <span><i class="sw sw-whistle"></i>your whistle</span>
+      <span><i class="sw sw-inst"></i>what plays</span>
+      <span><i class="sw sw-note"></i>notes found</span>
+      <span class="legend-right" id="noteCount"></span>
+    </div>
+    <div class="transport">
+      <button class="play-btn" id="playBtn" aria-label="Play">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path id="playIcon" d="M7 4l13 8-13 8z"/></svg>
+      </button>
+      <button class="icon-btn" id="rewBtn" aria-label="Back to start">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg>
+      </button>
+      <div class="time"><output id="timeNow">0:00.0</output> / <output id="timeTotal">0:00.0</output></div>
+      <div class="zoom">
+        <button class="icon-btn" id="zoomOut" aria-label="Zoom out">−</button>
+        <button class="icon-btn" id="zoomIn" aria-label="Zoom in">+</button>
+      </div>
+    </div>
+
+    <div class="mix">
+      <div class="field">
+        <label for="volInst">Instrument <output id="volInstOut"></output></label>
+        <input type="range" id="volInst" min="0" max="1.2" step="0.01" value="0.9">
+      </div>
+      <div class="field">
+        <label for="volSong">Song <output id="volSongOut"></output></label>
+        <input type="range" id="volSong" min="0" max="1.2" step="0.01" value="0.7">
+      </div>
+      <div class="field">
+        <label for="volWhistle">Your whistle <output id="volWhistleOut"></output></label>
+        <input type="range" id="volWhistle" min="0" max="1.2" step="0.01" value="0">
+      </div>
+      <div class="field" id="nudgeField">
+        <label for="nudge">Sync with song <output id="nudgeOut"></output></label>
+        <input type="range" id="nudge" min="-400" max="400" step="5" value="0">
+      </div>
+    </div>
+  </section>
+
+
+  <section class="panel keep" aria-labelledby="keepHead">
+    <h2 id="keepHead" class="label">4 · Keep</h2>
+    <div class="btn-row">
+      <button class="btn" id="saveBtn">Save take</button>
+      <button class="btn ghost" id="wavBtn">Download mix (.wav)</button>
+      <button class="btn ghost" id="midiBtn">Download MIDI</button>
+    </div>
+    <p class="hint">The MIDI file keeps your bends as pitch bend, so you can drop it on a guitar in GarageBand or any DAW. Saved takes stay in this browser.</p>
+    <ul class="takes" id="takes"></ul>
+  </section>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
