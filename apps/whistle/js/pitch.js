@@ -380,3 +380,28 @@ export function demoWhistle(sr = ANALYSIS_SR) {
   }
   return x;
 }
+
+/* The octave shift that puts the middle of the melody nearest an
+ * instrument's home note. The middle is the duration-weighted median of the
+ * notes, so one stray squeak doesn't move it. */
+export function melodyMiddle(notes) {
+  if (!notes.length) return NaN;
+  const sorted = notes.map((n) => [n.center, n.end - n.start]).sort((a, b) => a[0] - b[0]);
+  const half = sorted.reduce((s, [, w]) => s + w, 0) / 2;
+  let acc = 0;
+  for (const [m, w] of sorted) { acc += w; if (acc >= half) return m; }
+  return sorted[sorted.length - 1][0];
+}
+
+export function fitOctave(notes, home) {
+  const mid = melodyMiddle(notes);
+  if (isNaN(mid)) return 0;
+  return Math.max(-4, Math.min(2, Math.round((home - mid) / 12)));
+}
+
+export function melodyRange(notes) {
+  if (!notes.length) return null;
+  let lo = Infinity, hi = -Infinity;
+  for (const n of notes) { lo = Math.min(lo, n.center); hi = Math.max(hi, n.center); }
+  return [lo, hi];
+}

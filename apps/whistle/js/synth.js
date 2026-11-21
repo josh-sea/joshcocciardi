@@ -12,13 +12,15 @@
 import { midiToHz } from './pitch.js';
 
 export const INSTRUMENTS = {
-  overdrive: { label: 'Overdrive guitar', octave: -1, gm: 29 },
-  clean: { label: 'Clean guitar', octave: -1, gm: 27 },
-  bass: { label: 'Bass', octave: -3, gm: 33 },
-  lead: { label: 'Synth lead', octave: -1, gm: 80 },
-  violin: { label: 'Violin', octave: -1, gm: 40 },
-  brass: { label: 'Trumpet', octave: -1, gm: 56 },
-  flute: { label: 'Flute', octave: 0, gm: 73 },
+  // home: the MIDI note a melody on this instrument usually sits around.
+  // range: the notes it can really play (low E to the top fret, and so on).
+  overdrive: { label: 'Overdrive guitar', octave: -1, gm: 29, home: 66, range: [40, 88] },
+  clean: { label: 'Clean guitar', octave: -1, gm: 27, home: 62, range: [40, 84] },
+  bass: { label: 'Bass', octave: -3, gm: 33, home: 40, range: [28, 60] },
+  lead: { label: 'Synth lead', octave: -1, gm: 80, home: 72, range: [36, 96] },
+  violin: { label: 'Violin', octave: -1, gm: 40, home: 74, range: [55, 100] },
+  brass: { label: 'Trumpet', octave: -1, gm: 56, home: 67, range: [52, 82] },
+  flute: { label: 'Flute', octave: 0, gm: 73, home: 81, range: [60, 96] },
 };
 
 const TAU = Math.PI * 2;
