@@ -1,0 +1,9 @@
+{
+  "name": "crowd-cannon",
+  "private": true,
+  "type": "module",
+  "description": "Crowd Cannon. Lets node load the pure rules as ES modules for the tests.",
+  "scripts": {
+    "test": "node ../portfolio/test/crowd-cannon.test.mjs"
+  }
+}

@@ -258,9 +258,14 @@ jobs:
       - name: Test Whistle Rig
         run: node apps/portfolio/test/whistle.test.mjs
 
+      # Crowd Cannon: levels, gates, spinners, upgrades, saves.
+      # Plain modules, no install needed.
+      - name: Test Crowd Cannon
+        run: node apps/portfolio/test/crowd-cannon.test.mjs
+
       - name: Copy static apps into portfolio
         run: |
-          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room swarmbreak casino daybook whistle; do
+          for app in playball canitwo recipebox psx solra disney-trivia tophat-spears party-room swarmbreak casino daybook whistle crowd-cannon; do
             mkdir -p "apps/portfolio/public/projects/$app"
             rm -rf "apps/portfolio/public/projects/$app"
             cp -r "apps/$app" "apps/portfolio/public/projects/$app"

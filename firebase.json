@@ -102,6 +102,10 @@
           "destination": "/projects/whistle/index.html"
         },
         {
+          "source": "/projects/crowd-cannon/**",
+          "destination": "/projects/crowd-cannon/index.html"
+        },
+        {
           "source": "!/projects/**",
           "destination": "/index.html"
         }
@@ -290,6 +294,15 @@
           ]
         },
         {
+          "source": "/projects/crowd-cannon/**/*.@(js|css)",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
           "source": "/projects/tophat-spears/**/*.@(js|css)",
           "headers": [
             {
@@ -372,6 +385,11 @@
         {
           "source": "/whistle",
           "destination": "/projects/whistle/",
+          "type": 301
+        },
+        {
+          "source": "/cannon",
+          "destination": "/projects/crowd-cannon/",
           "type": 301
         },
         {
