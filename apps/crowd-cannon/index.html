@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Crowd Cannon</title>
+<meta name="description" content="Fire a crowd down the track, run it through multiplier gates and swamp the enemy fort before their army reaches your wall.">
+<meta name="theme-color" content="#2d7dff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="view" aria-label="Game view"></canvas>
+
+<div id="hud">
+  <div class="top">
+    <button id="pauseBtn" class="round" aria-label="Pause">II</button>
+    <span id="lvl" class="pill">Level 1</span>
+    <span class="pill"><b class="coin"></b><span id="coins">0</span></span>
+  </div>
+  <div id="fortBar" class="fort-bar" aria-label="Enemy fort health">
+    <span id="fortNum">0</span>
+    <div class="bar"><div id="fortFill"></div></div>
+  </div>
+  <div id="hint" class="hint">Hold to fire, drag to aim</div>
+  <div class="bottom">
+    <div class="row">
+      <div class="stat"><span class="dot blue"></span><span id="units">0</span></div>
+      <div id="charge" class="charge"><div id="chargeFill"></div><span id="chargeLabel">Champion</span></div>
+    </div>
+    <div class="home" aria-label="Your wall">
+      <span>Wall</span>
+      <div class="bar"><div id="homeFill"></div></div>
+      <span id="homeNum">20</span>
+    </div>
+  </div>
+</div>
+
+<section id="menu" class="sheet">
+  <div class="card">
+    <h1><span>Crowd</span> Cannon</h1>
+    <p class="lede">Fire your crowd through the gates, multiply it, and swamp the red fort before their army reaches your wall.</p>
+    <button id="play" class="big"><span id="menuLevel">Level 1</span><small>Play</small></button>
+    <h2>Upgrades</h2>
+    <div id="shop" class="shop"></div>
+    <div class="links">
+      <button id="sound" class="ghost" aria-pressed="true">Sound on</button>
+      <button id="reset" class="ghost">Start over</button>
+    </div>
+    <p class="keys">Phone: hold anywhere to fire, slide to aim. Keyboard: arrows or A/D to aim, hold Space to fire.</p>
+  </div>
+</section>
+
+<section id="end" class="sheet" hidden>
+  <div class="card">
+    <h1 id="endTitle">Fort taken!</h1>
+    <p id="endSub" class="lede"></p>
+    <p id="endCoins" class="earned">+0</p>
+    <button id="endGo" class="big">Next</button>
+    <h2>Upgrades</h2>
+    <div id="endShop" class="shop"></div>
+    <div class="links"><button id="endMenu" class="ghost">Menu</button></div>
+  </div>
+</section>
+
+<section id="pause" class="sheet" hidden>
+  <div class="card small">
+    <h1>Paused</h1>
+    <button id="resume" class="big">Resume</button>
+    <div class="links">
+      <button id="restart" class="ghost">Restart level</button>
+      <button id="quit" class="ghost">Menu</button>
+    </div>
+  </div>
+</section>
+
+<section id="nogl" class="sheet" hidden>
+  <div class="card small">
+    <h1>No 3D here</h1>
+    <p class="lede">This browser has WebGL turned off, and the game needs it. Try another browser or turn on hardware acceleration.</p>
+  </div>
+</section>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
