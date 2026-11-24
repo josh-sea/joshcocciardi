@@ -61,6 +61,50 @@ console.log('levels');
   ok('no brutes on level 1', L.makeLevel(1).enemy.bruteEvery === 0 && L.makeLevel(2).enemy.bruteEvery > 0);
 }
 
+console.log('barricades, bosses and ogres');
+{
+  ok('no barricades on level 1', L.makeLevel(1).barriers.length === 0);
+  let fine = true, why = null;
+  for (let n = 2; n <= 60; n++) {
+    const lv = L.makeLevel(n);
+    if (!lv.barriers.length) { fine = false; why = { n, none: true }; }
+    for (const b of lv.barriers) {
+      const bonus = lv.gates.find((g) => g.bonus && g.x === b.x && g.z < b.z && b.z - g.z < 4);
+      if (!bonus) { fine = false; why = { n, b }; }
+      if (Math.abs(b.x) + b.w / 2 > L.HALF_W + 1e-9) { fine = false; why = { n, wide: b }; }
+      if (b.z >= -2 || b.z <= -lv.length + 3) { fine = false; why = { n, z: b.z }; }
+      // Barricades leave the middle of the track open for the enemy.
+      if (Math.abs(b.x) - b.w / 2 < 0.3) { fine = false; why = { n, blocks: b }; }
+      if (b.hp !== L.barrierHp(n)) { fine = false; why = { n, hp: b.hp }; }
+    }
+  }
+  ok('every barricade guards a bonus gate right behind it, at the side', fine, why);
+  ok('barricades get tougher', L.barrierHp(10) > L.barrierHp(5));
+  ok('every fifth level is a boss', [5, 10, 15].every((n) => L.makeLevel(n).boss) && ![4, 6, 9].some((n) => L.makeLevel(n).boss));
+  ok('a boss fort is tougher than the level after it', L.makeLevel(5).fortHp > L.makeLevel(6).fortHp);
+  ok('boss levels pay double', L.makeLevel(5).reward > L.makeLevel(6).reward);
+  ok('ogres from level 3', L.makeLevel(2).enemy.ogreEvery === 0 && L.makeLevel(3).enemy.ogreEvery > 0);
+  ok('boss ogres come more often', L.makeLevel(10).enemy.ogreEvery < L.makeLevel(11).enemy.ogreEvery);
+  ok('ogres hurt the wall most', L.WALL_DAMAGE.ogre > L.WALL_DAMAGE.brute && L.WALL_DAMAGE.brute > L.WALL_DAMAGE.grunt);
+}
+
+console.log('squad');
+{
+  const none = L.stats({});
+  ok('bruisers and bombers start locked', none.bruiserEvery === 0 && none.bomberEvery === 0);
+  ok('locked squad means every shot is a runner', Array.from({ length: 50 }, (_, i) => L.shotKind(i + 1, none)).every((k) => k === 'runner'));
+  const st = L.stats({ bruiser: 3, bomber: 2 });
+  const kinds = Array.from({ length: 60 }, (_, i) => L.shotKind(i + 1, st));
+  ok('unlocked bruisers come every Nth shot', kinds.filter((k) => k === 'bruiser').length >= 60 / st.bruiserEvery - 1 - 60 / st.bomberEvery);
+  ok('unlocked bombers come every Nth shot', kinds.filter((k) => k === 'bomber').length === Math.floor(60 / st.bomberEvery));
+  ok('more levels, more often', L.stats({ bruiser: 6 }).bruiserEvery < L.stats({ bruiser: 1 }).bruiserEvery);
+  ok('a runner chips a barricade, a bruiser spends its hit points', L.barrierDamage('runner', 1, st) === 1 && L.barrierDamage('bruiser', 5, st) === 5);
+  ok('a bomber hits a barricade hard', L.barrierDamage('bomber', 1, st) === st.bomberHit && st.bomberHit > 5);
+  ok('champions hit the fort hardest', L.fortDamage('champ', st) > L.fortDamage('bomber', st) && L.fortDamage('bruiser', st) > L.fortDamage('runner', st));
+  ok('wall and head start upgrades', L.stats({ wall: 2, start: 3 }).homeBonus === 10 && L.stats({ start: 3 }).startSquad === 18);
+  ok('double shot chance stays a chance', L.stats({ double: L.UPGRADES.double.max }).doubleChance < 1);
+}
+
 console.log('upgrades and saves');
 {
   ok('upgrades cost more each time', L.upgradeCost('rate', 1) > L.upgradeCost('rate', 0));
@@ -77,6 +121,8 @@ console.log('upgrades and saves');
   ok('null save is a fresh save', L.cleanSave(null).level === 1);
   const lv = L.makeLevel(3);
   ok('an unhurt wall pays a bonus', L.winCoins(lv, lv.homeHp) > L.winCoins(lv, 1));
+  ok('the wall bonus counts upgraded walls', L.winCoins(lv, 40, 40) === L.winCoins(lv, lv.homeHp));
+  ok('old saves get the new upgrades at zero', (() => { const c = L.cleanSave({ level: 4, up: { rate: 2 } }); return c.up.rate === 2 && c.up.bruiser === 0 && c.up.bomber === 0 && c.up.wall === 0; })());
   ok('a loss pays for damage done', L.loseCoins(lv, 0) > L.loseCoins(lv, lv.fortHp / 2) && L.loseCoins(lv, lv.fortHp) === 0);
 }
 

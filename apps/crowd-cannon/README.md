@@ -19,15 +19,28 @@ name, levels, characters, art and sounds are all original.
 | Aim | Slide your finger | Arrows or A/D |
 
 - **Gates.** Each runner can use each gate once, and the clones a gate makes
-  have already used it. Some gates sweep side to side.
+  have already used it. Some gates sweep side to side. Gates always copy a
+  unit as plain runners.
+- **Barricades** (from level 2) block one side of the track and show their hit
+  points. Every unit that runs into one spends itself on it. Break it and the
+  gold bonus gate behind it (`×3`, `+8` and up) is yours.
 - **Champion.** Every shot fills the meter. When it is full, the next shot is a
   big gold champion that ploughs through red runners and hits the fort hard.
-- **Brutes** (from level 2) are big red runners that take many hits.
-- **Spinners** (from level 4) knock out any blue runner they touch. Champions
-  shrug them off.
+- **Bruisers** (unlock in the shop) are big white fluffy runners that take
+  several hits. **Bombers** (unlock) are walking bombs that blow up a pack of
+  red on contact and crack barricades. Each level of either makes the cannon
+  fire one more often.
+- **Their army.** Grunts pour out in packed rushes, **brutes** (from level 2)
+  take many hits, and giant green **ogres** (from level 3) shrug off dozens of
+  runners and smash 8 points off your wall. They shrink as they are hurt.
+- **Boss levels.** Every fifth level has a bigger fort, more ogres and double
+  the coins.
+- **Spinners** (from level 4) knock out runners and bombers. Champions and
+  bruisers shrug them off.
 - **Coins.** A win pays the level's reward plus a bonus for an unhurt wall. A
-  loss still pays a share for the damage you did. Spend them on fire rate,
-  charge speed and champion strength.
+  loss still pays a share for the damage you did.
+- **Shop.** Cannon: fire rate, double shot, charge speed, thick wall, head
+  start. Squad: champion, bruisers, bombers.
 
 Progress, coins and upgrades are saved in the browser. `#level=7` in the
 address jumps to a level, for testing.

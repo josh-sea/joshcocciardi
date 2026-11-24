@@ -26,7 +26,7 @@ const hud = {
   fortBar: $('fortBar'), fortFill: $('fortFill'), fortNum: $('fortNum'),
   homeFill: $('homeFill'), homeNum: $('homeNum'),
   charge: $('chargeFill'), chargeWrap: $('charge'), chargeLabel: $('chargeLabel'),
-  units: $('units'),
+  units: $('units'), ogre: $('ogreWarn'),
 };
 
 let hintShown = false;
@@ -41,6 +41,8 @@ const game = new Game($('view'), {
     hud.chargeWrap.classList.toggle('ready', h.ready);
     hud.chargeLabel.textContent = h.ready ? 'Champion ready' : 'Champion';
     hud.units.textContent = h.units;
+    hud.ogre.hidden = !h.ogres;
+    if (h.ogres) hud.ogre.textContent = h.ogres > 1 ? `${h.ogres} ogres!` : 'Ogre!';
   },
   onFirstInput() {
     unlock();
@@ -50,11 +52,11 @@ const game = new Game($('view'), {
     $('hud').classList.remove('on');
     const lv = current;
     if (won) {
-      const coins = L.winCoins(lv, info.homeHp);
+      const coins = L.winCoins(lv, info.homeHp, info.homeMax);
       save = { ...save, coins: save.coins + coins, level: lv.n + 1, best: Math.max(save.best, lv.n + 1) };
       store();
       $('endTitle').textContent = 'Fort taken!';
-      $('endSub').textContent = `Level ${lv.n} cleared with ${info.homeHp} of ${lv.homeHp} wall left.`;
+      $('endSub').textContent = `Level ${lv.n}${lv.boss ? ' (boss)' : ''} cleared with ${info.homeHp} of ${info.homeMax} wall left.`;
       $('endCoins').textContent = `+${coins}`;
       $('endCoins').hidden = false;
       $('endGo').textContent = `Level ${lv.n + 1}`;
@@ -65,7 +67,7 @@ const game = new Game($('view'), {
       store();
       const pct = Math.round((1 - info.fortHp / lv.fortHp) * 100);
       $('endTitle').textContent = 'Wall broken';
-      $('endSub').textContent = `You knocked ${pct}% off the fort. Aim for the purple multipliers, and spend coins on upgrades.`;
+      $('endSub').textContent = `You knocked ${pct}% off the fort. Smash a barricade to reach its gold gate, aim for the purple multipliers, and spend coins on upgrades.`;
       $('endCoins').textContent = `+${coins}`;
       $('endCoins').hidden = coins === 0;
       $('endGo').textContent = 'Try again';
@@ -82,8 +84,10 @@ let current = null;
 function prepare(n) {
   current = L.makeLevel(n);
   game.load(current, L.stats(save.up));
-  $('lvl').textContent = `Level ${n}`;
-  $('menuLevel').textContent = `Level ${n}`;
+  const name = `Level ${n}${current.boss ? ' · Boss' : ''}`;
+  $('lvl').textContent = name;
+  $('menuLevel').textContent = name;
+  $('lvl').classList.toggle('boss', current.boss);
   $('coins').textContent = save.coins;
 }
 
@@ -101,30 +105,44 @@ function play() {
   game.start();
 }
 
+const GROUPS = [['cannon', 'Cannon'], ['squad', 'Squad']];
+
 function renderShop(el) {
   el.innerHTML = '';
-  for (const [key, u] of Object.entries(L.UPGRADES)) {
-    const lvl = save.up[key];
-    const maxed = lvl >= u.max;
-    const cost = L.upgradeCost(key, lvl);
-    const b = document.createElement('button');
-    b.className = 'up';
-    b.disabled = maxed || save.coins < cost;
-    b.innerHTML = `
-      <span class="up-name">${u.name}</span>
-      <span class="up-blurb">${u.blurb}</span>
-      <span class="up-pips">${'<i class="on"></i>'.repeat(Math.min(lvl, 12))}${'<i></i>'.repeat(Math.max(0, Math.min(u.max, 12) - lvl))}</span>
-      <span class="up-cost">${maxed ? 'Max' : `<b class="coin"></b>${cost}`}</span>`;
-    b.addEventListener('click', () => {
-      const r = L.buy(save, key);
-      if (!r.ok) return;
-      save = r.save;
-      store();
-      sfx.ready();
-      $('coins').textContent = save.coins;
-      renderShop(el);
-    });
-    el.appendChild(b);
+  for (const [group, title] of GROUPS) {
+    const h = document.createElement('h3');
+    h.className = 'shop-head';
+    h.textContent = title;
+    el.appendChild(h);
+    const grid = document.createElement('div');
+    grid.className = 'shop-grid';
+    el.appendChild(grid);
+    for (const [key, u] of Object.entries(L.UPGRADES)) {
+      if (u.group !== group) continue;
+      const lvl = save.up[key] || 0;
+      const maxed = lvl >= u.max;
+      const locked = u.unlock && lvl === 0;
+      const cost = L.upgradeCost(key, lvl);
+      const b = document.createElement('button');
+      b.className = `up${locked ? ' locked' : ''}`;
+      b.disabled = maxed || save.coins < cost;
+      const pips = Math.min(u.max, 12);
+      b.innerHTML = `
+        <span class="up-name">${u.name}</span>
+        <span class="up-blurb">${u.blurb}</span>
+        <span class="up-pips">${'<i class="on"></i>'.repeat(Math.min(lvl, pips))}${'<i></i>'.repeat(Math.max(0, pips - lvl))}</span>
+        <span class="up-cost">${maxed ? 'Max' : `${locked ? '<em>Unlock</em>' : ''}<b class="coin"></b>${cost}`}</span>`;
+      b.addEventListener('click', () => {
+        const r = L.buy(save, key);
+        if (!r.ok) return;
+        save = r.save;
+        store();
+        sfx.ready();
+        $('coins').textContent = save.coins;
+        renderShop(el);
+      });
+      grid.appendChild(b);
+    }
   }
 }
 
