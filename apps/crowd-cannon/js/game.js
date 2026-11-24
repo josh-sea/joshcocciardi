@@ -16,6 +16,10 @@ const COL = {
   brute: 0x8e1b2a,
   add: '#2f8dff',
   mul: '#b03cff',
+  bonus: '#ffa31a',
+  ogre: 0x74c043,
+  white: 0xf1f5ff,
+  bomb: 0x3b404d,
 };
 
 const THEMES = [
@@ -26,7 +30,6 @@ const THEMES = [
 
 const CELL = 1;
 const GRID_COLS = 12;
-const SPEED = { unit: 7.4, champ: 4.2 };
 
 /* ---- Geometry --------------------------------------------------------- */
 
@@ -39,41 +42,83 @@ function painted(geo, shade) {
 
 // A chunky little runner that faces -z. Vertex colours are shades: the
 // instance colour tints them, so one model serves both armies.
-function runnerGeometry(horns) {
+// style: 'plain', 'horns' (champion, brute), 'ogre', 'fluffy' (bruiser), 'bomb'.
+function runnerGeometry(style = 'plain') {
   const parts = [];
-  const body = new THREE.CapsuleGeometry(0.27, 0.26, 3, 10);
-  body.translate(0, 0.42, 0);
-  parts.push(painted(body, 1));
-
-  const helmet = new THREE.SphereGeometry(0.29, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  helmet.scale(1, 0.8, 1);
-  helmet.translate(0, 0.6, 0);
-  parts.push(painted(helmet, 0.55));
-
-  const brim = new THREE.CylinderGeometry(0.31, 0.31, 0.05, 12);
-  brim.translate(0, 0.6, 0);
-  parts.push(painted(brim, 0.4));
-
+  const add = (g, shade) => parts.push(painted(g, shade));
+  if (style === 'bomb') {
+    const ball = new THREE.SphereGeometry(0.33, 12, 8);
+    ball.translate(0, 0.42, 0);
+    add(ball, 1);
+    const cap = new THREE.CylinderGeometry(0.1, 0.12, 0.1, 8);
+    cap.translate(0, 0.78, 0);
+    add(cap, 2.2);
+    const fuse = new THREE.CylinderGeometry(0.025, 0.025, 0.18, 5);
+    fuse.rotateZ(0.4);
+    fuse.translate(0.04, 0.9, 0);
+    add(fuse, 4);
+    const spark = new THREE.SphereGeometry(0.07, 6, 4);
+    spark.translate(0.08, 1.0, 0);
+    add(spark, 30);
+  } else {
+    const body = new THREE.CapsuleGeometry(0.27, 0.26, 3, 10);
+    body.translate(0, 0.42, 0);
+    add(body, 1);
+    if (style === 'fluffy') {
+      // Tufts of fur all over: little spheres around the body.
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 9) * Math.PI * 2;
+        const tuft = new THREE.IcosahedronGeometry(0.13, 0);
+        tuft.translate(Math.cos(a) * 0.25, 0.3 + (k % 3) * 0.18, Math.sin(a) * 0.25);
+        add(tuft, 0.92);
+      }
+      const top = new THREE.IcosahedronGeometry(0.2, 0);
+      top.translate(0, 0.72, 0.02);
+      add(top, 1);
+    } else {
+      const helmet = new THREE.SphereGeometry(0.29, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
+      helmet.scale(1, 0.8, 1);
+      helmet.translate(0, 0.6, 0);
+      add(helmet, 0.55);
+      const brim = new THREE.CylinderGeometry(0.31, 0.31, 0.05, 12);
+      brim.translate(0, 0.6, 0);
+      add(brim, 0.4);
+    }
+  }
   for (const s of [-1, 1]) {
     const eye = new THREE.SphereGeometry(0.065, 6, 4);
-    eye.translate(s * 0.1, 0.5, -0.24);
-    parts.push(painted(eye, 5));
+    eye.translate(s * 0.1, 0.5, style === 'bomb' ? -0.3 : -0.24);
+    add(eye, style === 'bomb' ? 25 : 5);
     const foot = new THREE.BoxGeometry(0.13, 0.1, 0.2);
     foot.translate(s * 0.12, 0.05, -0.03);
-    parts.push(painted(foot, 0.3));
+    add(foot, 0.3);
   }
-  if (horns) {
+  if (style === 'horns' || style === 'ogre') {
     for (const s of [-1, 1]) {
       const horn = new THREE.ConeGeometry(0.08, 0.3, 6);
       horn.rotateZ(-s * 0.6);
       horn.translate(s * 0.25, 0.8, 0);
-      parts.push(painted(horn, 3));
+      add(horn, 3);
     }
     const belt = new THREE.CylinderGeometry(0.29, 0.29, 0.08, 12);
     belt.translate(0, 0.33, 0);
-    parts.push(painted(belt, 0.25));
+    add(belt, 0.25);
   }
-  const nonIndexed = parts.map((g) => g.toNonIndexed());
+  if (style === 'ogre') {
+    // A big belly, fists and tusks.
+    const belly = new THREE.SphereGeometry(0.24, 10, 8);
+    belly.translate(0, 0.38, -0.12);
+    add(belly, 1.15);
+    for (const s of [-1, 1]) {
+      const fist = new THREE.SphereGeometry(0.13, 8, 6);
+      fist.translate(s * 0.36, 0.3, -0.08);
+      add(fist, 0.7);
+      const tusk = new THREE.ConeGeometry(0.035, 0.14, 5);
+      tusk.translate(s * 0.08, 0.44, -0.27);
+      add(tusk, 6);
+    }
+  }
+  const nonIndexed = parts.map((g) => (g.index ? g.toNonIndexed() : g));
   nonIndexed.forEach((g) => g.deleteAttribute('uv'));
   return mergeGeometries(nonIndexed);
 }
@@ -94,6 +139,8 @@ class Crowd {
     this.hp = new Int16Array(cap);
     this.mask = new Uint32Array(cap);
     this.baseY = new Float32Array(cap);
+    this.maxHp = new Int16Array(cap);
+    this.shrink = false;   // draw hurt units smaller (ogres)
     this.mesh = new THREE.InstancedMesh(geo, mat, cap);
     this.mesh.count = 0;
     this.mesh.castShadow = true;
@@ -111,7 +158,7 @@ class Crowd {
     const i = this.n++;
     this.x[i] = x; this.z[i] = z; this.vx[i] = vx; this.fly[i] = fly;
     this.age[i] = 0; this.phase[i] = Math.random() * 6.28;
-    this.hp[i] = hp; this.mask[i] = mask; this.baseY[i] = 0;
+    this.hp[i] = hp; this.maxHp[i] = hp; this.mask[i] = mask; this.baseY[i] = 0;
     return i;
   }
   remove(i) {
@@ -119,7 +166,7 @@ class Crowd {
     if (i === j) return;
     this.x[i] = this.x[j]; this.z[i] = this.z[j]; this.vx[i] = this.vx[j];
     this.fly[i] = this.fly[j]; this.age[i] = this.age[j]; this.phase[i] = this.phase[j];
-    this.hp[i] = this.hp[j]; this.mask[i] = this.mask[j]; this.baseY[i] = this.baseY[j];
+    this.hp[i] = this.hp[j]; this.maxHp[i] = this.maxHp[j]; this.mask[i] = this.mask[j]; this.baseY[i] = this.baseY[j];
   }
   clear() { this.n = 0; this.mesh.count = 0; }
   draw(t, facing, extraScale = 1) {
@@ -127,7 +174,8 @@ class Crowd {
     for (let i = 0; i < this.n; i++) {
       const ph = this.phase[i];
       const grow = Math.min(1, 0.35 + this.age[i] * 5);
-      const s = this.scale * grow * extraScale;
+      let s = this.scale * grow * extraScale;
+      if (this.shrink) s *= 0.7 + 0.3 * Math.max(0, this.hp[i]) / Math.max(1, this.maxHp[i]);
       const swing = Math.sin(t * 15 + ph);
       const ang = facing + swing * 0.18 + this.vx[i] * 0.1;
       const c = Math.cos(ang) * s, sn = Math.sin(ang) * s;
@@ -270,7 +318,7 @@ function gateTexture(gate) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 128;
   const x = c.getContext('2d');
-  const col = gate.kind === 'mul' ? COL.mul : COL.add;
+  const col = gate.bonus ? COL.bonus : gate.kind === 'mul' ? COL.mul : COL.add;
   x.fillStyle = col;
   x.globalAlpha = 0.55;
   x.fillRect(0, 0, 256, 128);
@@ -299,7 +347,7 @@ function gateTexture(gate) {
 
 function makeGate(gate) {
   const g = new THREE.Group();
-  const col = gate.kind === 'mul' ? COL.mul : COL.add;
+  const col = gate.bonus ? COL.bonus : gate.kind === 'mul' ? COL.mul : COL.add;
   const frame = std(col, { emissive: col, emissiveIntensity: 0.25 });
   const h = 1.55;
   for (const s of [-1, 1]) {
@@ -326,6 +374,73 @@ function makeGate(gate) {
   g.position.set(gate.x, 0, gate.z);
   g.userData = { pulse: 0, frame };
   return g;
+}
+
+/* A barricade: a heavy block with hazard stripes and its hit points on the
+ * front, redrawn whenever the number changes. */
+function stripeTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 16;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffcc00';
+  x.fillRect(0, 0, 128, 16);
+  x.fillStyle = '#1b1b1b';
+  for (let i = -16; i < 128; i += 16) {
+    x.beginPath(); x.moveTo(i, 16); x.lineTo(i + 8, 16); x.lineTo(i + 24, 0); x.lineTo(i + 16, 0); x.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.repeat.x = 3;
+  return t;
+}
+
+function makeBarrier(b) {
+  const g = new THREE.Group();
+  const H = 1.25, D = 0.8;
+  const block = shadowed(new THREE.Mesh(new THREE.BoxGeometry(b.w, H, D), std(0x3d424e, { roughness: 0.7 })));
+  block.position.y = H / 2;
+  g.add(block);
+  const stripes = new THREE.MeshStandardMaterial({ map: stripeTexture(), roughness: 0.6 });
+  for (const y of [0.12, H - 0.12]) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.04, 0.2, D + 0.04), stripes);
+    band.position.y = y;
+    g.add(band);
+  }
+  for (const s of [-1, 1]) {
+    const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, H + 0.4, 10), std(0x8a8f99, { metalness: 0.5, roughness: 0.4 })));
+    post.position.set(s * b.w / 2, (H + 0.4) / 2, 0);
+    g.add(post);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 96;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(b.w * 0.8, b.w * 0.8 * 96 / 256), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+  label.position.set(0, H / 2, D / 2 + 0.01);
+  g.add(label);
+  g.position.set(b.x, 0, b.z);
+  g.userData = { canvas, tex, shown: -1, hit: 0, block };
+  drawBarrierLabel(g, b.hp);
+  return g;
+}
+
+function drawBarrierLabel(g, hp) {
+  const u = g.userData;
+  const v = Math.max(0, Math.ceil(hp));
+  if (v === u.shown) return;
+  u.shown = v;
+  const x = u.canvas.getContext('2d');
+  x.clearRect(0, 0, 256, 96);
+  x.font = '900 72px system-ui, -apple-system, Segoe UI, sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.lineWidth = 8;
+  x.strokeStyle = '#111';
+  x.strokeText(String(v), 128, 52);
+  x.fillStyle = '#fff';
+  x.fillText(String(v), 128, 52);
+  u.tex.needsUpdate = true;
 }
 
 function makeSpinner(h) {
@@ -404,6 +519,20 @@ function makeHomeWall() {
 
 /* ---- The game --------------------------------------------------------- */
 
+// Your squad. r is the body radius used for contact.
+const KINDS = {
+  runner:  { speed: 7.4, r: 0.25 },
+  bruiser: { speed: 6.0, r: 0.42 },
+  bomber:  { speed: 6.8, r: 0.3 },
+  champ:   { speed: 4.2, r: 0.6 },
+};
+// Their army. Ogres are slow; brutes a little slow.
+const FOES = {
+  grunt: { r: 0.25, pace: 1 },
+  brute: { r: 0.55, pace: 0.78 },
+  ogre:  { r: 1.45, pace: 0.55 },
+};
+
 export class Game {
   constructor(canvas, ui) {
     this.canvas = canvas;
@@ -427,21 +556,36 @@ export class Game {
     sun.shadow.normalBias = 0.02;
     scene.add(sun, sun.target);
 
-    const unitGeo = runnerGeometry(false), champGeo = runnerGeometry(true);
+    const geo = {
+      plain: runnerGeometry('plain'),
+      horns: runnerGeometry('horns'),
+      ogre: runnerGeometry('ogre'),
+      fluffy: runnerGeometry('fluffy'),
+      bomb: runnerGeometry('bomb'),
+    };
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.05 });
-    this.player = new Crowd(scene, unitGeo, mat, 1500, 1, COL.blue);
-    this.champs = new Crowd(scene, champGeo, mat, 24, 2.3, COL.gold);
-    this.enemies = new Crowd(scene, unitGeo, mat, 900, 1, COL.red);
-    this.brutes = new Crowd(scene, champGeo, mat, 60, 1.9, COL.brute);
-    this.decor = new Crowd(scene, unitGeo, mat, 420, 0.9, COL.red);
+    const crowd = (g, cap, scale, color, kind) => Object.assign(new Crowd(scene, g, mat, cap, scale, color), { kind, grid: new Grid(cap) });
+
+    this.runners = crowd(geo.plain, 1500, 1, COL.blue, 'runner');
+    this.bruisers = crowd(geo.fluffy, 220, 1.55, COL.white, 'bruiser');
+    this.bombers = crowd(geo.bomb, 150, 1.05, COL.bomb, 'bomber');
+    this.champs = crowd(geo.horns, 24, 2.3, COL.gold, 'champ');
+    this.grunts = crowd(geo.plain, 1600, 1, COL.red, 'grunt');
+    this.brutes = crowd(geo.horns, 90, 2.15, COL.brute, 'brute');
+    this.ogres = crowd(geo.ogre, 16, 4.4, COL.ogre, 'ogre');
+    this.ogres.shrink = true;
+    this.squads = [this.runners, this.bruisers, this.bombers, this.champs];
+    this.foes = [this.grunts, this.brutes, this.ogres];
+
+    this.decor = new Crowd(scene, geo.plain, mat, 420, 0.9, COL.red);
     this.decor.mesh.castShadow = false;
     this.blueFx = new Particles(scene, COL.blue, 1500);
     this.redFx = new Particles(scene, COL.red, 1500);
-    this.goldFx = new Particles(scene, 0xffd23a, 600);
-
-    this.pGrid = new Grid(1500);
-    this.eGrid = new Grid(900);
-    this.bGrid = new Grid(60);
+    this.goldFx = new Particles(scene, 0xffd23a, 800);
+    this.whiteFx = new Particles(scene, 0xe8eeff, 600);
+    this.fireFx = new Particles(scene, 0xff7a1a, 900);
+    this.rubbleFx = new Particles(scene, 0x50555f, 500);
+    this.fx = [this.blueFx, this.redFx, this.goldFx, this.whiteFx, this.fireFx, this.rubbleFx];
 
     this.cannon = makeCannon();
     scene.add(this.cannon);
@@ -523,8 +667,8 @@ export class Game {
     posts.castShadow = true;
     w.add(posts);
 
-    // Enemy plateau behind the fort, where the reserve army waits.
-    const standMat = std(0xa0443c, { roughness: 0.8 });
+    // Tiered stands behind the fort, where the reserve army waits.
+    const standMat = std(level.boss ? 0x7a2a3a : 0xa0443c, { roughness: 0.8 });
     for (let k = 0; k < 7; k++) {
       const step = shadowed(new THREE.Mesh(new THREE.BoxGeometry(26, 1 + k * 0.55, 1.8), standMat));
       step.position.set(0, (1 + k * 0.55) / 2, -len - 2.6 - k * 1.8);
@@ -532,10 +676,13 @@ export class Game {
     }
 
     this.fort = makeFort(-len);
+    if (level.boss) this.fort.scale.set(1.12, 1.25, 1);
+    this.fortScaleY = this.fort.scale.y;
     w.add(this.fort);
 
     this.gateObjs = level.gates.map((g) => { const o = makeGate(g); w.add(o); return o; });
     this.spinObjs = level.spinners.map((h) => { const o = makeSpinner(h); w.add(o); return o; });
+    this.barObjs = level.barriers.map((b) => { const o = makeBarrier(b); w.add(o); return o; });
 
     // Side scenery so the arena is not bare.
     const rockMat = std(level.theme === 2 ? 0xffffff : 0xb08a5c, { roughness: 1 });
@@ -566,11 +713,9 @@ export class Game {
     sc.updateProjectionMatrix();
 
     const zMin = -len - 4;
-    this.pGrid.setup(zMin, 6);
-    this.eGrid.setup(zMin, 6);
-    this.bGrid.setup(zMin, 6);
+    for (const c of [...this.squads, ...this.foes]) c.grid.setup(zMin, 6);
 
-    // Reserve army: rows of red runners on the plateau.
+    // Reserve army: rows of red runners on the stands.
     this.decor.clear();
     for (let row = 0; row < 14; row++) {
       for (let col = 0; col < 30; col++) {
@@ -586,30 +731,43 @@ export class Game {
   }
 
   reset() {
-    for (const c of [this.player, this.champs, this.enemies, this.brutes]) c.clear();
-    for (const p of [this.blueFx, this.redFx, this.goldFx]) p.clear();
-    const lv = this.level;
+    for (const c of [...this.squads, ...this.foes]) c.clear();
+    for (const p of this.fx) p.clear();
+    const lv = this.level, e = lv.enemy;
     this.fortHp = lv.fortHp;
-    this.homeHp = lv.homeHp;
+    this.homeMax = lv.homeHp + this.stats.homeBonus;
+    this.homeHp = this.homeMax;
     this.charge = 0;
     this.ready = false;
     this.fireAcc = 0;
     this.spawnAcc = 0;
-    this.burstT = lv.enemy.burstEvery;
-    this.bruteT = lv.enemy.bruteEvery || Infinity;
+    this.burstT = e.burstEvery;
+    this.bruteT = e.bruteEvery || Infinity;
+    this.ogreT = e.ogreEvery ? (lv.boss ? e.delay + 3 : e.ogreEvery * 0.7) : Infinity;
     this.playT = 0;
     this.endT = 0;
     this.cannonX = 0;
-    this.fort.scale.set(1, 1, 1);
+    this.fort.scale.y = this.fortScaleY;
     this.fort.position.y = 0;
+    this.fort.rotation.z = 0;
     this.fired = 0;
+    this.shots = 0;
     this.gateHits = 0;
     this.ended = false;
     this.input.holding = false;
     this.input.keyFire = false;
+    this.barriers = lv.barriers.map((b) => ({ ...b }));
+    this.barObjs.forEach((o, i) => { o.visible = true; o.scale.set(1, 1, 1); drawBarrierLabel(o, this.barriers[i].hp); });
   }
 
-  start() { this.reset(); this.state = 'play'; }
+  start() {
+    this.reset();
+    this.state = 'play';
+    // Head start: a squad already on the track.
+    for (let k = 0; k < this.stats.startSquad; k++) {
+      this.runners.add((Math.random() - 0.5) * 4, -1.6 - Math.random() * 2.5, 1, 0, 0, 0);
+    }
+  }
   pause(v) { if (this.state === 'play' || this.state === 'paused') this.state = v ? 'paused' : 'play'; }
   toMenu() { this.reset(); this.state = 'menu'; }
 
@@ -667,36 +825,104 @@ export class Game {
 
   /* ---- Simulation ---- */
   shoot() {
+    const st = this.stats;
     const x = this.cannonX + (Math.random() - 0.5) * 0.3;
     this.fired++;
+    this.cannon.userData.pivot.position.z = 0.25;
     if (this.ready) {
       this.ready = false;
       this.charge = 0;
-      this.champs.add(x, -1.4, this.stats.champHp, 0, 0.32);
+      this.champs.add(x, -1.4, st.champHp, 0, 0.32);
       sfx.champ();
       this.shake = Math.max(this.shake, 0.25);
-    } else {
-      this.player.add(x, -1.2, 1, 0, 0.32, (Math.random() - 0.5) * 0.6);
-      sfx.shot();
-      this.charge++;
-      if (this.charge >= this.stats.chargeShots) { this.ready = true; sfx.ready(); }
+      return;
     }
-    this.cannon.userData.pivot.position.z = 0.25;
+    const kind = L.shotKind(++this.shots, st);
+    if (kind === 'bruiser') { this.bruisers.add(x, -1.3, st.bruiserHp, 0, 0.32); sfx.thud(); }
+    else if (kind === 'bomber') { this.bombers.add(x, -1.3, 1, 0, 0.32); sfx.fuse(); }
+    else {
+      this.runners.add(x, -1.2, 1, 0, 0.32, (Math.random() - 0.5) * 0.6);
+      if (Math.random() < st.doubleChance) this.runners.add(x + 0.3, -1.2, 1, 0, 0.36, 0.8);
+      sfx.shot();
+    }
+    this.charge++;
+    if (this.charge >= st.chargeShots) { this.ready = true; sfx.ready(); }
   }
 
-  spawnEnemy(brute) {
-    const len = this.level.length;
-    const x = (Math.random() - 0.5) * 2.6;
-    const vx = (Math.random() - 0.5) * 5;
-    if (brute) this.brutes.add(x, -len + 1.2, this.level.enemy.bruteHp, 0, 0, vx * 0.4);
-    else this.enemies.add(x, -len + 1.2, 1, 0, 0, vx);
+  spawnFoe(kind, x, z, vx) {
+    const e = this.level.enemy;
+    if (kind === 'ogre') { this.ogres.add(x, z, e.ogreHp, 0, 0, vx); sfx.roar(); this.shake = Math.max(this.shake, 0.3); }
+    else if (kind === 'brute') this.brutes.add(x, z, e.bruteHp, 0, 0, vx);
+    else this.grunts.add(x, z, 1, 0, 0, vx);
   }
 
-  movePlayer(c, dt, speed, isChamp) {
-    const lv = this.level, t = this.t, fortZ = -lv.length;
-    const gates = lv.gates, spins = lv.spinners;
+  /* A packed block of grunts pouring out of the fort gate. */
+  rush(count) {
+    const z0 = -this.level.length + 1.2;
+    for (let k = 0; k < count; k++) {
+      const col = k % 7, row = Math.floor(k / 7);
+      this.spawnFoe('grunt', (col - 3) * 0.48 + (Math.random() - 0.5) * 0.2, z0 - row * 0.5, (col - 3) * 0.5 + (Math.random() - 0.5));
+    }
+  }
+
+  /* Calls fn(j) for every live unit of crowd c within r of (x, z), until fn
+   * returns true. Uses the crowd's grid, built this frame. */
+  near(c, x, z, r, fn) {
+    const g = c.grid, head = g.head, next = g.next, r2 = r * r;
+    const rc = Math.ceil(r / CELL), cx = g.cx(x), cz = g.cz(z);
+    for (let dz = -rc; dz <= rc; dz++) {
+      const rz = cz + dz;
+      if (rz < 0 || rz >= g.rows) continue;
+      for (let dx = -rc; dx <= rc; dx++) {
+        const rx = cx + dx;
+        if (rx < 0 || rx >= GRID_COLS) continue;
+        for (let j = head[rz * GRID_COLS + rx]; j >= 0; j = next[j]) {
+          if (c.hp[j] <= 0 || c.fly[j] > 0) continue;
+          const ddx = x - c.x[j], ddz = z - c.z[j];
+          if (ddx * ddx + ddz * ddz > r2) continue;
+          if (fn(j)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  explode(x, z) {
+    const st = this.stats;
+    for (const F of this.foes) {
+      this.near(F, x, z, st.bomberRadius + FOES[F.kind].r, (j) => { F.hp[j] -= st.bomberDmg; });
+    }
+    this.fireFx.burst(x, 0.5, z, 26, 6);
+    this.goldFx.burst(x, 0.5, z, 10, 4);
+    sfx.boom();
+    this.shake = Math.max(this.shake, 0.3);
+  }
+
+  hitBarrier(i, dmg, x) {
+    const b = this.barriers[i], o = this.barObjs[i];
+    b.hp -= dmg;
+    o.userData.hit = 1;
+    this.rubbleFx.burst(x, 0.9, b.z + 0.45, 1, 2.5);
+    if (b.hp <= 0) {
+      b.hp = 0;
+      o.visible = false;
+      this.rubbleFx.burst(b.x, 0.7, b.z, 60, 6);
+      this.goldFx.burst(b.x, 0.7, b.z, 20, 5);
+      sfx.crumble();
+      this.shake = Math.max(this.shake, 0.35);
+    } else sfx.crack();
+    drawBarrierLabel(o, b.hp);
+  }
+
+  moveSquad(c, dt) {
+    const lv = this.level, t = this.t, fortZ = -lv.length, st = this.stats;
+    const kind = c.kind, speed = KINDS[kind].speed;
+    const gates = lv.gates, spins = lv.spinners, bars = this.barriers;
     const wall = L.HALF_W - 0.3;
-    for (let i = c.n - 1; i >= 0; i--) {
+    // Gates copy runners as runners; specials come out with plain runners.
+    const cloneInto = this.runners;
+    const play = this.state === 'play';
+    outer: for (let i = c.n - 1; i >= 0; i--) {
       c.age[i] += dt;
       if (c.fly[i] > 0) c.fly[i] = Math.max(0, c.fly[i] - dt);
       const z0 = c.z[i];
@@ -709,79 +935,104 @@ export class Game {
         x += (target - x) * Math.min(1, dt * 3.5);
       }
       c.x[i] = x = Math.max(-wall, Math.min(wall, x));
+      if (c.fly[i] > 0) continue;
 
-      // Gates: each runner can use each gate once; clones inherit that.
-      if (c.fly[i] <= 0) {
-        for (let g = 0; g < gates.length; g++) {
-          const bit = 1 << g;
-          if (c.mask[i] & bit) continue;
-          const gate = gates[g];
-          if (!L.crossesGate(gate, t, x, z0, z1)) continue;
-          c.mask[i] |= bit;
-          this.gateHits++;
-          const gx = L.gateX(gate, t);
-          const make = L.gateClones(gate);
-          const mask = c.mask[i];
-          for (let k = 0; k < make; k++) {
-            const nx = gx + (Math.random() - 0.5) * gate.w * 0.85;
-            const j = this.player.add(nx, gate.z - 0.1 - Math.random() * 0.7, 1, mask, 0, (nx - gx) * 0.6);
-            if (j < 0) break;
-          }
-          this.gateObjs[g].userData.pulse = 1;
-          sfx.gate(gate.kind === 'mul');
+      // Barricades: the unit spends itself on the block.
+      for (let b = 0; b < bars.length; b++) {
+        const bar = bars[b];
+        if (bar.hp <= 0) continue;
+        const front = bar.z + 0.45;
+        if (z0 > front && z1 <= front && Math.abs(x - bar.x) <= bar.w / 2 + 0.1) {
+          const dmg = L.barrierDamage(kind, c.hp[i], st);
+          if (kind === 'bomber') { this.fireFx.burst(x, 0.6, front, 16, 5); sfx.boom(); }
+          this.hitBarrier(b, dmg, x);
+          c.remove(i);
+          continue outer;
         }
       }
 
-      if (!isChamp && c.fly[i] <= 0) {
-        let dead = false;
-        for (let s = 0; s < spins.length; s++) {
-          if (L.hitsSpinner(spins[s], t, x, z1, 0.25)) { dead = true; break; }
+      // Gates: each unit can use each gate once; clones inherit that.
+      for (let g = 0; g < gates.length; g++) {
+        const bit = 1 << g;
+        if (c.mask[i] & bit) continue;
+        const gate = gates[g];
+        if (!L.crossesGate(gate, t, x, z0, z1)) continue;
+        c.mask[i] |= bit;
+        this.gateHits++;
+        const gx = L.gateX(gate, t);
+        const make = L.gateClones(gate);
+        const mask = kind === 'runner' ? c.mask[i] : 0;
+        for (let k = 0; k < make; k++) {
+          const nx = gx + (Math.random() - 0.5) * gate.w * 0.85;
+          const j = cloneInto.add(nx, gate.z - 0.1 - Math.random() * 0.7, 1, mask | bit, 0, (nx - gx) * 0.6);
+          if (j < 0) break;
         }
-        if (dead) { this.blueFx.burst(x, 0.4, z1, 3, 4); c.remove(i); sfx.pop(); continue; }
+        this.gateObjs[g].userData.pulse = 1;
+        sfx.gate(gate.kind === 'mul');
+      }
+
+      if (kind === 'runner' || kind === 'bomber') {
+        for (let s = 0; s < spins.length; s++) {
+          if (L.hitsSpinner(spins[s], t, x, z1, KINDS[kind].r)) {
+            (kind === 'bomber' ? this.fireFx : this.blueFx).burst(x, 0.4, z1, 3, 4);
+            c.remove(i);
+            sfx.pop();
+            continue outer;
+          }
+        }
       }
 
       if (z1 <= fortZ + 0.9) {
-        if (this.state === 'play') {
-          this.fortHp -= isChamp ? this.stats.champHit : 1;
-          sfx.hit();
-        }
-        (isChamp ? this.goldFx : this.blueFx).burst(x, 1, fortZ + 0.9, isChamp ? 14 : 2, 3);
-        if (isChamp) this.shake = Math.max(this.shake, 0.35);
+        if (play) { this.fortHp -= L.fortDamage(kind, st); sfx.hit(); }
+        const fx = kind === 'champ' ? this.goldFx : kind === 'bruiser' ? this.whiteFx : kind === 'bomber' ? this.fireFx : this.blueFx;
+        fx.burst(x, 1, fortZ + 0.9, kind === 'runner' ? 2 : 12, 3);
+        if (kind === 'champ' || kind === 'bomber') this.shake = Math.max(this.shake, 0.3);
         c.remove(i);
       }
     }
   }
 
-  moveEnemies(c, dt, speed, isBrute) {
-    const wall = L.HALF_W - 0.3;
+  moveFoes(c, dt) {
+    const wall = L.HALF_W - 0.3, r = FOES[c.kind].r;
+    const speed = this.level.enemy.speed * FOES[c.kind].pace;
+    const bars = this.barriers;
     for (let i = c.n - 1; i >= 0; i--) {
       c.age[i] += dt;
-      c.z[i] += speed * dt;
+      const z = c.z[i] += speed * dt;
       c.vx[i] *= Math.exp(-dt * 1.4);
-      c.x[i] = Math.max(-wall, Math.min(wall, c.x[i] + c.vx[i] * dt + Math.sin(this.t * 2 + c.phase[i]) * 0.3 * dt));
-      if (c.z[i] >= L.FORT_LINE) {
+      let x = c.x[i] + c.vx[i] * dt + Math.sin(this.t * 2 + c.phase[i]) * 0.3 * dt;
+      // Walk around standing barricades, toward the middle of the track.
+      for (let b = 0; b < bars.length; b++) {
+        const bar = bars[b];
+        if (bar.hp <= 0 || Math.abs(z - bar.z) > 0.4 + r) continue;
+        const edge = bar.w / 2 + r;
+        if (Math.abs(x - bar.x) < edge) x = bar.x - Math.sign(bar.x) * edge;
+      }
+      const lim = wall - (c.kind === 'ogre' ? 0.8 : 0);
+      c.x[i] = Math.max(-lim, Math.min(lim, x));
+      if (z >= L.FORT_LINE) {
         if (this.state === 'play') {
-          this.homeHp -= isBrute ? 3 : 1;
-          this.shake = Math.max(this.shake, isBrute ? 0.4 : 0.15);
+          this.homeHp -= L.WALL_DAMAGE[c.kind];
+          this.shake = Math.max(this.shake, c.kind === 'grunt' ? 0.15 : 0.45);
           sfx.hurt();
         }
-        this.redFx.burst(c.x[i], 0.5, c.z[i], 4, 3);
+        this.redFx.burst(c.x[i], 0.5, z, c.kind === 'grunt' ? 4 : 20, 3);
         c.remove(i);
       }
     }
   }
 
-  /* Push runners of one crowd apart so they read as a mob, not a stack. */
-  separate(c, grid, minD) {
-    const head = grid.head, next = grid.next, md2 = minD * minD;
+  /* Push units of one crowd apart so they read as a mob, not a stack. */
+  separate(c, minD) {
+    const g = c.grid, head = g.head, next = g.next, md2 = minD * minD;
     for (let i = 0; i < c.n; i++) {
       if (c.hp[i] <= 0 || c.fly[i] > 0) continue;
       const x = c.x[i], z = c.z[i];
-      const cx = grid.cx(x), cz = grid.cz(z);
+      const cx = g.cx(x), cz = g.cz(z);
       let px = 0, pz = 0, seen = 0;
       for (let dz = -1; dz <= 1 && seen < 10; dz++) {
         const rz = cz + dz;
-        if (rz < 0 || rz >= grid.rows) continue;
+        if (rz < 0 || rz >= g.rows) continue;
         for (let dx = -1; dx <= 1; dx++) {
           const rx = cx + dx;
           if (rx < 0 || rx >= GRID_COLS) continue;
@@ -801,78 +1052,59 @@ export class Game {
     }
   }
 
-  /* One-for-one trades where blue meets red. */
+  /* Blue meets red: hit points trade one for one. */
   fight() {
-    const P = this.player, E = this.enemies, B = this.brutes, C = this.champs;
-    this.pGrid.build(P);
-    const head = this.pGrid.head, next = this.pGrid.next, grid = this.pGrid;
-    const clash = (c, i, r) => {
-      const x = c.x[i], z = c.z[i], r2 = r * r;
-      const cx = grid.cx(x), cz = grid.cz(z);
-      for (let dz = -1; dz <= 1; dz++) {
-        const rz = cz + dz;
-        if (rz < 0 || rz >= grid.rows) continue;
-        for (let dx = -1; dx <= 1; dx++) {
-          const rx = cx + dx;
-          if (rx < 0 || rx >= GRID_COLS) continue;
-          for (let j = head[rz * GRID_COLS + rx]; j >= 0; j = next[j]) {
-            if (P.hp[j] <= 0 || P.fly[j] > 0) continue;
-            const ddx = x - P.x[j], ddz = z - P.z[j];
-            if (ddx * ddx + ddz * ddz > r2) continue;
-            P.hp[j] = 0;
-            c.hp[i] -= 1;
-            if (c.hp[i] <= 0) return;
-          }
+    const front = [this.runners, this.bruisers];
+    for (const c of [...this.squads, ...this.foes]) c.grid.build(c);
+    for (const F of this.foes) {
+      const rF = FOES[F.kind].r;
+      for (let i = 0; i < F.n; i++) {
+        if (F.hp[i] <= 0) continue;
+        for (const P of front) {
+          this.near(P, F.x[i], F.z[i], rF + KINDS[P.kind].r, (j) => {
+            const trade = Math.min(F.hp[i], P.hp[j]);
+            F.hp[i] -= trade; P.hp[j] -= trade;
+            return F.hp[i] <= 0;
+          });
+          if (F.hp[i] <= 0) break;
         }
       }
-    };
-    for (let i = 0; i < E.n; i++) if (E.hp[i] > 0) clash(E, i, 0.5);
-    for (let i = 0; i < B.n; i++) if (B.hp[i] > 0) clash(B, i, 0.85);
-
-    // Champions plough through red runners and trade blows with brutes.
-    if (C.n) {
-      this.eGrid.build(E);
-      this.bGrid.build(B);
-      for (let i = 0; i < C.n; i++) {
-        if (C.hp[i] <= 0 || C.fly[i] > 0) continue;
-        for (const [grd, crowd, r] of [[this.eGrid, E, 1.0], [this.bGrid, B, 1.4]]) {
-          const x = C.x[i], z = C.z[i], r2 = r * r;
-          const cx = grd.cx(x), cz = grd.cz(z);
-          for (let dz = -1; dz <= 1; dz++) {
-            const rz = cz + dz;
-            if (rz < 0 || rz >= grd.rows) continue;
-            for (let dx = -1; dx <= 1; dx++) {
-              const rx = cx + dx;
-              if (rx < 0 || rx >= GRID_COLS) continue;
-              for (let j = grd.head[rz * GRID_COLS + rx]; j >= 0; j = grd.next[j]) {
-                if (crowd.hp[j] <= 0 || C.hp[i] <= 0) continue;
-                const ddx = x - crowd.x[j], ddz = z - crowd.z[j];
-                if (ddx * ddx + ddz * ddz > r2) continue;
-                const trade = Math.min(crowd.hp[j], C.hp[i]);
-                crowd.hp[j] -= trade;
-                C.hp[i] -= trade;
-              }
-            }
-          }
-        }
+    }
+    // Champions plough through and trade blows with the big ones.
+    const C = this.champs;
+    for (let i = 0; i < C.n; i++) {
+      if (C.hp[i] <= 0 || C.fly[i] > 0) continue;
+      for (const F of this.foes) {
+        this.near(F, C.x[i], C.z[i], KINDS.champ.r + FOES[F.kind].r, (j) => {
+          const trade = Math.min(F.hp[j], C.hp[i]);
+          F.hp[j] -= trade; C.hp[i] -= trade;
+          return C.hp[i] <= 0;
+        });
+        if (C.hp[i] <= 0) break;
       }
+    }
+    // Bombers go off at the first touch of red.
+    const B = this.bombers;
+    for (let i = 0; i < B.n; i++) {
+      if (B.hp[i] <= 0 || B.fly[i] > 0) continue;
+      const touch = this.foes.some((F) => this.near(F, B.x[i], B.z[i], KINDS.bomber.r + FOES[F.kind].r + 0.15, () => true));
+      if (touch) { B.hp[i] = 0; this.explode(B.x[i], B.z[i]); }
     }
   }
 
-  sweep(c, fx, n, sound) {
+  sweep(c, fx, n, cap = 60) {
     let popped = 0;
     for (let i = c.n - 1; i >= 0; i--) {
       if (c.hp[i] > 0) continue;
-      if (popped < 60) fx.burst(c.x[i], 0.45 * c.scale, c.z[i], n, 3);
+      if (fx && popped < cap) fx.burst(c.x[i], 0.45 * c.scale, c.z[i], n, 3);
       popped++;
       c.remove(i);
     }
-    if (popped && sound) sfx.pop();
     return popped;
   }
 
   update(dt) {
-    const lv = this.level;
+    const lv = this.level, e = lv.enemy;
     const play = this.state === 'play';
     if (play) this.playT += dt;
 
@@ -895,38 +1127,37 @@ export class Game {
     ring.material.opacity = this.ready ? 0.6 + Math.sin(this.t * 10) * 0.35 : 0;
     ring.scale.setScalar(this.ready ? 1 + Math.sin(this.t * 10) * 0.05 : 1);
 
-    // Enemies
-    if (play && this.playT > lv.enemy.delay) {
-      const rage = 1 + (1 - Math.max(0, this.fortHp) / lv.fortHp) * 0.7;
-      this.spawnAcc += lv.enemy.rate * rage * dt;
-      while (this.spawnAcc >= 1) { this.spawnAcc -= 1; this.spawnEnemy(false); }
-      this.burstT -= dt;
-      if (this.burstT <= 0) {
-        this.burstT = lv.enemy.burstEvery;
-        for (let k = 0; k < lv.enemy.burst; k++) this.spawnEnemy(false);
-      }
-      this.bruteT -= dt;
-      if (this.bruteT <= 0) { this.bruteT = lv.enemy.bruteEvery; this.spawnEnemy(true); }
+    // Their army
+    if (play && this.playT > e.delay) {
+      const z0 = -lv.length + 1.2;
+      const rage = 1 + (1 - Math.max(0, this.fortHp) / lv.fortHp) * 0.8;
+      this.spawnAcc += e.rate * rage * dt;
+      while (this.spawnAcc >= 1) { this.spawnAcc -= 1; this.spawnFoe('grunt', (Math.random() - 0.5) * 2.6, z0, (Math.random() - 0.5) * 5); }
+      if ((this.burstT -= dt) <= 0) { this.burstT = e.burstEvery; this.rush(e.burst); }
+      if ((this.bruteT -= dt) <= 0) { this.bruteT = e.bruteEvery; this.spawnFoe('brute', (Math.random() - 0.5) * 2, z0, (Math.random() - 0.5) * 2); }
+      if ((this.ogreT -= dt) <= 0) { this.ogreT = e.ogreEvery; this.spawnFoe('ogre', 0, z0 - 0.5, (Math.random() - 0.5) * 1.5); }
     }
 
-    this.movePlayer(this.player, dt, SPEED.unit, false);
-    this.movePlayer(this.champs, dt, SPEED.champ, true);
-    this.moveEnemies(this.enemies, dt, lv.enemy.speed, false);
-    this.moveEnemies(this.brutes, dt, lv.enemy.speed * 0.75, true);
+    for (const c of this.squads) this.moveSquad(c, dt);
+    for (const c of this.foes) this.moveFoes(c, dt);
 
     this.fight();
-    this.sweep(this.player, this.blueFx, 2, true);
-    const champsDown = this.sweep(this.champs, this.goldFx, 18, false);
-    if (champsDown) { sfx.hit(); this.shake = Math.max(this.shake, 0.2); }
-    this.sweep(this.enemies, this.redFx, 2, false);
-    if (this.sweep(this.brutes, this.redFx, 16, false)) sfx.hit();
+    if (this.sweep(this.runners, this.blueFx, 2)) sfx.pop();
+    if (this.sweep(this.bruisers, this.whiteFx, 6)) sfx.pop();
+    this.sweep(this.bombers, null, 0);
+    if (this.sweep(this.champs, this.goldFx, 18)) { sfx.hit(); this.shake = Math.max(this.shake, 0.2); }
+    this.sweep(this.grunts, this.redFx, 2);
+    if (this.sweep(this.brutes, this.redFx, 16)) sfx.hit();
+    if (this.sweep(this.ogres, this.redFx, 50)) { sfx.crumble(); this.shake = Math.max(this.shake, 0.5); }
 
-    this.pGrid.build(this.player);
-    this.separate(this.player, this.pGrid, 0.42);
-    this.eGrid.build(this.enemies);
-    this.separate(this.enemies, this.eGrid, 0.42);
+    this.runners.grid.build(this.runners);
+    this.separate(this.runners, 0.42);
+    this.bruisers.grid.build(this.bruisers);
+    this.separate(this.bruisers, 0.75);
+    this.grunts.grid.build(this.grunts);
+    this.separate(this.grunts, 0.42);
 
-    // Gates and spinners
+    // Gates, spinners, barricades
     const t = this.t;
     lv.gates.forEach((g, i) => {
       const o = this.gateObjs[i];
@@ -937,6 +1168,12 @@ export class Game {
       u.frame.emissiveIntensity = 0.25 + u.pulse * 0.9;
     });
     lv.spinners.forEach((h, i) => { this.spinObjs[i].userData.arm.rotation.y = -L.spinnerAngle(h, t); });
+    this.barObjs.forEach((o) => {
+      const u = o.userData;
+      u.hit = Math.max(0, u.hit - dt * 6);
+      o.position.y = u.hit * 0.05;
+      o.scale.set(1 + u.hit * 0.03, 1, 1);
+    });
 
     // Win and lose
     if (play && this.fortHp <= 0) {
@@ -946,26 +1183,28 @@ export class Game {
       sfx.win();
       this.shake = 0.6;
       for (let k = 0; k < 8; k++) this.redFx.burst((Math.random() - 0.5) * 10, 2, -lv.length, 20, 6);
-      for (const c of [this.enemies, this.brutes]) for (let i = 0; i < c.n; i++) c.hp[i] = 0;
+      for (const c of this.foes) for (let i = 0; i < c.n; i++) c.hp[i] = 0;
     } else if (play && this.homeHp <= 0) {
       this.homeHp = 0;
       this.state = 'lost';
       this.endT = 0;
       sfx.lose();
       this.shake = 0.5;
-      for (const c of [this.player, this.champs]) for (let i = 0; i < c.n; i++) c.hp[i] = 0;
+      for (const c of this.squads) for (let i = 0; i < c.n; i++) c.hp[i] = 0;
     }
     if (this.state === 'won' || this.state === 'lost') {
       this.endT += dt;
       if (this.state === 'won') {
         const k = Math.min(1, this.endT / 0.8);
-        this.fort.scale.y = 1 - k * 0.8;
+        this.fort.scale.y = this.fortScaleY * (1 - k * 0.8);
         this.fort.position.y = -k * 0.3;
         this.fort.rotation.z = Math.sin(this.endT * 30) * 0.02 * (1 - k);
       }
       if (this.endT > 1.4 && !this.ended) {
         this.ended = true;
-        this.ui.onEnd?.(this.state === 'won', { homeHp: Math.max(0, this.homeHp), fortHp: Math.max(0, this.fortHp), fired: this.fired });
+        this.ui.onEnd?.(this.state === 'won', {
+          homeHp: Math.max(0, this.homeHp), homeMax: this.homeMax, fortHp: Math.max(0, this.fortHp), fired: this.fired,
+        });
       }
     }
 
@@ -980,20 +1219,17 @@ export class Game {
     this.last = now;
     if (!this.level) return;
     dt = Math.min(dt, 1 / 30);
-    if (this.state !== 'paused') {
+    const paused = this.state === 'paused';
+    if (!paused) {
       this.t += dt;
       if (this.state !== 'menu') this.update(dt);
       else this.idle(dt);
     }
 
-    this.player.draw(this.t, 0);
-    this.champs.draw(this.t, 0);
-    this.enemies.draw(this.t, Math.PI);
-    this.brutes.draw(this.t, Math.PI);
+    for (const c of this.squads) c.draw(this.t, 0);
+    for (const c of this.foes) c.draw(this.t * (c.kind === 'ogre' ? 0.45 : c.kind === 'brute' ? 0.7 : 1), Math.PI);
     this.decor.draw(this.t * 0.5, Math.PI);
-    this.blueFx.update(this.state === 'paused' ? 0 : dt);
-    this.redFx.update(this.state === 'paused' ? 0 : dt);
-    this.goldFx.update(this.state === 'paused' ? 0 : dt);
+    for (const p of this.fx) p.update(paused ? 0 : dt);
 
     this.placeCamera(dt);
     this.renderer.render(this.scene, this.camera);
@@ -1030,11 +1266,12 @@ export class Game {
       fortHp: Math.max(0, Math.ceil(this.fortHp)),
       fortMax: lv.fortHp,
       homeHp: Math.max(0, this.homeHp),
-      homeMax: lv.homeHp,
+      homeMax: this.homeMax,
       charge: this.ready ? 1 : this.charge / this.stats.chargeShots,
       ready: this.ready,
-      units: this.player.n + this.champs.n,
-      enemies: this.enemies.n + this.brutes.n,
+      units: this.runners.n + this.bruisers.n + this.bombers.n + this.champs.n,
+      enemies: this.grunts.n + this.brutes.n + this.ogres.n,
+      ogres: this.ogres.n,
       barX: (v.x * 0.5 + 0.5) * c.clientWidth,
       barY: (-v.y * 0.5 + 0.5) * c.clientHeight,
     });

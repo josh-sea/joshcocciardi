@@ -64,38 +64,44 @@ export function hitsSpinner(h, t, x, z, r = 0.3) {
   return ex * ex + ez * ez <= (h.thick / 2 + r) ** 2;
 }
 
-/* Build level n (1-based). Everything about a level comes from here. */
+/* Build level n (1-based). Everything about a level comes from here.
+ * Every fifth level is a boss level: a tougher fort and more ogres. */
 export function makeLevel(n) {
   n = Math.max(1, Math.floor(n));
   const r = rng(n * 7919 + 101);
-  const tier = Math.min(n, 14);
-  const length = 46 + tier * 1.5;
+  const tier = Math.min(n, 16);
+  const boss = n % 5 === 0;
+  const length = 48 + Math.min(n, 14) * 1.6;
 
-  const fortHp = Math.round(220 * Math.pow(1.2, n - 1));
+  const fortHp = Math.round(300 * Math.pow(1.21, n - 1) * (boss ? 1.5 : 1));
   const level = {
     n,
+    boss,
     length,
     fortHp,                                   // enemy fort
-    homeHp: 20,                               // your wall
+    homeHp: 20,                               // your wall, before upgrades
     enemy: {
-      rate: 3 + tier * 0.65,                  // enemies a second, steady
-      burstEvery: Math.max(4, 8 - tier * 0.3),
-      burst: 10 + Math.floor(tier * 2.2),
-      bruteEvery: n >= 2 ? Math.max(4, 14 - tier * 0.8) : 0,
-      bruteHp: 10 + n * 4,
-      speed: 3.4 + tier * 0.08,
-      delay: 2.5,                             // a moment before they start
+      rate: 4.5 + tier * 0.9,                 // enemies a second, steady
+      burstEvery: Math.max(3.5, 7.5 - tier * 0.3),
+      burst: 18 + Math.floor(tier * 3.5),       // a packed rush out of the gate
+      bruteEvery: n >= 2 ? Math.max(3, 12 - tier * 0.7) : 0,
+      bruteHp: 14 + n * 5,
+      ogreEvery: n >= 3 ? Math.max(8, (boss ? 14 : 24) - tier) : 0,
+      ogreHp: Math.round((40 + n * 14) * (boss ? 1.6 : 1)),
+      speed: 3.5 + tier * 0.08,
+      delay: 2.2,                             // a moment before they start
     },
     gates: [],
     spinners: [],
-    reward: 50 + n * 25,
+    barriers: [],
+    reward: Math.round((80 + n * 40) * (boss ? 2 : 1)),
     theme: n % 3,
   };
 
   // Gate rows, spaced up the track. The first row is always generous.
   const first = -9;
   const last = -length + 12;
-  const rows = clamp(2 + Math.floor(n / 4), 2, 4);
+  const rows = clamp(2 + Math.floor(n / 4), 2, 5);
   const step = (first - last) / Math.max(1, rows - 1);
   for (let i = 0; i < rows; i++) {
     const z = Math.round((first - i * step) * 10) / 10;
@@ -121,12 +127,27 @@ export function makeLevel(n) {
     }
   }
 
-  // Spinners from level 4, set between gate rows.
-  if (n >= 4) {
-    const count = clamp(Math.floor((n - 2) / 2), 1, 3);
-    for (let i = 0; i < count; i++) {
-      const z = first - step * (i + 0.5);
-      if (z < last) break;
+  // Between gate rows: a barricade with a big bonus gate behind it (from
+  // level 2), or a spinner (from level 4). They alternate, barricade first.
+  const slots = rows - 1;
+  let spinnersLeft = n >= 4 ? clamp(Math.floor((n - 2) / 2), 1, 3) : 0;
+  for (let k = 0; k < slots; k++) {
+    const z = first - step * (k + 0.5);
+    const wantBarrier = n >= 2 && (k % 2 === 0 || spinnersLeft === 0);
+    if (wantBarrier) {
+      const side = r() < 0.5 ? -1 : 1;
+      const w = 4.2;
+      const x = side * (HALF_W - w / 2 - 0.1);
+      level.barriers.push({ x, z: Math.round((z + 1.3) * 10) / 10, w, hp: barrierHp(n) });
+      const mul = r() < 0.5;
+      level.gates.push({
+        kind: mul ? 'mul' : 'add',
+        value: mul ? pick(r, n < 6 ? [3, 4] : [4, 5]) : pick(r, n < 6 ? [8, 10] : [12, 15, 20]),
+        x, z: Math.round((z - 1.3) * 10) / 10, w: 3.6,
+        sweep: 0, speed: 0, phase: 0, row: -1, bonus: true,
+      });
+    } else if (spinnersLeft > 0) {
+      spinnersLeft--;
       level.spinners.push({
         x: (r() * 2 - 1) * 2,
         z,
@@ -142,6 +163,26 @@ export function makeLevel(n) {
   return level;
 }
 
+/* Hit points of a barricade on level n. */
+export function barrierHp(n) {
+  return Math.round(40 * Math.pow(1.24, n - 1));
+}
+
+/* What a unit does to a barricade it runs into (it does not survive). */
+export function barrierDamage(kind, hp, stats) {
+  if (kind === 'bomber') return stats.bomberHit;
+  if (kind === 'runner') return 1;
+  return Math.max(1, hp);          // bruisers and champions spend all they have
+}
+
+/* What a unit does to the enemy fort when it gets there. */
+export function fortDamage(kind, stats) {
+  return { runner: 1, bruiser: 3, bomber: 6, champ: stats.champHit }[kind] || 1;
+}
+
+/* What an enemy does to your wall when it gets there. */
+export const WALL_DAMAGE = { grunt: 1, brute: 3, ogre: 8 };
+
 function gateValue(r, n, kind) {
   if (kind === 'mul') return n < 6 ? pick(r, [2, 2, 3]) : pick(r, [2, 3, 3, 4]);
   return pick(r, n < 4 ? [2, 3, 4] : [3, 4, 5, 6]);
@@ -154,10 +195,17 @@ function makeGate(r, n, z, x, w, row) {
 
 /* ---- Upgrades and saved progress -------------------------------------- */
 
+// group: 'cannon' upgrades the gun and your wall, 'squad' the special units.
+// unlock: level 0 means the unit is not in your squad yet.
 export const UPGRADES = {
-  rate:   { name: 'Fire rate',    blurb: 'More shots a second',         base: 40, max: 12 },
-  charge: { name: 'Charge speed', blurb: 'Champion comes sooner',       base: 50, max: 10 },
-  champ:  { name: 'Champion',     blurb: 'Tougher, hits the fort harder', base: 60, max: 10 },
+  rate:    { group: 'cannon', name: 'Fire rate',    blurb: 'More shots a second',            base: 40,  max: 12 },
+  double:  { group: 'cannon', name: 'Double shot',  blurb: 'Chance a shot fires two',        base: 60,  max: 10 },
+  charge:  { group: 'cannon', name: 'Charge speed', blurb: 'Champion comes sooner',          base: 50,  max: 10 },
+  wall:    { group: 'cannon', name: 'Thick wall',   blurb: 'Your wall takes more hits',      base: 45,  max: 10 },
+  start:   { group: 'cannon', name: 'Head start',   blurb: 'Runners ready when you begin',   base: 70,  max: 8 },
+  champ:   { group: 'squad',  name: 'Champion',     blurb: 'Tougher, hits the fort harder',  base: 60,  max: 10 },
+  bruiser: { group: 'squad',  name: 'Bruisers',     blurb: 'Big white runners that take hits', base: 150, max: 8, unlock: true },
+  bomber:  { group: 'squad',  name: 'Bombers',      blurb: 'Blow up a whole pack of red',    base: 220, max: 8, unlock: true },
 };
 
 export function upgradeCost(key, level) {
@@ -165,17 +213,34 @@ export function upgradeCost(key, level) {
 }
 
 export function stats(up = {}) {
-  const rate = up.rate || 0, charge = up.charge || 0, champ = up.champ || 0;
+  const g = (k) => up[k] || 0;
+  const bru = g('bruiser'), bom = g('bomber');
   return {
-    shotsPerSec: 5 + rate * 0.75,
-    chargeShots: Math.max(12, 36 - charge * 2.4),   // shots to fill the meter
-    champHp: 25 + champ * 8,
-    champHit: 12 + champ * 4,                       // fort damage on arrival
+    shotsPerSec: 5 + g('rate') * 0.75,
+    doubleChance: g('double') * 0.07,
+    chargeShots: Math.max(12, 36 - g('charge') * 2.4),   // shots to fill the meter
+    homeBonus: g('wall') * 5,
+    startSquad: g('start') * 6,
+    champHp: 25 + g('champ') * 10,
+    champHit: 12 + g('champ') * 5,                        // fort damage on arrival
+    bruiserEvery: bru ? Math.max(3, 9 - bru) : 0,         // every Nth shot
+    bruiserHp: 4 + Math.floor(bru / 2),
+    bomberEvery: bom ? Math.max(5, 14 - bom) : 0,
+    bomberRadius: 1.8 + bom * 0.12,
+    bomberDmg: 4 + bom,
+    bomberHit: 8 + bom * 2,                               // barricade damage
   };
 }
 
+/* Which unit the cannon fires on shot number `shot` (1-based). */
+export function shotKind(shot, st) {
+  if (st.bomberEvery && shot % st.bomberEvery === 0) return 'bomber';
+  if (st.bruiserEvery && shot % st.bruiserEvery === 0) return 'bruiser';
+  return 'runner';
+}
+
 export function newSave() {
-  return { level: 1, coins: 0, up: { rate: 0, charge: 0, champ: 0 }, best: 1, sound: true };
+  return { level: 1, coins: 0, up: Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0])), best: 1, sound: true };
 }
 
 export function cleanSave(s) {
@@ -193,7 +258,7 @@ export function cleanSave(s) {
 }
 
 export function buy(save, key) {
-  const lvl = save.up[key];
+  const lvl = save.up[key] || 0;
   if (lvl >= UPGRADES[key].max) return { ok: false, why: 'max' };
   const cost = upgradeCost(key, lvl);
   if (save.coins < cost) return { ok: false, why: 'coins' };
@@ -201,8 +266,8 @@ export function buy(save, key) {
 }
 
 /* Coins for a win: the level's reward plus a bonus for an unhurt wall. */
-export function winCoins(level, homeLeft) {
-  return level.reward + Math.round((homeLeft / level.homeHp) * level.reward * 0.5);
+export function winCoins(level, homeLeft, homeMax = level.homeHp) {
+  return level.reward + Math.round((Math.min(homeLeft, homeMax) / homeMax) * level.reward * 0.5);
 }
 
 /* Coins for a loss: a share of the reward for the damage you did. */

@@ -278,7 +278,7 @@ const PROJECTS = [
     title: "Crowd Cannon",
     blurb: "Fire a crowd through multiplier gates and swamp the enemy fort. Made for a phone.",
     description:
-      "Hold to fire and slide to aim. Every runner that goes through a ×3 gate comes out as three, and the red army is pouring out of its fort to meet them. Fill the meter for a champion that ploughs through their line, dodge the spinners, and spend the coins you win on a faster cannon.",
+      "Hold to fire and slide to aim. Every runner that goes through a ×3 gate comes out as three, while the red army pours out of its fort with brutes and giant ogres. Smash barricades to reach gold bonus gates, unlock bruisers and bombers for your squad, and take on a boss fort every fifth level.",
     tech: ["Three.js", "WebGL", "Web Audio"],
     link: "/projects/crowd-cannon",
   },

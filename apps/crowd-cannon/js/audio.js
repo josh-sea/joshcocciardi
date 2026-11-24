@@ -72,5 +72,23 @@ export const sfx = {
   ready() { tone({ type: 'triangle', f0: 880, dur: 0.08, vol: 0.1 }); tone({ type: 'triangle', f0: 1320, dur: 0.12, vol: 0.1, delay: 0.09 }); },
   win() { [523, 659, 784, 1046].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 0.25, vol: 0.14, delay: i * 0.12 })); noise({ dur: 0.6, vol: 0.2, freq: 200 }); },
   lose() { [392, 330, 262, 196].forEach((f, i) => tone({ type: 'sawtooth', f0: f, f1: f * 0.97, dur: 0.3, vol: 0.08, delay: i * 0.16 })); },
+  thud() { if (gate('thud', 90)) tone({ type: 'sine', f0: 140, f1: 60, dur: 0.14, vol: 0.2 }); },
+  fuse() { if (gate('fuse', 120)) noise({ dur: 0.12, vol: 0.08, freq: 4000, q: 2 }); },
+  boom() {
+    if (!gate('boom', 90)) return;
+    noise({ dur: 0.45, vol: 0.35, freq: 140, q: 0.6 });
+    tone({ type: 'sine', f0: 90, f1: 35, dur: 0.35, vol: 0.25 });
+  },
+  crack() { if (gate('crack', 70)) noise({ dur: 0.07, vol: 0.12, freq: 2200, q: 3 }); },
+  crumble() {
+    if (!gate('crumble', 200)) return;
+    noise({ dur: 0.7, vol: 0.3, freq: 250, q: 0.5 });
+    tone({ type: 'triangle', f0: 660, f1: 990, dur: 0.18, vol: 0.08, delay: 0.1 });
+  },
+  roar() {
+    if (!gate('roar', 600)) return;
+    tone({ type: 'sawtooth', f0: 95, f1: 70, dur: 0.6, vol: 0.14 });
+    tone({ type: 'sawtooth', f0: 142, f1: 100, dur: 0.55, vol: 0.08, delay: 0.03 });
+  },
   click() { tone({ type: 'sine', f0: 900, f1: 700, dur: 0.05, vol: 0.08 }); },
 };
